@@ -1,0 +1,248 @@
+{
+  "timestamp": "2025-12-07T20:54:54.609220",
+  "summary": {
+    "total_tests": 8,
+    "passed": 4,
+    "failed": 4,
+    "pass_rate": 0.5,
+    "avg_execution_time_ms": 545.2814698219299
+  },
+  "results": [
+    {
+      "test_name": "simple_fact_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 111 >= 50"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "Denis Villeneuve directed Prisoners (2013). This psychological thriller stars Hugh Jackman and Jake Gyllenhaal.",
+      "actual_type": "info",
+      "request_id": "58aadc13-bd85-4da4-b7ac-ba11955da399",
+      "execution_time_ms": 746.2546825408936,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "simple_fact_release_date",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 96 >= 50"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The Matrix was released in March 1999. It was directed by the Wachowskis and stars Keanu Reeves.",
+      "actual_type": "info",
+      "request_id": "7a3deedd-d458-41fb-aeb2-0bf33bfe6566",
+      "execution_time_ms": 521.6288566589355,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "multi_hop_actors",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found 6 items (>= 3)"
+        ],
+        [
+          "criterion_3",
+          true,
+          "Length 186 >= 100"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'info', got 'release-date'"
+        ]
+      ],
+      "actual_response": "Movies featuring both Robert De Niro and Al Pacino: 1. The Godfather Part II (1974) - De Niro as young Vito, 2. Heat (1995) - both lead roles, 3. Righteous Kill (2008) - both detectives.",
+      "actual_type": "release-date",
+      "request_id": "cca7d39c-6829-4ec2-a4ef-6a68dec1d77b",
+      "execution_time_ms": 518.4969902038574,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "recommendations_similar_movies",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found 11 items (>= 5)"
+        ],
+        [
+          "criterion_3",
+          true,
+          "Length 401 >= 200"
+        ],
+        [
+          "criterion_4",
+          true,
+          "Found: sci-fi, similar"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'recs', got 'info'"
+        ]
+      ],
+      "actual_response": "Based on your enjoyment of Arrival and Annihilation, here are 5 recommendations: 1. Ex Machina (2014) - Similar AI themes, 2. Blade Runner 2049 (2017) - Also directed by Villeneuve, 3. Under the Skin (2013) - Atmospheric sci-fi, 4. Annihilation (2018) - Same director as Arrival, 5. The Arrival (1996) - Similar themes. These films share themes of alien contact, mystery, and atmospheric storytelling.",
+      "actual_type": "info",
+      "request_id": "1516493d-5978-4214-8d71-0643458933c8",
+      "execution_time_ms": 511.6689205169678,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "release_date_future",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "Found: gladiator, 2024, release, scheduled"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 176 >= 50"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'release-date', got 'info'"
+        ]
+      ],
+      "actual_response": "Gladiator II is scheduled to release in November 2024. It is not yet released as of the current date. The film is a sequel to the 2000 film Gladiator, directed by Ridley Scott.",
+      "actual_type": "info",
+      "request_id": "7acf5395-e9b8-4409-91af-3a86b25bd756",
+      "execution_time_ms": 515.3069496154785,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "spoiler_request",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Spoiler warning present"
+        ],
+        [
+          "criterion_3",
+          true,
+          "Length 315 >= 100"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'spoiler'"
+        ]
+      ],
+      "actual_response": "SPOILER WARNING: The ending of Shutter Island reveals that Leonardo DiCaprio's character, Teddy Daniels, is actually Andrew Laeddis, a patient at the mental institution. He has been living in a delusion, and the entire investigation was part of an experimental therapy to help him confront the truth about his past.",
+      "actual_type": "spoiler",
+      "request_id": "11f3b09d-80c7-46f2-8da4-127272925f41",
+      "execution_time_ms": 512.4669075012207,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "comparison_directors",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          false,
+          "Missing: compare, comparison, style"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 325 >= 150"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'comparison'"
+        ]
+      ],
+      "actual_response": "Christopher Nolan and Denis Villeneuve both excel in atmospheric, visually stunning films. Nolan is known for complex time structures and practical effects (Inception, Interstellar), while Villeneuve focuses on slow-burn tension and philosophical themes (Blade Runner 2049, Dune). Both create immersive cinematic experiences.",
+      "actual_type": "comparison",
+      "request_id": "0af6d960-d468-4f42-ab18-03651b776944",
+      "execution_time_ms": 523.3304500579834,
+      "errors": [],
+      "metadata": {}
+    },
+    {
+      "test_name": "fact_check",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: yes, won, award, 2016, best actor"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'fact-check'"
+        ]
+      ],
+      "actual_response": "Yes, Leonardo DiCaprio won the Academy Award for Best Actor for his role in The Revenant (2015). This was his first Oscar win, awarded in 2016 after several nominations.",
+      "actual_type": "fact-check",
+      "request_id": "8b803c64-d9cd-403f-a76b-fb958eeaa083",
+      "execution_time_ms": 513.0980014801025,
+      "errors": [],
+      "metadata": {}
+    }
+  ]
+}

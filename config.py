@@ -2,6 +2,7 @@
 Configuration settings for CineMind movie agent.
 """
 import os
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,8 +32,19 @@ MOVIE_DATA_SOURCES = {
     "metacritic": "https://www.metacritic.com"
 }
 
-# System Prompt
-SYSTEM_PROMPT = """You are CineMind, an expert movie analysis and discovery agent.
+# Prompt Version Configuration
+PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v1")  # v1, v2, v3
+
+# System Prompt (load from version)
+def get_system_prompt(version: Optional[str] = None) -> str:
+    """Get system prompt for specified version."""
+    try:
+        from prompt_versions import get_prompt_version
+        version = version or PROMPT_VERSION
+        return get_prompt_version(version)
+    except ImportError:
+        # Fallback if prompt_versions not available
+        return """You are CineMind, an expert movie analysis and discovery agent.
 
 Your sole domain is movies, including:
 - Films (all countries and eras)
@@ -61,3 +73,5 @@ When providing information:
 4. Provide comprehensive but organized responses
 5. Offer additional context when relevant"""
 
+# System Prompt (default version)
+SYSTEM_PROMPT = get_system_prompt()

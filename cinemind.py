@@ -4,6 +4,8 @@ CineMind - Real-time Movie Analysis and Discovery Agent
 import os
 import json
 import logging
+import uuid
+import time
 from typing import List, Dict, Optional, AsyncGenerator
 from datetime import datetime
 
@@ -14,8 +16,11 @@ except ImportError:
 
 from config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL
 from search_engine import SearchEngine, MovieDataAggregator
+from database import Database
+from observability import Observability, calculate_openai_cost
+from tagging import RequestTagger, classify_with_llm
 
-# Configure logging
+# Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -28,13 +33,15 @@ class CineMind:
     CineMind agent for real-time movie analysis and discovery.
     """
     
-    def __init__(self, openai_api_key: Optional[str] = None, tavily_api_key: Optional[str] = None):
+    def __init__(self, openai_api_key: Optional[str] = None, tavily_api_key: Optional[str] = None,
+                 enable_observability: bool = True):
         """
         Initialize CineMind agent.
         
         Args:
             openai_api_key: OpenAI API key for LLM
             tavily_api_key: Tavily API key for real-time search
+            enable_observability: Enable request tracking and metrics
         """
         if not AsyncOpenAI:
             raise ImportError("OpenAI library not installed. Install with: pip install openai")
@@ -50,110 +57,238 @@ class CineMind:
         self.agent_name = AGENT_NAME
         self.version = AGENT_VERSION
         
-        logger.info(f"Initialized {self.agent_name} v{self.version}")
+        # Initialize observability
+        self.enable_observability = enable_observability
+        if enable_observability:
+            db = Database()
+            self.observability = Observability(db)
+        else:
+            self.observability = None
+        
+        # Initialize tagger
+        self.tagger = RequestTagger()
+        
+        logger.info(f"Initialized {self.agent_name} v{self.version} (observability: {enable_observability})")
     
-    async def search_and_analyze(self, user_query: str, use_live_data: bool = True) -> Dict:
+    async def search_and_analyze(self, user_query: str, use_live_data: bool = True,
+                                request_id: Optional[str] = None,
+                                request_type: Optional[str] = None,
+                                outcome: Optional[str] = None) -> Dict:
         """
         Search for real-time movie data and provide analysis.
         
         Args:
             user_query: User's question about movies
             use_live_data: Whether to perform real-time searches
+            request_id: Optional request ID for tracking (auto-generated if not provided)
+            request_type: Optional request type tag (auto-classified if not provided)
+            outcome: Optional outcome tag (can be set later)
             
         Returns:
             Dictionary with agent response and sources
         """
-        logger.info(f"Processing query: {user_query}")
+        # Generate or use provided request ID
+        if not request_id:
+            request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
         
-        # Perform real-time search if requested
-        search_results = []
-        search_context = ""
+        # Auto-classify request type if not provided
+        if not request_type:
+            # Try LLM classification first (more accurate), fallback to pattern matching
+            if self.observability:
+                try:
+                    request_type = await classify_with_llm(user_query, self.client)
+                except Exception as e:
+                    logger.warning(f"LLM classification failed: {e}, using pattern matching")
+                    request_type = self.tagger.classify_request_type(user_query)
+            else:
+                request_type = self.tagger.classify_request_type(user_query)
         
-        if use_live_data:
-            try:
-                logger.info("Performing real-time search...")
-                movie_info = await self.aggregator.get_movie_info(user_query, include_recent_news=True)
-                search_results = movie_info.get("results", [])
-                
-                # Format search results for context
-                if search_results:
-                    search_context = "\n\n=== REAL-TIME SEARCH RESULTS ===\n"
-                    for i, result in enumerate(search_results[:5], 1):
-                        source = result.get("source", "unknown")
-                        title = result.get("title", "No title")
-                        content = result.get("content", "")[:500]  # Truncate long content
-                        url = result.get("url", "")
-                        
-                        search_context += f"\n[{i}] Source: {source}\n"
-                        search_context += f"Title: {title}\n"
-                        if url:
-                            search_context += f"URL: {url}\n"
-                        search_context += f"Content: {content}\n"
-                    
-                    search_context += "\nUse this current data to answer the user's question.\n"
-                    search_context += "Distinguish between confirmed facts and rumors.\n"
-                
-            except Exception as e:
-                logger.error(f"Search failed: {e}")
-                search_context = "\n\nNote: Real-time search encountered an error. Providing answer based on training data.\n"
-        
-        # Construct the prompt with search context
-        user_message = user_query
-        if search_context:
-            user_message = search_context + "\n\nUser Question: " + user_query
-        
-        # Generate response using OpenAI
-        try:
-            response = await self.client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.7,
-                max_tokens=2000
+        # Track request if observability is enabled
+        if self.observability:
+            track_ctx = self.observability.track_request(
+                request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
             )
+            tracker = track_ctx.__enter__()
+        else:
+            tracker = None
+            track_ctx = None
+            logger.info(f"[{request_id}] Processing query: {user_query} [type: {request_type}]")
+        
+        try:
+            search_start = time.time()
             
-            agent_response = response.choices[0].message.content
+            # Perform real-time search if requested
+            search_results = []
+            search_context = ""
             
-            return {
-                "agent": self.agent_name,
-                "version": self.version,
-                "query": user_query,
-                "response": agent_response,
-                "sources": [
+            if use_live_data:
+                try:
+                    if tracker:
+                        with tracker.time_operation("search"):
+                            movie_info = await self.aggregator.get_movie_info(user_query, include_recent_news=True)
+                    else:
+                        logger.info(f"[{request_id}] Performing real-time search...")
+                        movie_info = await self.aggregator.get_movie_info(user_query, include_recent_news=True)
+                    
+                    search_results = movie_info.get("results", [])
+                    search_time_ms = (time.time() - search_start) * 1000
+                    
+                    # Log search operation
+                    if tracker:
+                        tracker.log_search(
+                            query=user_query,
+                            provider="tavily",
+                            results_count=len(search_results),
+                            search_time_ms=search_time_ms
+                        )
+                    
+                    # Format search results for context
+                    if search_results:
+                        search_context = "\n\n=== REAL-TIME SEARCH RESULTS ===\n"
+                        for i, result in enumerate(search_results[:5], 1):
+                            source = result.get("source", "unknown")
+                            title = result.get("title", "No title")
+                            content = result.get("content", "")[:500]  # Truncate long content
+                            url = result.get("url", "")
+                            
+                            search_context += f"\n[{i}] Source: {source}\n"
+                            search_context += f"Title: {title}\n"
+                            if url:
+                                search_context += f"URL: {url}\n"
+                            search_context += f"Content: {content}\n"
+                        
+                        search_context += "\nUse this current data to answer the user's question.\n"
+                        search_context += "Distinguish between confirmed facts and rumors.\n"
+                
+                except Exception as e:
+                    if tracker:
+                        tracker.log_error(f"Search failed: {e}")
+                    logger.error(f"[{request_id}] Search failed: {e}")
+                    search_context = "\n\nNote: Real-time search encountered an error. Providing answer based on training data.\n"
+            
+            # Construct the prompt with search context
+            user_message = user_query
+            if search_context:
+                user_message = search_context + "\n\nUser Question: " + user_query
+            
+            # Generate response using OpenAI
+            llm_start = time.time()
+            try:
+                if tracker:
+                    with tracker.time_operation("openai_llm"):
+                        response = await self.client.chat.completions.create(
+                            model=OPENAI_MODEL,
+                            messages=[
+                                {"role": "system", "content": self.system_prompt},
+                                {"role": "user", "content": user_message}
+                            ],
+                            temperature=0.7,
+                            max_tokens=2000
+                        )
+                else:
+                    response = await self.client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": user_message}
+                        ],
+                        temperature=0.7,
+                        max_tokens=2000
+                    )
+                
+                agent_response = response.choices[0].message.content
+                llm_time_ms = (time.time() - llm_start) * 1000
+                
+                # Extract token usage and calculate cost
+                usage = response.usage.__dict__ if response.usage else {}
+                token_usage = {
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0)
+                }
+                cost_usd = calculate_openai_cost(token_usage, OPENAI_MODEL)
+                
+                # Log metrics
+                if tracker:
+                    tracker.log_metric("llm_response_time_ms", llm_time_ms)
+                    tracker.log_metric("prompt_tokens", token_usage["prompt_tokens"])
+                    tracker.log_metric("completion_tokens", token_usage["completion_tokens"])
+                    tracker.log_metric("total_tokens", token_usage["total_tokens"])
+                    tracker.log_metric("cost_usd", cost_usd)
+                
+                # Save response to database
+                sources_list = [
                     {
                         "title": r.get("title", ""),
                         "url": r.get("url", ""),
                         "source": r.get("source", "unknown")
                     }
                     for r in search_results
-                ],
-                "timestamp": datetime.now().isoformat(),
-                "live_data_used": use_live_data
-            }
+                ]
+                
+                if self.observability:
+                    self.observability.db.save_response(
+                        request_id=request_id,
+                        response_text=agent_response,
+                        sources=sources_list,
+                        token_usage=token_usage,
+                        cost_usd=cost_usd
+                    )
+                
+                # Update outcome if provided
+                if outcome:
+                    if self.observability:
+                        self.observability.db.update_request(request_id, outcome=outcome)
+                    tracker.log_metric("outcome", 1.0, {"outcome": outcome})
+                
+                result = {
+                    "agent": self.agent_name,
+                    "version": self.version,
+                    "request_id": request_id,
+                    "query": user_query,
+                    "response": agent_response,
+                    "sources": sources_list,
+                    "timestamp": datetime.now().isoformat(),
+                    "live_data_used": use_live_data,
+                    "token_usage": token_usage,
+                    "cost_usd": cost_usd,
+                    "request_type": request_type,
+                    "outcome": outcome or "success"  # Default to success if not set
+                }
+                
+                if track_ctx:
+                    track_ctx.__exit__(None, None, None)
+                
+                return result
+            
+            except Exception as e:
+                if tracker:
+                    tracker.log_error(f"OpenAI API error: {e}")
+                logger.error(f"[{request_id}] OpenAI API error: {e}")
+                error_msg = str(e)
+                
+                # Provide helpful error messages
+                if "model" in error_msg.lower() and ("not found" in error_msg.lower() or "does not exist" in error_msg.lower()):
+                    raise Exception(
+                        f"Model '{OPENAI_MODEL}' not found or not accessible.\n"
+                        f"Please set OPENAI_MODEL in .env file to one of: gpt-3.5-turbo, gpt-4, gpt-4o"
+                    )
+                elif "quota" in error_msg.lower() or "429" in error_msg or "insufficient_quota" in error_msg.lower():
+                    raise Exception(
+                        "OpenAI API quota exceeded. Please check your billing and usage at:\n"
+                        "https://platform.openai.com/usage\n"
+                        "You may need to add payment method or upgrade your plan."
+                    )
+                elif "api key" in error_msg.lower() or "invalid" in error_msg.lower() or "401" in error_msg:
+                    raise Exception(
+                        "Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file."
+                    )
+                raise Exception(f"Failed to generate response: {e}")
         
         except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            error_msg = str(e)
-            
-            # Provide helpful error messages
-            if "model" in error_msg.lower() and ("not found" in error_msg.lower() or "does not exist" in error_msg.lower()):
-                raise Exception(
-                    f"Model '{OPENAI_MODEL}' not found or not accessible.\n"
-                    f"Please set OPENAI_MODEL in .env file to one of: gpt-3.5-turbo, gpt-4, gpt-4o"
-                )
-            elif "quota" in error_msg.lower() or "429" in error_msg or "insufficient_quota" in error_msg.lower():
-                raise Exception(
-                    "OpenAI API quota exceeded. Please check your billing and usage at:\n"
-                    "https://platform.openai.com/usage\n"
-                    "You may need to add payment method or upgrade your plan."
-                )
-            elif "api key" in error_msg.lower() or "invalid" in error_msg.lower() or "401" in error_msg:
-                raise Exception(
-                    "Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file."
-                )
-            raise Exception(f"Failed to generate response: {e}")
+            if track_ctx:
+                track_ctx.__exit__(type(e), e, e.__traceback__)
+            raise
     
     async def stream_response(self, user_query: str, use_live_data: bool = True) -> AsyncGenerator[str, None]:
         """
@@ -207,6 +342,8 @@ class CineMind:
     async def close(self):
         """Close connections and cleanup."""
         await self.search_engine.async_close()
+        if self.observability and hasattr(self.observability, 'db'):
+            self.observability.db.close()
         logger.info("CineMind agent closed")
 
 
