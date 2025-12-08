@@ -1,5 +1,10 @@
 """
 CineMind - Real-time Movie Analysis and Discovery Agent
+
+Performance optimizations:
+- Fast pattern-based request classification (no blocking LLM call)
+- Parallel search execution (multiple searches run concurrently)
+- Non-blocking database writes (runs in background thread pool)
 """
 import os
 import json
@@ -92,16 +97,9 @@ class CineMind:
             request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
         
         # Auto-classify request type if not provided
+        # Use fast pattern matching by default (LLM classification is slow and adds latency)
         if not request_type:
-            # Try LLM classification first (more accurate), fallback to pattern matching
-            if self.observability:
-                try:
-                    request_type = await classify_with_llm(user_query, self.client)
-                except Exception as e:
-                    logger.warning(f"LLM classification failed: {e}, using pattern matching")
-                    request_type = self.tagger.classify_request_type(user_query)
-            else:
-                request_type = self.tagger.classify_request_type(user_query)
+            request_type = self.tagger.classify_request_type(user_query)
         
         # Track request if observability is enabled
         if self.observability:
@@ -216,7 +214,7 @@ class CineMind:
                     tracker.log_metric("total_tokens", token_usage["total_tokens"])
                     tracker.log_metric("cost_usd", cost_usd)
                 
-                # Save response to database
+                # Save response to database (non-blocking)
                 sources_list = [
                     {
                         "title": r.get("title", ""),
@@ -226,19 +224,28 @@ class CineMind:
                     for r in search_results
                 ]
                 
+                # Run database writes in background to avoid blocking
                 if self.observability:
-                    self.observability.db.save_response(
-                        request_id=request_id,
-                        response_text=agent_response,
-                        sources=sources_list,
-                        token_usage=token_usage,
-                        cost_usd=cost_usd
-                    )
+                    import asyncio
+                    def save_to_db():
+                        try:
+                            self.observability.db.save_response(
+                                request_id=request_id,
+                                response_text=agent_response,
+                                sources=sources_list,
+                                token_usage=token_usage,
+                                cost_usd=cost_usd
+                            )
+                            if outcome:
+                                self.observability.db.update_request(request_id, outcome=outcome)
+                        except Exception as e:
+                            logger.error(f"Background DB write failed: {e}")
+                    
+                    # Fire and forget - run sync DB writes in thread pool
+                    asyncio.create_task(asyncio.to_thread(save_to_db))
                 
-                # Update outcome if provided
-                if outcome:
-                    if self.observability:
-                        self.observability.db.update_request(request_id, outcome=outcome)
+                # Update outcome if provided (for metrics)
+                if outcome and tracker:
                     tracker.log_metric("outcome", 1.0, {"outcome": outcome})
                 
                 result = {

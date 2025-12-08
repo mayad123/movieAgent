@@ -1,5 +1,9 @@
 """
 Real-time web search engine for movie data.
+
+Performance optimizations:
+- Parallel search execution: Multiple searches run concurrently using asyncio.gather
+- Parallel movie and news searches: Movie info and news searches run simultaneously
 """
 import os
 import requests
@@ -154,7 +158,7 @@ class SearchEngine:
         if year:
             query += f" {year}"
         
-        # Search multiple sources
+        # Search multiple sources in parallel
         queries = [
             f"{movie_title} {year if year else ''} IMDb",
             f"{movie_title} {year if year else ''} Rotten Tomatoes",
@@ -162,9 +166,17 @@ class SearchEngine:
             f"{movie_title} {year if year else ''} cast crew"
         ]
         
+        # Run all searches in parallel
+        import asyncio
+        search_tasks = [self.search(q, max_results=2) for q in queries]
+        all_results_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
+        
+        # Flatten results and handle exceptions
         all_results = []
-        for q in queries:
-            results = await self.search(q, max_results=2)
+        for results in all_results_lists:
+            if isinstance(results, Exception):
+                logger.warning(f"Search task failed: {results}")
+                continue
             all_results.extend(results)
         
         # Deduplicate by URL
@@ -205,12 +217,24 @@ class MovieDataAggregator:
         Returns:
             Dictionary with aggregated movie information
         """
-        results = await self.search_engine.search_movie_specific(query)
+        # Run movie search and news search in parallel
+        import asyncio
         
+        tasks = [self.search_engine.search_movie_specific(query)]
         if include_recent_news:
             news_query = f"{query} movie news 2024 2025"
-            news_results = await self.search_engine.search(news_query, max_results=3)
-            results.extend(news_results)
+            tasks.append(self.search_engine.search(news_query, max_results=3))
+        
+        results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Combine results
+        results = []
+        for result_list in results_lists:
+            if isinstance(result_list, Exception):
+                logger.warning(f"Search task failed: {result_list}")
+                continue
+            if isinstance(result_list, list):
+                results.extend(result_list)
         
         return {
             "query": query,

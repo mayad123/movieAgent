@@ -86,11 +86,34 @@ async def run_tests(
             if failure["errors"]:
                 print(f"    Errors: {', '.join(failure['errors'])}")
     
-    # Save results
+    # Save results - always save to test_results directory with timestamp
+    from datetime import datetime
+    from pathlib import Path
+    
+    # Create test_results directory if it doesn't exist
+    results_dir = Path(__file__).parent.parent / "test_results"
+    results_dir.mkdir(exist_ok=True)
+    
+    # Generate automatic filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suite_suffix = f"_{suite_name}" if suite_name != "all" else ""
+    auto_filename = f"test_results{suite_suffix}_{timestamp}.json"
+    auto_path = results_dir / auto_filename
+    
+    # Save to automatic location
+    with open(auto_path, 'w') as f:
+        json.dump(report, f, indent=2)
+    print(f"\nResults automatically saved to: {auto_path}")
+    
+    # Also save to user-specified location if provided
     if output_file:
-        with open(output_file, 'w') as f:
+        output_path = Path(output_file)
+        # If relative path, save in test_results directory
+        if not output_path.is_absolute():
+            output_path = results_dir / output_file
+        with open(output_path, 'w') as f:
             json.dump(report, f, indent=2)
-        print(f"\nResults saved to: {output_file}")
+        print(f"Results also saved to: {output_path}")
     
     return report
 

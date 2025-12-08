@@ -58,3 +58,6 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Test Results (keep README, ignore JSON files)
+test_results/*.json
+
