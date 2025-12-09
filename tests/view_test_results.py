@@ -201,8 +201,8 @@ def main():
     parser = argparse.ArgumentParser(description="View and compare test results")
     parser.add_argument(
         '--dir',
-        default='test_results',
-        help='Directory containing test results (default: test_results)'
+        default='data/test_results',
+        help='Directory containing test results (default: data/test_results)'
     )
     parser.add_argument(
         '--detailed',
@@ -227,8 +227,9 @@ def main():
     
     args = parser.parse_args()
     
-    # Get results directory
-    results_dir = Path(__file__).parent.parent / args.dir
+    # Get results directory (relative to project root)
+    project_root = Path(__file__).parent.parent
+    results_dir = project_root / args.dir if not Path(args.dir).is_absolute() else Path(args.dir)
     
     # Load all results
     results = load_all_results(results_dir)

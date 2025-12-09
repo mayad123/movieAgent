@@ -58,6 +58,23 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# Test Results (keep README, ignore JSON files)
+# Test Results and Data Files
+# Ignore JSON result files but keep README files
+data/test_results/*.json
+data/prompt_comparison/*.json
+!data/test_results/README.md
+!data/prompt_comparison/README.md
+
+# Old test_results directory (if it still exists at root)
 test_results/*.json
+!test_results/README.md
+
+# Generated test visualizations
+test_dashboard.png
+test_comparison.png
+# Allow other PNGs if needed (uncomment to ignore all PNGs)
+# *.png
+
+# Old directories (if they still exist at root)
+prompt_comparison/
 

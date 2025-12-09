@@ -19,11 +19,11 @@ try:
 except ImportError:
     AsyncOpenAI = None
 
-from config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL
-from search_engine import SearchEngine, MovieDataAggregator
-from database import Database
-from observability import Observability, calculate_openai_cost
-from tagging import RequestTagger, classify_with_llm
+from .config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL
+from .search_engine import SearchEngine, MovieDataAggregator
+from .database import Database
+from .observability import Observability, calculate_openai_cost
+from .tagging import RequestTagger, classify_with_llm
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -169,6 +169,13 @@ class CineMind:
             if search_context:
                 user_message = search_context + "\n\nUser Question: " + user_query
             
+            # Construct full prompt (system + user message) for storage
+            full_prompt = f"System: {self.system_prompt}\n\nUser: {user_message}"
+            
+            # Update request with full prompt in database
+            if self.observability:
+                self.observability.update_request_prompt(request_id, full_prompt)
+            
             # Generate response using OpenAI
             llm_start = time.time()
             try:
@@ -224,6 +231,58 @@ class CineMind:
                     for r in search_results
                 ]
                 
+                # Format search results for test results (with rank, metadata)
+                formatted_searches = []
+                if use_live_data and search_results:
+                    # Get search query from movie_info if available, otherwise use user_query
+                    search_query = user_query
+                    search_timestamp = datetime.now().isoformat()
+                    try:
+                        if 'movie_info' in locals() and movie_info:
+                            search_query = movie_info.get("query", user_query)
+                            search_timestamp = movie_info.get("timestamp", search_timestamp)
+                    except:
+                        pass
+                    
+                    search_results_formatted = []
+                    
+                    for rank, result in enumerate(search_results, 1):
+                        # Extract source name (e.g., "tavily" -> "Tavily", "imdb" -> "IMDb")
+                        source_name = result.get("source", "unknown")
+                        if source_name == "tavily":
+                            # Try to infer source from URL
+                            url = result.get("url", "")
+                            if "wikipedia.org" in url:
+                                source_name = "Wikipedia"
+                            elif "imdb.com" in url:
+                                source_name = "IMDb"
+                            elif "rottentomatoes.com" in url:
+                                source_name = "Rotten Tomatoes"
+                            elif "variety.com" in url:
+                                source_name = "Variety"
+                            elif "deadline.com" in url:
+                                source_name = "Deadline"
+                            else:
+                                source_name = "Tavily"
+                        elif source_name == "tavily_answer":
+                            source_name = "Tavily Answer"
+                        else:
+                            source_name = source_name.capitalize()
+                        
+                        search_results_formatted.append({
+                            "rank": rank,
+                            "source": source_name,
+                            "url": result.get("url", ""),
+                            "title": result.get("title", ""),
+                            "published_at": result.get("published_date") or result.get("published_at"),
+                            "last_updated_at": result.get("last_updated_at") or search_timestamp
+                        })
+                    
+                    formatted_searches.append({
+                        "query": search_query,
+                        "results": search_results_formatted
+                    })
+                
                 # Run database writes in background to avoid blocking
                 if self.observability:
                     import asyncio
@@ -248,6 +307,9 @@ class CineMind:
                 if outcome and tracker:
                     tracker.log_metric("outcome", 1.0, {"outcome": outcome})
                 
+                # Get configuration versions
+                from .config import PROMPT_VERSION, AGENT_VERSION
+                
                 result = {
                     "agent": self.agent_name,
                     "version": self.version,
@@ -260,7 +322,12 @@ class CineMind:
                     "token_usage": token_usage,
                     "cost_usd": cost_usd,
                     "request_type": request_type,
-                    "outcome": outcome or "success"  # Default to success if not set
+                    "outcome": outcome or "success",  # Default to success if not set
+                    "prompt": full_prompt,  # Include the full prompt that was sent
+                    "searches": formatted_searches,  # Formatted search results
+                    "model_version": OPENAI_MODEL,  # Model version (e.g., "gpt-3.5-turbo")
+                    "prompt_version": PROMPT_VERSION,  # Prompt version (e.g., "v1")
+                    "agent_config_version": f"cine_prompt_{PROMPT_VERSION}"  # Agent config version
                 }
                 
                 if track_ctx:
@@ -297,17 +364,23 @@ class CineMind:
                 track_ctx.__exit__(type(e), e, e.__traceback__)
             raise
     
-    async def stream_response(self, user_query: str, use_live_data: bool = True) -> AsyncGenerator[str, None]:
+    async def stream_response(self, user_query: str, use_live_data: bool = True, 
+                             request_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
         Stream response token by token.
         
         Args:
             user_query: User's question
             use_live_data: Whether to perform real-time searches
+            request_id: Optional request ID for tracking
             
         Yields:
             Response tokens
         """
+        # Generate or use provided request ID
+        if not request_id:
+            request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
+        
         # Perform search first
         search_context = ""
         if use_live_data:
@@ -325,6 +398,16 @@ class CineMind:
                 logger.error(f"Search failed: {e}")
         
         user_message = search_context + "\n\nUser Question: " + user_query if search_context else user_query
+        
+        # Construct full prompt for storage
+        full_prompt = f"System: {self.system_prompt}\n\nUser: {user_message}"
+        
+        # Save request with prompt if observability is enabled
+        if self.observability:
+            self.observability.db.save_request(
+                request_id, user_query, use_live_data, OPENAI_MODEL, "pending",
+                prompt=full_prompt
+            )
         
         try:
             stream = await self.client.chat.completions.create(

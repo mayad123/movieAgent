@@ -11,7 +11,7 @@ from typing import Dict, Optional, Any
 from contextlib import contextmanager
 from functools import wraps
 
-from database import Database
+from .database import Database
 
 # Create custom formatter that safely handles missing request_id
 class SafeRequestFormatter(logging.Formatter):
@@ -80,7 +80,8 @@ class Observability:
     
     @contextmanager
     def track_request(self, request_id: str, user_query: str, use_live_data: bool = True,
-                     model: Optional[str] = None, request_type: Optional[str] = None):
+                     model: Optional[str] = None, request_type: Optional[str] = None,
+                     prompt: Optional[str] = None):
         """
         Context manager for tracking a request from start to finish.
         
@@ -93,7 +94,7 @@ class Observability:
         
         # Save initial request with type
         self.db.save_request(request_id, user_query, use_live_data, model, "pending", 
-                            request_type=request_type)
+                            request_type=request_type, prompt=prompt)
         
         # Create track object
         track = RequestTracker(request_id, self.db, self.logger)
@@ -118,6 +119,10 @@ class Observability:
                                  request_type=request_type)
             track.log_error(str(e))
             raise
+    
+    def update_request_prompt(self, request_id: str, prompt: str):
+        """Update the prompt for an existing request."""
+        self.db.update_request(request_id, prompt=prompt)
     
     def log_request(self, request_id: str, level: str, message: str, **kwargs):
         """Log a message with request context."""

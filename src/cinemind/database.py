@@ -66,6 +66,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 request_id TEXT UNIQUE,
                 user_query TEXT NOT NULL,
+                prompt TEXT,
                 timestamp TEXT NOT NULL,
                 use_live_data INTEGER DEFAULT 1,
                 model TEXT,
@@ -77,6 +78,16 @@ class Database:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Add prompt column if it doesn't exist (for existing databases)
+        cursor.execute("PRAGMA table_info(requests)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'prompt' not in columns:
+            try:
+                cursor.execute("ALTER TABLE requests ADD COLUMN prompt TEXT")
+            except sqlite3.OperationalError:
+                # Column already exists, ignore
+                pass
         
         # Responses table
         cursor.execute("""
@@ -132,6 +143,7 @@ class Database:
                 id SERIAL PRIMARY KEY,
                 request_id VARCHAR(255) UNIQUE NOT NULL,
                 user_query TEXT NOT NULL,
+                prompt TEXT,
                 timestamp TIMESTAMP NOT NULL,
                 use_live_data BOOLEAN DEFAULT TRUE,
                 model VARCHAR(100),
@@ -143,6 +155,19 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Add prompt column if it doesn't exist (for existing databases)
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='requests' AND column_name='prompt'
+        """)
+        if not cursor.fetchone():
+            try:
+                cursor.execute("ALTER TABLE requests ADD COLUMN prompt TEXT")
+            except Exception:
+                # Column already exists, ignore
+                pass
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS responses (
@@ -188,7 +213,8 @@ class Database:
     
     def save_request(self, request_id: str, user_query: str, use_live_data: bool = True,
                     model: Optional[str] = None, status: str = "pending",
-                    request_type: Optional[str] = None, outcome: Optional[str] = None) -> bool:
+                    request_type: Optional[str] = None, outcome: Optional[str] = None,
+                    prompt: Optional[str] = None) -> bool:
         """Save a request record."""
         try:
             cursor = self.conn.cursor()
@@ -196,19 +222,20 @@ class Database:
             
             if self.use_postgres:
                 cursor.execute("""
-                    INSERT INTO requests (request_id, user_query, timestamp, use_live_data, model, status, request_type, outcome)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO requests (request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (request_id) DO UPDATE SET
                         status = EXCLUDED.status,
                         request_type = EXCLUDED.request_type,
-                        outcome = EXCLUDED.outcome
-                """, (request_id, user_query, timestamp, use_live_data, model, status, request_type, outcome))
+                        outcome = EXCLUDED.outcome,
+                        prompt = EXCLUDED.prompt
+                """, (request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome))
             else:
                 cursor.execute("""
                     INSERT OR REPLACE INTO requests 
-                    (id, request_id, user_query, timestamp, use_live_data, model, status, request_type, outcome)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (request_id, request_id, user_query, timestamp, int(use_live_data), model, status, request_type, outcome))
+                    (id, request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (request_id, request_id, user_query, prompt, timestamp, int(use_live_data), model, status, request_type, outcome))
             
             self.conn.commit()
             return True
@@ -219,7 +246,7 @@ class Database:
     
     def update_request(self, request_id: str, status: str = None, 
                       response_time_ms: float = None, error_message: str = None,
-                      request_type: str = None, outcome: str = None):
+                      request_type: str = None, outcome: str = None, prompt: str = None):
         """Update request record with completion data."""
         try:
             cursor = self.conn.cursor()
@@ -241,6 +268,9 @@ class Database:
             if outcome:
                 updates.append("outcome = ?" if not self.use_postgres else "outcome = %s")
                 params.append(outcome)
+            if prompt:
+                updates.append("prompt = ?" if not self.use_postgres else "prompt = %s")
+                params.append(prompt)
             
             if updates:
                 params.append(request_id)

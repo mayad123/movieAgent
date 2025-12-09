@@ -124,6 +124,55 @@ Results include:
 - Execution time
 - Errors (if any)
 
+### Viewing Test Results
+
+#### Text-Based View
+
+```bash
+# View summary of all test runs
+python tests/view_test_results.py
+
+# View detailed results of most recent run
+python tests/view_test_results.py --detailed
+
+# Compare last 5 test runs
+python tests/view_test_results.py --compare 5
+
+# Show failure analysis
+python tests/view_test_results.py --failures
+
+# View specific result file
+python tests/view_test_results.py --file test_results_all_20241207_211415.json
+```
+
+#### Graphical Visualization
+
+View test results in a graphical format with charts and dashboards:
+
+```bash
+# Show comprehensive dashboard (opens interactive window)
+python tests/view_test_results_graphical.py
+
+# Save dashboard as PNG
+python tests/view_test_results_graphical.py --output dashboard.png
+
+# Compare last 5 test runs graphically
+python tests/view_test_results_graphical.py --compare 5
+
+# Save comparison chart
+python tests/view_test_results_graphical.py --compare 5 --output comparison.png
+```
+
+The graphical viewer provides:
+- **Pass Rate Trends**: See how pass rates change over time
+- **Execution Time Trends**: Monitor performance over time
+- **Test-by-Test Analysis**: Individual test pass rates across all runs
+- **Criteria Failure Breakdown**: Which criteria fail most often
+- **Comparison Charts**: Side-by-side comparison of multiple test runs
+- **Latest Run Details**: Detailed breakdown of the most recent test run
+
+**Note**: Requires `matplotlib` (install with `pip install matplotlib`)
+
 ## Using Tests for Regression
 
 1. **Before changes**: Run tests and save baseline

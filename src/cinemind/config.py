@@ -39,7 +39,7 @@ PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v1")  # v1, v2, v3
 def get_system_prompt(version: Optional[str] = None) -> str:
     """Get system prompt for specified version."""
     try:
-        from prompt_versions import get_prompt_version
+        from ..prompts.versions import get_prompt_version
         version = version or PROMPT_VERSION
         return get_prompt_version(version)
     except ImportError:

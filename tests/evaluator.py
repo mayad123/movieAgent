@@ -7,8 +7,14 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 from test_cases import TestCase
-from cinemind import CineMind
+from cinemind.agent import CineMind
 
 
 @dataclass
@@ -23,6 +29,11 @@ class TestResult:
     execution_time_ms: float
     errors: List[str]
     metadata: Dict
+    prompt_used: Optional[str] = None  # The full prompt that was sent to the LLM
+    searches: Optional[List[Dict]] = None  # Search information
+    model_version: Optional[str] = None  # Model version used
+    prompt_version: Optional[str] = None  # Prompt version used
+    agent_config_version: Optional[str] = None  # Agent config version
 
 
 class TestEvaluator:
@@ -74,10 +85,20 @@ class TestEvaluator:
             actual_response = result.get("response", "")
             actual_type = result.get("request_type")
             request_id = result.get("request_id")
+            prompt_used = result.get("prompt", "")
+            searches = result.get("searches", [])
+            model_version = result.get("model_version")
+            prompt_version = result.get("prompt_version")
+            agent_config_version = result.get("agent_config_version")
             
         except Exception as e:
             errors.append(str(e))
             actual_response = f"ERROR: {e}"
+            prompt_used = ""
+            searches = []
+            model_version = None
+            prompt_version = None
+            agent_config_version = None
         
         execution_time = (time.time() - start_time) * 1000
         
@@ -115,7 +136,12 @@ class TestEvaluator:
             request_id=request_id,
             execution_time_ms=execution_time,
             errors=errors,
-            metadata=test_case.metadata
+            metadata=test_case.metadata,
+            prompt_used=prompt_used,
+            searches=searches,
+            model_version=model_version,
+            prompt_version=prompt_version,
+            agent_config_version=agent_config_version
         )
     
     def _evaluate_criteria(self, test_case: TestCase, response: str) -> List[Tuple[str, bool, str]]:

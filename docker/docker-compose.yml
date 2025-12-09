@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   cinemind:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: cinemind-api
     ports:
       - "8000:8000"

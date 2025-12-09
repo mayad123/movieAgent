@@ -11,10 +11,17 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 try:
-    from cinemind import CineMind
-    from database import Database
-    from observability import Observability
-    from tagging import RequestTagger, OUTCOMES
+    import sys
+    from pathlib import Path
+    # Add src to path for imports
+    src_path = Path(__file__).parent.parent
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+    
+    from cinemind.agent import CineMind
+    from cinemind.database import Database
+    from cinemind.observability import Observability
+    from cinemind.tagging import RequestTagger, OUTCOMES
 except ImportError as e:
     raise ImportError(
         f"CineMind module not found. Make sure all dependencies are installed: {e}"

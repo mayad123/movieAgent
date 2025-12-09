@@ -9,12 +9,12 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from test_cases import TEST_CASES, TEST_SUITES, TestCase
 from evaluator import TestEvaluator
-from cinemind import CineMind
+from cinemind.agent import CineMind
 
 
 async def run_tests(
@@ -91,8 +91,8 @@ async def run_tests(
     from pathlib import Path
     
     # Create test_results directory if it doesn't exist
-    results_dir = Path(__file__).parent.parent / "test_results"
-    results_dir.mkdir(exist_ok=True)
+    results_dir = Path(__file__).parent.parent / "data" / "test_results"
+    results_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate automatic filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -145,17 +145,27 @@ async def run_test_suite_real_apis(
             actual_response = ""
             actual_type = None
             request_id = None
+            prompt_used = ""
+            searches = []
+            model_version = None
+            prompt_version = None
+            agent_config_version = None
             
             try:
                 # Run with real APIs
-                result = await agent.search_and_analyze(
+                api_result = await agent.search_and_analyze(
                     test_case.prompt,
                     use_live_data=True  # Use real search
                 )
                 
-                actual_response = result.get("response", "")
-                actual_type = result.get("request_type")
-                request_id = result.get("request_id")
+                actual_response = api_result.get("response", "")
+                actual_type = api_result.get("request_type")
+                request_id = api_result.get("request_id")
+                prompt_used = api_result.get("prompt", "")
+                searches = api_result.get("searches", [])
+                model_version = api_result.get("model_version")
+                prompt_version = api_result.get("prompt_version")
+                agent_config_version = api_result.get("agent_config_version")
                 
             except Exception as e:
                 errors.append(str(e))
@@ -196,7 +206,12 @@ async def run_test_suite_real_apis(
                 request_id=request_id,
                 execution_time_ms=execution_time,
                 errors=errors,
-                metadata=test_case.metadata
+                metadata=test_case.metadata,
+                prompt_used=prompt_used,
+                searches=searches,
+                model_version=model_version,
+                prompt_version=prompt_version,
+                agent_config_version=agent_config_version
             )
             results.append(result)
             

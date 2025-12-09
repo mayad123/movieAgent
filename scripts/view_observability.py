@@ -2,10 +2,16 @@
 View observability data from the CineMind database.
 """
 import os
+import sys
 import json
-from database import Database
+from pathlib import Path
 from typing import Optional
 import argparse
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from cinemind.database import Database
 
 
 def print_request(request: dict):

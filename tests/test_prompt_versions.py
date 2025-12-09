@@ -7,13 +7,13 @@ import sys
 import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from test_cases import TEST_CASES, TEST_SUITES
 from evaluator import TestEvaluator
 from test_runner import run_test_suite_real_apis
-from prompt_versions import PROMPT_VERSIONS, list_versions
-from config import get_system_prompt
+from cinemind.prompts.versions import PROMPT_VERSIONS, list_versions
+from cinemind.config import get_system_prompt
 
 
 async def compare_prompt_versions(
@@ -64,7 +64,7 @@ async def compare_prompt_versions(
         print(f"Prompt length: {len(PROMPT_VERSIONS[version])} chars")
         
         # Update config to use this version
-        import config
+        from cinemind import config
         original_prompt = config.SYSTEM_PROMPT
         config.SYSTEM_PROMPT = get_system_prompt(version)
         
@@ -72,6 +72,11 @@ async def compare_prompt_versions(
             # Run tests with real APIs
             evaluator = TestEvaluator(enable_observability=False)
             report = await run_test_suite_real_apis(test_cases, evaluator, verbose=False)
+            
+            # Add prompt version info to report
+            report['prompt_version'] = version
+            report['prompt_text'] = get_system_prompt(version)
+            
             results[version] = report
             
             print(f"  Pass Rate: {report['summary']['pass_rate']:.1%}")
@@ -157,7 +162,7 @@ def main():
     )
     parser.add_argument(
         '--output',
-        default='prompt_comparison',
+        default='data/prompt_comparison',
         help='Output directory'
     )
     parser.add_argument(
