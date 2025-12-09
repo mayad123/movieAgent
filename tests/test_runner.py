@@ -21,7 +21,10 @@ async def run_tests(
     suite_name: str = "all",
     output_file: Optional[str] = None,
     verbose: bool = False,
-    skip_confirmation: bool = False
+    skip_confirmation: bool = False,
+    use_database: bool = True,
+    parallel: bool = False,
+    max_concurrent: int = 3
 ):
     """
     Run test suite with real APIs.
@@ -60,7 +63,14 @@ async def run_tests(
     
     # Run tests with real APIs
     evaluator = TestEvaluator(enable_observability=False)
-    report = await run_test_suite_real_apis(test_cases, evaluator, verbose)
+    
+    if parallel:
+        from parallel_runner import run_test_suite_parallel
+        report = await run_test_suite_parallel(
+            test_cases, evaluator, max_concurrent=max_concurrent, verbose=verbose
+        )
+    else:
+        report = await run_test_suite_real_apis(test_cases, evaluator, verbose)
     
     # Print summary
     print(f"\n{'='*80}")
@@ -104,6 +114,17 @@ async def run_tests(
     with open(auto_path, 'w') as f:
         json.dump(report, f, indent=2)
     print(f"\nResults automatically saved to: {auto_path}")
+    
+    # Save to database if enabled
+    if use_database:
+        try:
+            from cinemind.test_results_db import TestResultsDB
+            test_db = TestResultsDB()
+            run_id = test_db.save_test_run(report)
+            test_db.close()
+            print(f"Results saved to database (run_id: {run_id})")
+        except Exception as e:
+            print(f"Warning: Could not save to database: {e}")
     
     # Also save to user-specified location if provided
     if output_file:
@@ -258,6 +279,22 @@ def main():
         action='store_true',
         help='Skip confirmation prompt (for automation)'
     )
+    parser.add_argument(
+        '--no-db',
+        action='store_true',
+        help='Skip saving to database'
+    )
+    parser.add_argument(
+        '--parallel',
+        action='store_true',
+        help='Run tests in parallel (faster but uses more API quota)'
+    )
+    parser.add_argument(
+        '--max-concurrent',
+        type=int,
+        default=3,
+        help='Max concurrent tests when using --parallel (default: 3)'
+    )
     
     args = parser.parse_args()
     
@@ -266,7 +303,10 @@ def main():
         suite_name=args.suite,
         output_file=args.output,
         verbose=args.verbose,
-        skip_confirmation=args.yes
+        skip_confirmation=args.yes,
+        use_database=not args.no_db,
+        parallel=args.parallel,
+        max_concurrent=args.max_concurrent
     ))
     
     if report is None:

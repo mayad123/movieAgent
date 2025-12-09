@@ -75,6 +75,9 @@ test_comparison.png
 # Allow other PNGs if needed (uncomment to ignore all PNGs)
 # *.png
 
+# Exported CSV files
+data/exports/*.csv
+
 # Old directories (if they still exist at root)
 prompt_comparison/
 
