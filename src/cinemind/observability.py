@@ -7,7 +7,7 @@ import uuid
 import logging
 import json
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from contextlib import contextmanager
 from functools import wraps
 
@@ -129,6 +129,46 @@ class Observability:
         extra = {"request_id": request_id, **kwargs}
         log_func = getattr(self.logger, level.lower(), self.logger.info)
         log_func(message, extra=extra)
+    
+    def log_classification_metadata(self, request_id: str, predicted_type: str, 
+                                   rule_hit: Optional[str] = None, llm_used: bool = False,
+                                   confidence: float = 1.0, entities: List = None,
+                                   need_freshness: bool = False):
+        """
+        Log classification metadata for a request.
+        
+        Args:
+            request_id: Request ID
+            predicted_type: The predicted request type
+            rule_hit: Which rule matched (if any)
+            llm_used: Whether LLM was used for classification
+            confidence: Confidence score (0.0-1.0)
+            entities: List of extracted entities
+            need_freshness: Whether query needs fresh data
+        """
+        metadata = {
+            "predicted_type": predicted_type,
+            "rule_hit": rule_hit,
+            "llm_used": llm_used,
+            "confidence": confidence,
+            "entities": entities or [],
+            "need_freshness": need_freshness
+        }
+        
+        # Save as metric for querying
+        self.db.save_metric(
+            request_id,
+            metric_type="classification",
+            metric_name="classification_metadata",
+            metric_value=confidence,
+            metric_data=metadata
+        )
+        
+        self.logger.info(
+            f"Classification: type={predicted_type}, rule={rule_hit}, llm={llm_used}, "
+            f"confidence={confidence:.2f}, freshness={need_freshness}",
+            extra={"request_id": request_id}
+        )
     
     def get_request_trace(self, request_id: str) -> Dict:
         """Get complete trace for a request."""

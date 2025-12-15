@@ -22,6 +22,64 @@ class SearchEngine:
         self.tavily_api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
         self.session = httpx.AsyncClient(timeout=30.0)
     
+    def build_intent_queries(self, intent: str, entities: List[str], 
+                           request_type: str = "info") -> List[str]:
+        """
+        Build intent-specific search queries that bias toward Tier A sources.
+        
+        Args:
+            intent: Structured intent (e.g., "filmography_overlap")
+            entities: Extracted entities (person names, movie titles)
+            request_type: Request classification type
+        
+        Returns:
+            List of optimized search queries
+        """
+        queries = []
+        
+        if intent == "filmography_overlap" and len(entities) >= 2:
+            # Filmography overlap: bias to IMDb and Wikipedia
+            person1, person2 = entities[0], entities[1]
+            
+            # IMDb-specific queries
+            queries.append(f'site:imdb.com "{person1}" "{person2}" film')
+            queries.append(f'site:imdb.com {person1} {person2} movies together')
+            
+            # Wikipedia-specific queries
+            queries.append(f'site:wikipedia.org {person1} {person2} film')
+            queries.append(f'site:wikipedia.org "{person1}" "{person2}" collaboration')
+            
+            # General query (fallback)
+            queries.append(f'{person1} {person2} movies together')
+        
+        elif intent == "director_info" and entities:
+            # Director info: IMDb and Wikipedia
+            movie = entities[0] if entities else ""
+            queries.append(f'site:imdb.com "{movie}" director')
+            queries.append(f'site:wikipedia.org "{movie}" film director')
+            queries.append(f'who directed {movie}')
+        
+        elif intent == "release_date" and entities:
+            # Release date: IMDb and Wikipedia
+            movie = entities[0] if entities else ""
+            queries.append(f'site:imdb.com "{movie}" release date')
+            queries.append(f'site:wikipedia.org "{movie}" film {movie} release')
+            queries.append(f'{movie} release date')
+        
+        elif intent == "cast_info" and entities:
+            # Cast info: IMDb
+            movie = entities[0] if entities else ""
+            queries.append(f'site:imdb.com "{movie}" cast')
+            queries.append(f'site:imdb.com/title "{movie}" full cast')
+            queries.append(f'{movie} cast actors')
+        
+        else:
+            # Generic query
+            entity_str = " ".join(entities) if entities else ""
+            queries.append(entity_str if entity_str else "movie")
+        
+        return queries
+    
     async def search(self, query: str, max_results: int = 5) -> List[Dict]:
         """
         Perform real-time search for movie information.
@@ -201,26 +259,41 @@ class SearchEngine:
 
 
 class MovieDataAggregator:
-    """Aggregates movie data from multiple sources."""
+    """Aggregates movie data from multiple sources with source policy enforcement."""
     
-    def __init__(self, search_engine: SearchEngine):
+    def __init__(self, search_engine: SearchEngine, source_policy=None):
         self.search_engine = search_engine
+        self.source_policy = source_policy
     
-    async def get_movie_info(self, query: str, include_recent_news: bool = True) -> Dict:
+    async def get_movie_info(self, query: str, include_recent_news: bool = True,
+                           intent: Optional[str] = None, entities: Optional[List[str]] = None,
+                           request_type: str = "info") -> Dict:
         """
-        Get comprehensive movie information from multiple sources.
+        Get comprehensive movie information from multiple sources with source policy.
         
         Args:
             query: Movie title or search query
             include_recent_news: Whether to include recent news/articles
+            intent: Structured intent (for query optimization)
+            entities: Extracted entities (for query optimization)
+            request_type: Request classification type (for source filtering)
             
         Returns:
-            Dictionary with aggregated movie information
+            Dictionary with aggregated movie information and source metadata
         """
-        # Run movie search and news search in parallel
         import asyncio
         
-        tasks = [self.search_engine.search_movie_specific(query)]
+        # Build intent-specific queries if available
+        if intent and entities and self.source_policy:
+            queries = self.search_engine.build_intent_queries(intent, entities, request_type)
+        else:
+            queries = [query]
+        
+        # Run searches in parallel
+        tasks = []
+        for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
+            tasks.append(self.search_engine.search(q, max_results=5))
+        
         if include_recent_news:
             news_query = f"{query} movie news 2024 2025"
             tasks.append(self.search_engine.search(news_query, max_results=3))
@@ -228,18 +301,44 @@ class MovieDataAggregator:
         results_lists = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Combine results
-        results = []
+        raw_results = []
         for result_list in results_lists:
             if isinstance(result_list, Exception):
                 logger.warning(f"Search task failed: {result_list}")
                 continue
             if isinstance(result_list, list):
-                results.extend(result_list)
+                raw_results.extend(result_list)
+        
+        # Apply source policy if available
+        if self.source_policy:
+            ranked_sources = self.source_policy.rank_and_filter(
+                raw_results, request_type, need_freshness=False
+            )
+            
+            # Convert back to dict format for compatibility
+            results = []
+            source_summary = self.source_policy.get_source_summary(ranked_sources)
+            
+            for source in ranked_sources:
+                results.append({
+                    "title": source.title,
+                    "url": source.url,
+                    "content": source.content,
+                    "score": source.score,
+                    "published_date": source.published_date,
+                    "source": "tavily",
+                    "tier": source.tier.value,
+                    "domain": source.domain
+                })
+        else:
+            results = raw_results
+            source_summary = {}
         
         return {
             "query": query,
             "results": results,
             "timestamp": datetime.now().isoformat(),
-            "source_count": len(results)
+            "source_count": len(results),
+            "source_summary": source_summary
         }
 

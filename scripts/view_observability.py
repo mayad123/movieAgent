@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Optional
 import argparse
 
+# Fix encoding for Windows console
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -46,9 +52,9 @@ def view_recent_requests(db: Database, limit: int = 10):
         print(f"    Status: {req.get('status', 'N/A')} | Time: {req.get('response_time_ms', 0):.2f}ms")
 
 
-def view_request_details(db: Database, request_id: str):
+def view_request_details(db: Database, request_id: str, full_prompt: bool = False, full_response: bool = False):
     """View detailed information about a specific request."""
-    from observability import Observability
+    from cinemind.observability import Observability
     
     obs = Observability(db)
     trace = obs.get_request_trace(request_id)
@@ -64,9 +70,40 @@ def view_request_details(db: Database, request_id: str):
     
     print_request(request)
     
+    # Show prompt if available
+    prompt = request.get('prompt')
+    if prompt:
+        print("\n[Prompt Used:]")
+        if full_prompt or len(prompt) <= 2000:
+            # Show full prompt, split by lines for readability
+            lines = prompt.split('\n')
+            for line in lines:
+                print(f"   {line}")
+            if not full_prompt and len(prompt) > 2000:
+                print(f"\n   (Full prompt: {len(prompt)} characters, use --full-prompt to see all)")
+        else:
+            # Truncate for display
+            print(f"   {prompt[:1000]}...")
+            print(f"   (Full prompt: {len(prompt)} characters, use --full-prompt to see all)")
+    
     if response:
         print("\n[Response:]")
-        print(f"   Text: {response.get('response_text', 'N/A')[:200]}...")
+        response_text = response.get('response_text', 'N/A')
+        if response_text and response_text != 'N/A':
+            # Show full response, formatted nicely
+            if full_response or len(response_text) <= 2000:
+                # Split by lines for better readability
+                lines = response_text.split('\n')
+                for line in lines:
+                    print(f"   {line}")
+                if not full_response and len(response_text) > 2000:
+                    print(f"\n   (Full response: {len(response_text)} characters, use --full-response to see all)")
+            else:
+                # Truncate for display
+                print(f"   {response_text[:2000]}...")
+                print(f"   (Full response: {len(response_text)} characters, use --full-response to see all)")
+        else:
+            print(f"   {response_text}")
         
         sources = response.get('sources')
         if sources:
@@ -91,10 +128,53 @@ def view_request_details(db: Database, request_id: str):
     
     if metrics:
         print(f"\n[Metrics ({len(metrics)}):]")
-        for metric in metrics[:10]:
+        
+        # Show classification metadata first if available
+        classification_metric = None
+        for metric in metrics:
+            if metric.get('metric_name') == 'classification_metadata':
+                classification_metric = metric
+                break
+        
+        if classification_metric:
+            print("\n[Classification Metadata:]")
+            metric_data = classification_metric.get('metric_data')
+            if isinstance(metric_data, str):
+                try:
+                    metric_data = json.loads(metric_data)
+                except:
+                    metric_data = {}
+            elif metric_data is None:
+                metric_data = {}
+            
+            print(f"   Predicted Type: {metric_data.get('predicted_type', 'N/A')}")
+            print(f"   Rule Hit: {metric_data.get('rule_hit', 'N/A')}")
+            print(f"   LLM Used: {metric_data.get('llm_used', False)}")
+            print(f"   Confidence: {metric_data.get('confidence', 0.0):.2f}")
+            entities = metric_data.get('entities', [])
+            if entities:
+                print(f"   Entities: {', '.join(entities) if isinstance(entities, list) else entities}")
+            print(f"   Need Freshness: {metric_data.get('need_freshness', False)}")
+            print()
+        
+        # Show other metrics
+        for metric in metrics:
             name = metric.get('metric_name', 'N/A')
+            if name == 'classification_metadata':
+                continue  # Already shown above
             value = metric.get('metric_value', 0)
-            print(f"   - {name}: {value}")
+            metric_data = metric.get('metric_data')
+            if metric_data and isinstance(metric_data, str):
+                try:
+                    metric_data = json.loads(metric_data)
+                except:
+                    pass
+            if metric_data and isinstance(metric_data, dict) and len(metric_data) > 0:
+                print(f"   - {name}: {value}")
+                for k, v in metric_data.items():
+                    print(f"     {k}: {v}")
+            else:
+                print(f"   - {name}: {value}")
     
     if searches:
         print(f"\n[Search Operations ({len(searches)}):]")
@@ -156,13 +236,15 @@ def main():
     parser.add_argument('--type', help='Filter by request type')
     parser.add_argument('--outcome', help='Filter by outcome')
     parser.add_argument('--tags', action='store_true', help='Show tag distribution')
+    parser.add_argument('--full-prompt', action='store_true', help='Show full prompt (not truncated)')
+    parser.add_argument('--full-response', action='store_true', help='Show full response (not truncated)')
     
     args = parser.parse_args()
     
     db = Database(db_path=args.db)
     
     if args.request_id:
-        view_request_details(db, args.request_id)
+        view_request_details(db, args.request_id, full_prompt=args.full_prompt, full_response=args.full_response)
     elif args.stats:
         view_stats(db, days=args.days, request_type=args.type, outcome=args.outcome)
     elif args.tags:

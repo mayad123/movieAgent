@@ -1,9 +1,12 @@
 """
 Request tagging and classification for CineMind.
+Hybrid three-layer classification system: Rules → LLM → Guardrails
 """
 import re
+import json
 import logging
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -26,61 +29,325 @@ OUTCOMES = {
 }
 
 
-class RequestTagger:
-    """Classifies requests by type and tracks outcomes."""
+@dataclass
+class ClassificationResult:
+    """Result of classification with metadata."""
+    predicted_type: str
+    rule_hit: Optional[str] = None  # Which rule matched, or None if LLM was used
+    llm_used: bool = False
+    confidence: float = 1.0
+    entities: List[str] = None  # Extracted entities (titles, persons)
+    need_freshness: bool = False  # Whether query needs up-to-date data
+    original_llm_type: Optional[str] = None  # LLM prediction before guardrails
+    
+    def __post_init__(self):
+        if self.entities is None:
+            self.entities = []
+
+
+class HybridClassifier:
+    """
+    Three-layer hybrid classification system:
+    A) Fast deterministic rules (40-70% coverage)
+    B) LLM classification for ambiguous cases
+    C) Guardrails/overrides for edge cases
+    """
     
     def __init__(self):
-        self.request_type_patterns = {
-            "info": [
-                r"\b(what|tell me|explain|describe|who|when|where|how|what is|what are)\b",
-                r"\b(information|about|details|info)\b"
-            ],
+        # Layer A: Fast deterministic rules - optimized for obvious cases
+        self.rules = {
             "recs": [
-                r"\b(recommend|suggest|best|top|favorite|good|great|awesome)\b",
-                r"\b(should i watch|worth watching|watch next)\b"
-            ],
-            "comparison": [
-                r"\b(compare|vs|versus|difference|better|which is|similar|different)\b",
-                r"\b(vs\.|vs |versus)\b"
+                # Strong signals
+                r"\b(recommend|suggest|recommendation)\b",
+                r"\b(similar to|like|similar|alike)\b",
+                r"\b(should i watch|worth watching|watch next|what to watch)\b",
+                r"\b(best|top|favorite|great|good)\s+(movie|film|movies|films)\b",
+                r"\b(movies|films)\s+(like|similar to)\b",
             ],
             "spoiler": [
-                r"\b(spoiler|ending|plot|what happens|dies|kills|death)\b",
-                r"\b(ending|finale|climax|twist)\b"
+                # Strong signals
+                r"\b(spoiler|spoilers)\b",
+                r"\b(ending|endings|how does it end|how did it end)\b",
+                r"\b(what happens|what happened|plot|twist|twists)\b",
+                r"\b(explain the ending|explain the plot)\b",
+                r"\b(dies|kills|death|deaths|killed)\b",
             ],
             "release-date": [
-                r"\b(release|coming out|when does|premiere|trailer)\b",
-                r"\b(release date|release dates|released|debut)\b",
-                r"\b(2024|2025|coming soon)\b"
+                # Strong signals
+                r"\b(out yet|is it out|when is.*out|when does.*come out)\b",
+                r"\b(release date|release dates|released|premiere|premieres)\b",
+                r"\b(coming out|when.*coming out|debut)\b",
+                r"\b(is.*out|was.*released|release)\b",
+            ],
+            "info": [
+                # Strong signals - specific question patterns
+                r"^(who directed|who starred|who stars|who wrote|who produced)\b",
+                r"^(when was|when did|when is|when are)\b",
+                r"^(what is|what are|what was|what were)\b",
+                r"^(where was|where is|where are)\b",
+                r"^(how many|how much|how long)\b",
+            ],
+            "comparison": [
+                # Strong signals
+                r"\b(compare|comparison|vs\.|versus|vs\s)\b",
+                r"\b(difference|differences|different|better|worse)\b",
+                r"\b(which is|which are|which one|which movie)\b",
+                r"\b(similar|similarities|alike|same)\b",
             ],
             "fact-check": [
-                r"\b(true|false|accurate|correct|verify|fact|facts|confirm|check)\b",
-                r"\b(is it true|is this true|did|really|actually)\b"
+                # Strong signals
+                r"\b(is it true|is this true|is that true)\b",
+                r"\b(did.*really|does.*really|was.*really)\b",
+                r"\b(verify|confirm|fact check|fact-check)\b",
+                r"\b(accurate|correct|true|false)\b",
             ]
         }
+        
+        # Layer C: Guardrail patterns (override rules)
+        self.guardrails = [
+            # Override: If contains "similar" + "recommend" → recs (even if LLM says info)
+            (lambda q: bool(re.search(r"\b(similar|like)\b", q.lower()) and 
+                           re.search(r"\b(recommend|suggest)\b", q.lower())),
+             "recs", "guardrail: similar+recommend"),
+            
+            # Override: If "is it out yet" or "out yet" → release-date (even if LLM says info)
+            (lambda q: bool(re.search(r"\b(is it out yet|out yet|is.*out yet)\b", q.lower())),
+             "release-date", "guardrail: out yet"),
+            
+            # Override: If "explain the ending" → spoiler (even if LLM says info)
+            (lambda q: bool(re.search(r"\b(explain the ending|explain ending|ending of)\b", q.lower())),
+             "spoiler", "guardrail: explain ending"),
+            
+            # Override: If "movies in order" → info (even if LLM says recs)
+            (lambda q: bool(re.search(r"\b(movies in order|order of|chronological order)\b", q.lower())),
+             "info", "guardrail: movies in order"),
+        ]
+    
+    def classify_with_rules(self, query: str) -> Optional[Tuple[str, str]]:
+        """
+        Layer A: Fast deterministic rules.
+        Returns (type, rule_name) if match found, None otherwise.
+        """
+        query_lower = query.lower()
+        
+        # Check rules in priority order (most specific first)
+        for req_type, patterns in self.rules.items():
+            for pattern in patterns:
+                if re.search(pattern, query_lower, re.IGNORECASE):
+                    return (req_type, f"rule:{pattern[:30]}")
+        
+        return None
+    
+    async def classify_with_llm(self, query: str, client) -> ClassificationResult:
+        """
+        Layer B: LLM classification for ambiguous cases.
+        Returns structured JSON with type, entities, need_freshness, confidence.
+        """
+        try:
+            from .config import OPENAI_MODEL
+            
+            classification_prompt = f"""Classify this movie-related query and extract information.
+
+Query: "{query}"
+
+Respond with ONLY valid JSON in this exact format:
+{{
+  "type": "one of: info, recs, comparison, spoiler, release-date, fact-check",
+  "entities": ["movie title", "person name", ...],
+  "need_freshness": true or false,
+  "confidence": 0.0 to 1.0
+}}
+
+Rules:
+- type: The primary intent category
+- entities: List of movie titles, director names, actor names mentioned (empty array if none)
+- need_freshness: true if query needs current/up-to-date data (release dates, recent news, etc.)
+- confidence: How confident you are (0.0-1.0)
+
+Respond with ONLY the JSON, nothing else."""
+
+            # Try to use JSON mode if available (gpt-4o, gpt-4-turbo, etc.)
+            try:
+                # Check if model supports JSON mode
+                json_mode_models = ["gpt-4o", "gpt-4-turbo", "gpt-4-1106-preview", "gpt-3.5-turbo-1106"]
+                use_json_mode = any(model in OPENAI_MODEL.lower() for model in json_mode_models)
+                
+                if use_json_mode:
+                    response = await client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                            {"role": "user", "content": classification_prompt}
+                        ],
+                        temperature=0.1,
+                        max_tokens=200,
+                        response_format={"type": "json_object"}
+                    )
+                else:
+                    response = await client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                            {"role": "user", "content": classification_prompt}
+                        ],
+                        temperature=0.1,
+                        max_tokens=200
+                    )
+            except Exception as e:
+                # Fallback if JSON mode fails
+                logger.warning(f"JSON mode not supported, using regular mode: {e}")
+                response = await client.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                        {"role": "user", "content": classification_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=200
+                )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Try to parse JSON (handle cases where LLM adds extra text)
+            try:
+                # Extract JSON if wrapped in markdown code blocks
+                if "```json" in result_text:
+                    result_text = result_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in result_text:
+                    result_text = result_text.split("```")[1].split("```")[0].strip()
+                
+                result_json = json.loads(result_text)
+            except json.JSONDecodeError:
+                # Fallback: try to extract JSON object
+                json_match = re.search(r'\{[^}]+\}', result_text)
+                if json_match:
+                    result_json = json.loads(json_match.group())
+                else:
+                    raise ValueError("No valid JSON found in response")
+            
+            predicted_type = result_json.get("type", "info").lower()
+            entities = result_json.get("entities", [])
+            need_freshness = result_json.get("need_freshness", False)
+            confidence = float(result_json.get("confidence", 0.7))
+            
+            # Validate type
+            if predicted_type not in REQUEST_TYPES:
+                predicted_type = "info"
+            
+            return ClassificationResult(
+                predicted_type=predicted_type,
+                rule_hit=None,
+                llm_used=True,
+                confidence=confidence,
+                entities=entities if isinstance(entities, list) else [],
+                need_freshness=bool(need_freshness),
+                original_llm_type=predicted_type
+            )
+            
+        except Exception as e:
+            logger.warning(f"LLM classification failed: {e}, falling back to rules")
+            # Fallback to rules
+            rule_result = self.classify_with_rules(query)
+            if rule_result:
+                return ClassificationResult(
+                    predicted_type=rule_result[0],
+                    rule_hit=rule_result[1],
+                    llm_used=False,
+                    confidence=0.6  # Lower confidence for fallback
+                )
+            return ClassificationResult(
+                predicted_type="info",
+                rule_hit="fallback:default",
+                llm_used=False,
+                confidence=0.3
+            )
+    
+    def apply_guardrails(self, query: str, classification: ClassificationResult) -> ClassificationResult:
+        """
+        Layer C: Guardrails/overrides for edge cases.
+        Applies overrides based on strong signals that contradict the classification.
+        """
+        query_lower = query.lower()
+        
+        for guardrail_func, override_type, reason in self.guardrails:
+            if guardrail_func(query):
+                if classification.predicted_type != override_type:
+                    logger.info(f"Guardrail applied: {reason} - overriding {classification.predicted_type} → {override_type}")
+                    classification.predicted_type = override_type
+                    classification.rule_hit = reason
+                    classification.confidence = min(classification.confidence + 0.2, 1.0)  # Boost confidence
+        
+        return classification
+    
+    async def classify(self, query: str, client=None, force_llm: bool = False) -> ClassificationResult:
+        """
+        Main classification method using three-layer hybrid approach.
+        
+        Args:
+            query: User query
+            client: OpenAI client (required if LLM classification needed)
+            force_llm: If True, skip rules and use LLM directly
+        
+        Returns:
+            ClassificationResult with all metadata
+        """
+        # Layer A: Try fast rules first (unless forced to use LLM)
+        if not force_llm:
+            rule_result = self.classify_with_rules(query)
+            if rule_result:
+                classification = ClassificationResult(
+                    predicted_type=rule_result[0],
+                    rule_hit=rule_result[1],
+                    llm_used=False,
+                    confidence=0.85  # High confidence for clear rule matches
+                )
+                # Apply guardrails even for rule-based results
+                classification = self.apply_guardrails(query, classification)
+                return classification
+        
+        # Layer B: Use LLM for ambiguous cases
+        if client:
+            classification = await self.classify_with_llm(query, client)
+        else:
+            # No client available, fallback to rules
+            rule_result = self.classify_with_rules(query)
+            if rule_result:
+                classification = ClassificationResult(
+                    predicted_type=rule_result[0],
+                    rule_hit=rule_result[1],
+                    llm_used=False,
+                    confidence=0.7
+                )
+            else:
+                classification = ClassificationResult(
+                    predicted_type="info",
+                    rule_hit="fallback:no_client",
+                    llm_used=False,
+                    confidence=0.5
+                )
+        
+        # Layer C: Apply guardrails
+        classification = self.apply_guardrails(query, classification)
+        
+        return classification
+
+
+# Backward compatibility: Keep old RequestTagger class
+class RequestTagger:
+    """Legacy tagger - wraps HybridClassifier for backward compatibility."""
+    
+    def __init__(self):
+        self.classifier = HybridClassifier()
     
     def classify_request_type(self, query: str) -> str:
         """
-        Classify the request type based on query content.
+        Classify the request type based on query content (rules only, for speed).
         
         Returns the most likely request type or 'info' as default.
         """
-        query_lower = query.lower()
-        scores = {}
-        
-        for req_type, patterns in self.request_type_patterns.items():
-            score = 0
-            for pattern in patterns:
-                matches = len(re.findall(pattern, query_lower, re.IGNORECASE))
-                score += matches
-            scores[req_type] = score
-        
-        # Get the type with highest score
-        if any(scores.values()):
-            best_type = max(scores.items(), key=lambda x: x[1])
-            if best_type[1] > 0:
-                return best_type[0]
-        
-        # Default to 'info' if no clear match
+        rule_result = self.classifier.classify_with_rules(query)
+        if rule_result:
+            return rule_result[0]
         return "info"
     
     def validate_request_type(self, request_type: str) -> bool:
@@ -100,53 +367,11 @@ class RequestTagger:
         return OUTCOMES.get(outcome.lower(), "Unknown outcome")
 
 
+# Legacy function for backward compatibility
 async def classify_with_llm(query: str, client) -> str:
     """
-    Use LLM to classify request type (more accurate than pattern matching).
-    
-    Args:
-        query: User query
-        client: OpenAI client
-        
-    Returns:
-        Classified request type
+    Legacy function: Use LLM to classify request type (returns just the type string).
     """
-    try:
-        from config import OPENAI_MODEL
-        
-        classification_prompt = f"""Classify this movie-related query into one of these categories:
-- info: General information request
-- recs: Recommendation request  
-- comparison: Comparison between movies/directors/actors
-- spoiler: Request asking for spoilers or plot details
-- release-date: Release date or premiere inquiry
-- fact-check: Fact verification request
-
-Query: "{query}"
-
-Respond with ONLY the category name (one word), nothing else."""
-        
-        response = await client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a query classifier. Respond with only the category name."},
-                {"role": "user", "content": classification_prompt}
-            ],
-            temperature=0.1,
-            max_tokens=10
-        )
-        
-        result = response.choices[0].message.content.strip().lower()
-        
-        # Validate result
-        tagger = RequestTagger()
-        if tagger.validate_request_type(result):
-            return result
-        
-        return "info"  # Default fallback
-        
-    except Exception as e:
-        logger.warning(f"LLM classification failed: {e}, using pattern matching")
-        tagger = RequestTagger()
-        return tagger.classify_request_type(query)
-
+    classifier = HybridClassifier()
+    result = await classifier.classify(query, client, force_llm=True)
+    return result.predicted_type

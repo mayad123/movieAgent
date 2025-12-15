@@ -11,6 +11,7 @@ import json
 import logging
 import uuid
 import time
+import re
 from typing import List, Dict, Optional, AsyncGenerator
 from datetime import datetime
 
@@ -19,11 +20,15 @@ try:
 except ImportError:
     AsyncOpenAI = None
 
-from .config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL
+from .config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL, PROMPT_VERSION
 from .search_engine import SearchEngine, MovieDataAggregator
 from .database import Database
 from .observability import Observability, calculate_openai_cost
-from .tagging import RequestTagger, classify_with_llm
+from .tagging import RequestTagger, HybridClassifier, classify_with_llm
+from .cache import SemanticCache
+from .source_policy import SourcePolicy
+from .intent_extraction import IntentExtractor
+from .verification import FactVerifier
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -57,7 +62,15 @@ class CineMind:
         
         self.client = AsyncOpenAI(api_key=self.openai_api_key)
         self.search_engine = SearchEngine(tavily_api_key=tavily_api_key)
-        self.aggregator = MovieDataAggregator(self.search_engine)
+        
+        # Initialize source policy and related components
+        self.source_policy = SourcePolicy()
+        self.intent_extractor = IntentExtractor()
+        self.verifier = FactVerifier(self.source_policy)
+        
+        # Initialize aggregator with source policy
+        self.aggregator = MovieDataAggregator(self.search_engine, self.source_policy)
+        
         self.system_prompt = SYSTEM_PROMPT
         self.agent_name = AGENT_NAME
         self.version = AGENT_VERSION
@@ -70,8 +83,17 @@ class CineMind:
         else:
             self.observability = None
         
-        # Initialize tagger
+        # Initialize tagger and hybrid classifier
         self.tagger = RequestTagger()
+        self.classifier = HybridClassifier()
+        
+        # Initialize semantic cache
+        if enable_observability:
+            self.cache = SemanticCache(self.observability.db)
+        else:
+            # Create a temporary database for cache if observability is disabled
+            temp_db = Database()
+            self.cache = SemanticCache(temp_db)
         
         logger.info(f"Initialized {self.agent_name} v{self.version} (observability: {enable_observability})")
     
@@ -96,10 +118,109 @@ class CineMind:
         if not request_id:
             request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
         
-        # Auto-classify request type if not provided
-        # Use fast pattern matching by default (LLM classification is slow and adds latency)
+        # Auto-classify request type if not provided using hybrid classifier
+        classification_result = None
         if not request_type:
-            request_type = self.tagger.classify_request_type(user_query)
+            # Use hybrid classifier (rules → LLM → guardrails)
+            classification_result = await self.classifier.classify(user_query, self.client)
+            request_type = classification_result.predicted_type
+            
+            # Log classification metadata
+            if self.observability:
+                self.observability.log_classification_metadata(
+                    request_id,
+                    predicted_type=classification_result.predicted_type,
+                    rule_hit=classification_result.rule_hit,
+                    llm_used=classification_result.llm_used,
+                    confidence=classification_result.confidence,
+                    entities=classification_result.entities,
+                    need_freshness=classification_result.need_freshness
+                )
+        else:
+            # If request_type was provided, create a minimal classification result
+            classification_result = type('obj', (object,), {
+                'predicted_type': request_type,
+                'entities': [],
+                'need_freshness': False
+            })()
+            # Still log it
+            if self.observability:
+                self.observability.log_classification_metadata(
+                    request_id,
+                    predicted_type=request_type,
+                    rule_hit="user_provided",
+                    llm_used=False,
+                    confidence=1.0
+                )
+        
+        # Check cache before making API calls
+        cache_hit = None
+        if self.cache and use_live_data:  # Only check cache if we would normally use live data
+            try:
+                entities = getattr(classification_result, 'entities', []) if classification_result else []
+                need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                
+                cache_hit = self.cache.get(
+                    prompt=user_query,
+                    classifier_type="hybrid",
+                    tool_config_version=f"cine_prompt_{PROMPT_VERSION}",
+                    predicted_type=request_type,
+                    entities=entities,
+                    need_freshness=need_freshness
+                )
+            except Exception as e:
+                logger.warning(f"Cache lookup failed: {e}, proceeding with normal flow")
+        
+        # If cache hit, return cached response
+        if cache_hit:
+            logger.info(f"[{request_id}] Cache {cache_hit.cache_tier} hit! Returning cached response")
+            
+            # Track request for metrics
+            if self.observability:
+                track_ctx = self.observability.track_request(
+                    request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
+                )
+                tracker = track_ctx.__enter__()
+                tracker.log_metric("cache_hit", 1.0, {
+                    "cache_tier": cache_hit.cache_tier,
+                    "similarity_score": cache_hit.similarity_score
+                })
+                tracker.log_metric("cache_savings_usd", cache_hit.cost_metrics.get("saved_cost", 0))
+            else:
+                tracker = None
+                track_ctx = None
+            
+            # Get configuration versions
+            from .config import PROMPT_VERSION, AGENT_VERSION
+            
+            result = {
+                "agent": self.agent_name,
+                "version": self.version,
+                "request_id": request_id,
+                "query": user_query,
+                "response": cache_hit.response_text,
+                "sources": cache_hit.sources,
+                "timestamp": datetime.now().isoformat(),
+                "live_data_used": False,  # Cache hit means no live data needed
+                "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "cost_usd": 0.0,  # No cost for cache hit
+                "request_type": request_type,
+                "outcome": outcome or "success",
+                "model_version": OPENAI_MODEL,
+                "prompt_version": PROMPT_VERSION,
+                "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",
+                "cache_hit": True,
+                "cache_tier": cache_hit.cache_tier,
+                "cache_similarity": cache_hit.similarity_score
+            }
+            
+            if track_ctx:
+                track_ctx.__exit__(None, None, None)
+            
+            return result
+        
+        # No cache hit - proceed with normal flow
+        logger.info(f"[{request_id}] Cache miss, proceeding with API calls")
         
         # Track request if observability is enabled
         if self.observability:
@@ -107,6 +228,7 @@ class CineMind:
                 request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
             )
             tracker = track_ctx.__enter__()
+            tracker.log_metric("cache_hit", 0.0)
         else:
             tracker = None
             track_ctx = None
@@ -115,21 +237,95 @@ class CineMind:
         try:
             search_start = time.time()
             
+            # Extract structured intent before search
+            structured_intent = None
+            try:
+                # Use LLM extraction for better accuracy, fallback to pattern-based
+                structured_intent = await self.intent_extractor.extract_with_llm(
+                    user_query, self.client, request_type
+                )
+                logger.info(f"[{request_id}] Extracted intent: {structured_intent.intent}, entities: {structured_intent.entities}")
+            except Exception as e:
+                logger.warning(f"Intent extraction failed: {e}, using pattern-based")
+                structured_intent = self.intent_extractor.extract(user_query, request_type)
+            
             # Perform real-time search if requested
             search_results = []
             search_context = ""
+            source_summary = {}
+            verified_facts = []
             
             if use_live_data:
                 try:
+                    # Use structured intent for optimized search
+                    intent = structured_intent.intent if structured_intent else None
+                    entities = structured_intent.entities if structured_intent else []
+                    need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                    
                     if tracker:
                         with tracker.time_operation("search"):
-                            movie_info = await self.aggregator.get_movie_info(user_query, include_recent_news=True)
+                            movie_info = await self.aggregator.get_movie_info(
+                                user_query, 
+                                include_recent_news=True,
+                                intent=intent,
+                                entities=entities,
+                                request_type=request_type
+                            )
                     else:
                         logger.info(f"[{request_id}] Performing real-time search...")
-                        movie_info = await self.aggregator.get_movie_info(user_query, include_recent_news=True)
+                        movie_info = await self.aggregator.get_movie_info(
+                            user_query,
+                            include_recent_news=True,
+                            intent=intent,
+                            entities=entities,
+                            request_type=request_type
+                        )
                     
                     search_results = movie_info.get("results", [])
+                    source_summary = movie_info.get("source_summary", {})
                     search_time_ms = (time.time() - search_start) * 1000
+                    
+                    # Log source transparency
+                    if tracker and source_summary:
+                        tracker.log_metric("source_tier_counts", 1.0, source_summary.get("tier_counts", {}))
+                        tracker.log_metric("has_tier_a_sources", 1.0 if source_summary.get("has_tier_a") else 0.0)
+                        tracker.log_metric("has_tier_c_only", 1.0 if source_summary.get("has_tier_c_only") else 0.0)
+                    
+                    # Perform verification for fact-based queries
+                    if request_type in ["info", "fact-check"] and structured_intent:
+                        if structured_intent.intent == "filmography_overlap" and len(structured_intent.entities) >= 2:
+                            # Extract candidate titles from search results
+                            candidate_titles = self._extract_candidate_titles(search_results, structured_intent.entities)
+                            
+                            # Convert search results to SourceMetadata for verification
+                            from .source_policy import SourceMetadata, SourceTier
+                            source_metadata_list = []
+                            for r in search_results:
+                                tier = self.source_policy.classify_source(
+                                    r.get("url", ""), 
+                                    r.get("title", ""), 
+                                    r.get("content", "")
+                                )
+                                source_metadata_list.append(SourceMetadata(
+                                    url=r.get("url", ""),
+                                    domain=r.get("domain", ""),
+                                    tier=tier,
+                                    title=r.get("title", ""),
+                                    content=r.get("content", ""),
+                                    score=r.get("score", 0.0)
+                                ))
+                            
+                            # Verify against Tier A sources
+                            try:
+                                verified_facts = self.verifier.verify_filmography_overlap(
+                                    structured_intent.entities[0],
+                                    structured_intent.entities[1],
+                                    candidate_titles,
+                                    source_metadata_list
+                                )
+                                logger.info(f"[{request_id}] Verified {len([f for f in verified_facts if f.verified])} facts")
+                            except Exception as e:
+                                logger.warning(f"Verification failed: {e}")
                     
                     # Log search operation
                     if tracker:
@@ -140,23 +336,52 @@ class CineMind:
                             search_time_ms=search_time_ms
                         )
                     
-                    # Format search results for context
+                    # Log search operation
+                    if tracker:
+                        tracker.log_search(
+                            query=user_query,
+                            provider="tavily",
+                            results_count=len(search_results),
+                            search_time_ms=search_time_ms
+                        )
+                    
+                    # Format search results for context (prioritize Tier A sources)
                     if search_results:
-                        search_context = "\n\n=== REAL-TIME SEARCH RESULTS ===\n"
-                        for i, result in enumerate(search_results[:5], 1):
+                        search_context = "\n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n"
+                        
+                        # Sort by tier (A first)
+                        tier_order = {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}
+                        sorted_results = sorted(search_results, 
+                                               key=lambda x: tier_order.get(x.get("tier", "UNKNOWN"), 3))
+                        
+                        tier_a_count = sum(1 for r in sorted_results if r.get("tier") == "A")
+                        tier_c_count = sum(1 for r in sorted_results if r.get("tier") == "C")
+                        
+                        for i, result in enumerate(sorted_results[:5], 1):
                             source = result.get("source", "unknown")
+                            tier = result.get("tier", "UNKNOWN")
                             title = result.get("title", "No title")
                             content = result.get("content", "")[:500]  # Truncate long content
                             url = result.get("url", "")
                             
-                            search_context += f"\n[{i}] Source: {source}\n"
+                            search_context += f"\n[{i}] Source: {source} (Tier {tier})\n"
                             search_context += f"Title: {title}\n"
                             if url:
                                 search_context += f"URL: {url}\n"
                             search_context += f"Content: {content}\n"
                         
-                        search_context += "\nUse this current data to answer the user's question.\n"
-                        search_context += "Distinguish between confirmed facts and rumors.\n"
+                        # Add verification results if available
+                        if verified_facts:
+                            verified_titles = [f.value for f in verified_facts if f.verified]
+                            if verified_titles:
+                                search_context += f"\n\nVERIFIED FACTS (from Tier A sources):\n"
+                                for title in verified_titles:
+                                    search_context += f"- {title}\n"
+                        
+                        search_context += "\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\n"
+                        if tier_c_count > 0:
+                            search_context += f"WARNING: {tier_c_count} Tier C sources found - use only for context, not facts.\n"
+                        search_context += "Distinguish between confirmed facts (Tier A) and rumors/speculation.\n"
                 
                 except Exception as e:
                     if tracker:
@@ -297,6 +522,31 @@ class CineMind:
                             )
                             if outcome:
                                 self.observability.db.update_request(request_id, outcome=outcome)
+                            
+                            # Store in cache for future use
+                            if self.cache:
+                                try:
+                                    entities = getattr(classification_result, 'entities', []) if classification_result else []
+                                    need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                                    
+                                    self.cache.put(
+                                        prompt=user_query,
+                                        response_text=agent_response,
+                                        sources=sources_list,
+                                        predicted_type=request_type,
+                                        entities=entities,
+                                        need_freshness=need_freshness,
+                                        classifier_type="hybrid",
+                                        tool_config_version=f"cine_prompt_{PROMPT_VERSION}",
+                                        agent_version=self.version,
+                                        prompt_version=PROMPT_VERSION,
+                                        cost_metrics={
+                                            "saved_cost": cost_usd,  # Cost that would be saved on cache hit
+                                            "original_cost": cost_usd
+                                        }
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"Failed to cache response: {e}")
                         except Exception as e:
                             logger.error(f"Background DB write failed: {e}")
                     
@@ -428,6 +678,32 @@ class CineMind:
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield f"Error: {e}"
+    
+    def _extract_candidate_titles(self, search_results: List[Dict], entities: List[str]) -> List[str]:
+        """
+        Extract candidate movie titles from search results.
+        Simple extraction - could be enhanced with NER.
+        """
+        titles = []
+        for result in search_results:
+            content = result.get("content", "").lower()
+            title = result.get("title", "").lower()
+            
+            # Look for movie title patterns
+            # This is a simplified version - could use more sophisticated extraction
+            if any(entity.lower() in content or entity.lower() in title for entity in entities):
+                # Try to extract movie titles from content
+                # Pattern: "Movie Title (Year)" or "Movie Title"
+                title_patterns = [
+                    r'"([^"]+)"',  # Quoted titles
+                    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*\(\d{4}\)",  # "Title (Year)"
+                ]
+                for pattern in title_patterns:
+                    matches = re.findall(pattern, result.get("content", ""))
+                    titles.extend(matches)
+        
+        # Remove duplicates and return
+        return list(set(titles))[:10]  # Limit to 10 candidates
     
     async def close(self):
         """Close connections and cleanup."""
