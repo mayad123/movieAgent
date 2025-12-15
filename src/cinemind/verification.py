@@ -1,11 +1,13 @@
 """
 Verification module for CineMind.
 Verifies extracted facts against Tier A sources (IMDb, Wikipedia, Wikidata).
+Implements "candidate → verify → answer" pattern for fact/list questions.
 """
 import re
 import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+from urllib.parse import urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,143 @@ class FactVerifier:
             source_policy: SourcePolicy instance
         """
         self.source_policy = source_policy
+    
+    def verify_movie_credit(self, movie_title: str, person_name: str, 
+                           year: Optional[int] = None,
+                           sources: List = None) -> Tuple[bool, str, float]:
+        """
+        Verify if a person has a credit (cast/director) in a movie.
+        Reusable verification component.
+        
+        Args:
+            movie_title: Movie title
+            person_name: Person name (actor/director)
+            year: Optional year for disambiguation
+            sources: List of SourceMetadata objects (if None, returns unverified)
+        
+        Returns:
+            (verified: bool, source_url: str, confidence: float)
+        """
+        if not sources:
+            return (False, "", 0.0)
+        
+        # Filter to Tier A sources only
+        tier_a_sources = [s for s in sources if hasattr(s, 'tier') and s.tier.value == "A"]
+        
+        if not tier_a_sources:
+            logger.warning(f"No Tier A sources for verification of {person_name} in {movie_title}")
+            return (False, "", 0.0)
+        
+        # Check IMDb sources first (highest confidence)
+        imdb_sources = [s for s in tier_a_sources if "imdb.com" in s.domain.lower()]
+        for source in imdb_sources:
+            if self._check_credit_in_content(source.content, movie_title, person_name, year):
+                return (True, source.url, 0.95)
+        
+        # Check Wikipedia sources
+        wiki_sources = [s for s in tier_a_sources if "wikipedia.org" in s.domain.lower()]
+        for source in wiki_sources:
+            if self._check_credit_in_content(source.content, movie_title, person_name, year):
+                return (True, source.url, 0.85)
+        
+        return (False, "", 0.0)
+    
+    def verify_release_year(self, movie_title: str, 
+                           sources: List = None) -> Tuple[Optional[int], str, float]:
+        """
+        Verify release year for a movie.
+        Reusable verification component.
+        
+        Args:
+            movie_title: Movie title
+            sources: List of SourceMetadata objects
+        
+        Returns:
+            (year: Optional[int], source_url: str, confidence: float)
+        """
+        if not sources:
+            return (None, "", 0.0)
+        
+        # Filter to Tier A sources only
+        tier_a_sources = [s for s in sources if hasattr(s, 'tier') and s.tier.value == "A"]
+        
+        if not tier_a_sources:
+            return (None, "", 0.0)
+        
+        # Extract years from Tier A sources
+        year_pattern = r'\b(19\d{2}|20\d{2})\b'
+        years_found = {}  # year -> [source_urls]
+        
+        for source in tier_a_sources:
+            content_lower = source.content.lower()
+            title_lower = movie_title.lower()
+            
+            # Only consider sources that mention the movie title
+            if title_lower in content_lower or any(word in content_lower for word in title_lower.split() if len(word) > 3):
+                years = re.findall(year_pattern, source.content)
+                for year_str in years:
+                    year = int(year_str)
+                    if year not in years_found:
+                        years_found[year] = []
+                    years_found[year].append(source.url)
+        
+        if not years_found:
+            return (None, "", 0.0)
+        
+        # Get most common year (likely the release year)
+        most_common_year = max(years_found.keys(), key=lambda y: len(years_found[y]))
+        source_url = years_found[most_common_year][0]
+        
+        # Confidence based on agreement
+        agreement_count = len(years_found[most_common_year])
+        total_sources = len(tier_a_sources)
+        confidence = min(0.95, 0.7 + (agreement_count / max(total_sources, 1)) * 0.25)
+        
+        # Check for conflicts
+        if len(years_found) > 1:
+            confidence *= 0.9  # Reduce confidence if multiple years found
+        
+        return (most_common_year, source_url, confidence)
+    
+    def _check_credit_in_content(self, content: str, movie_title: str, 
+                                person_name: str, year: Optional[int] = None) -> bool:
+        """Check if person has credit in movie based on content."""
+        content_lower = content.lower()
+        title_lower = movie_title.lower()
+        person_lower = person_name.lower()
+        
+        # Check if movie title is mentioned
+        title_words = title_lower.split()
+        title_mentioned = (
+            title_lower in content_lower or
+            any(word in content_lower for word in title_words if len(word) > 3)
+        )
+        
+        if not title_mentioned:
+            return False
+        
+        # Check if year matches (if provided)
+        if year:
+            year_pattern = rf'\b{year}\b'
+            if not re.search(year_pattern, content):
+                return False
+        
+        # Check if person is mentioned
+        # Handle name variations
+        person_words = person_lower.split()
+        person_variations = [
+            person_lower,
+            person_words[-1] if len(person_words) > 1 else person_lower,  # Last name
+            " ".join(person_words[-2:]) if len(person_words) > 2 else person_lower,  # Last two words
+        ]
+        
+        person_found = any(
+            var in content_lower 
+            for var in person_variations 
+            if len(var) > 3
+        )
+        
+        return person_found
     
     def verify_filmography_overlap(self, person1: str, person2: str, 
                                   candidate_titles: List[str],

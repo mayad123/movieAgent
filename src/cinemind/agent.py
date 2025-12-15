@@ -28,8 +28,10 @@ from .tagging import RequestTagger, HybridClassifier, classify_with_llm
 from .cache import SemanticCache
 from .source_policy import SourcePolicy
 from .intent_extraction import IntentExtractor
-from .verification import FactVerifier
+from .verification import FactVerifier, VerifiedFact
 from .request_plan import RequestPlanner, RequestPlan
+from .candidate_extraction import CandidateExtractor
+from .tool_plan import ToolPlanner, ToolPlan
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -68,6 +70,8 @@ class CineMind:
         self.source_policy = SourcePolicy()
         self.intent_extractor = IntentExtractor()
         self.verifier = FactVerifier(self.source_policy)
+        self.candidate_extractor = CandidateExtractor()
+        self.tool_planner = ToolPlanner()
         
         # Initialize aggregator with source policy
         self.aggregator = MovieDataAggregator(self.search_engine, self.source_policy)
@@ -299,53 +303,123 @@ class CineMind:
         try:
             search_start = time.time()
             
-            # Extract structured intent before search
+            # Use structured intent from RequestPlan (already extracted in plan_request)
+            # This avoids duplicate intent extraction calls to OpenAI
             structured_intent = None
-            try:
-                # Use LLM extraction for better accuracy, fallback to pattern-based
-                structured_intent = await self.intent_extractor.extract_with_llm(
-                    user_query, self.client, request_type
+            if request_plan:
+                # Reconstruct StructuredIntent from RequestPlan (no OpenAI call needed)
+                from .intent_extraction import StructuredIntent
+                # RequestPlan.entities is a list, convert to typed format
+                typed_entities = {"movies": [], "people": []}
+                if isinstance(request_plan.entities, list):
+                    # Old format - try to infer types (simple heuristic)
+                    for entity in request_plan.entities:
+                        words = entity.split()
+                        if len(words) >= 2 and all(w[0].isupper() if w else False for w in words):
+                            typed_entities["people"].append(entity)
+                        else:
+                            typed_entities["movies"].append(entity)
+                elif isinstance(request_plan.entities, dict):
+                    typed_entities = request_plan.entities
+                
+                structured_intent = StructuredIntent(
+                    intent=request_plan.intent,
+                    entities=typed_entities,
+                    constraints={},  # RequestPlan doesn't store constraints separately
+                    original_query=user_query,
+                    confidence=request_plan.confidence,
+                    requires_disambiguation=False,  # RequestPlan doesn't store this
+                    need_freshness=request_plan.need_freshness,
+                    freshness_ttl_hours=request_plan.freshness_ttl_hours
                 )
-                logger.info(f"[{request_id}] Extracted intent: {structured_intent.intent}, entities: {structured_intent.entities}")
-            except Exception as e:
-                logger.warning(f"Intent extraction failed: {e}, using pattern-based")
-                structured_intent = self.intent_extractor.extract(user_query, request_type)
+                all_entities = structured_intent.get_all_entities()
+                logger.info(f"[{request_id}] Using intent from RequestPlan: {structured_intent.intent}, entities: {all_entities}")
+            else:
+                # Fallback: only extract if RequestPlan wasn't created (shouldn't happen)
+                logger.warning(f"[{request_id}] No RequestPlan available, extracting intent as fallback")
+                try:
+                    structured_intent = await self.intent_extractor.extract_with_llm(
+                        user_query, self.client, request_type
+                    )
+                    all_entities = structured_intent.get_all_entities()
+                    logger.info(f"[{request_id}] Extracted intent: {structured_intent.intent}, entities: {all_entities}")
+                except Exception as e:
+                    logger.warning(f"Intent extraction failed: {e}, using pattern-based")
+                    structured_intent = self.intent_extractor.extract(user_query, request_type)
             
-            # Perform real-time search if requested
+            # Step 1: Create tool plan based on freshness (decides before Tavily)
+            tool_plan = None
+            if structured_intent and request_plan:
+                tool_plan = self.tool_planner.plan_tools(
+                    intent=structured_intent.intent,
+                    need_freshness=structured_intent.need_freshness,
+                    freshness_reason=getattr(structured_intent, 'freshness_reason', None),
+                    entities=structured_intent.entities,
+                    candidate_year=structured_intent.candidate_year,
+                    requires_disambiguation=structured_intent.requires_disambiguation
+                )
+                logger.info(f"[{request_id}] Tool plan: Tavily={tool_plan.use_tavily}, Reason: {tool_plan.freshness_reason or tool_plan.skip_reason}")
+            
+            # Perform real-time search if requested AND tool plan allows it
             search_results = []
             search_context = ""
             source_summary = {}
             verified_facts = []
             
             if use_live_data:
+                # Check if we should skip Tavily based on tool plan
+                should_skip_tavily = False
+                skip_reason = ""
+                if tool_plan:
+                    should_skip_tavily, skip_reason = self.tool_planner.should_skip_tavily(
+                        tool_plan,
+                        cache_hit=False,  # We're in the live data path, so no cache hit yet
+                        entity_resolved=len(structured_intent.get_all_entities() if structured_intent else []) > 0
+                    )
+                    
+                    if should_skip_tavily:
+                        logger.info(f"[{request_id}] Skipping Tavily based on tool plan: {skip_reason}")
+                        # For stable intents without freshness, we can try to answer from cache/structured sources
+                        # For now, we'll still proceed but log the decision
+                        # In future, we could implement structured source lookup here
+                
                 try:
                     # Use structured intent for optimized search
                     intent = structured_intent.intent if structured_intent else None
-                    entities = structured_intent.entities if structured_intent else []
+                    # Get all entities as flat list for search (backward compatibility)
+                    entities = structured_intent.get_all_entities() if structured_intent else []
                     need_freshness = request_plan.need_freshness if request_plan else False
                     
-                    if tracker:
-                        with tracker.time_operation("search"):
+                    # Only call Tavily if tool plan allows it
+                    if not should_skip_tavily:
+                        if tracker:
+                            with tracker.time_operation("search"):
+                                movie_info = await self.aggregator.get_movie_info(
+                                    user_query, 
+                                    include_recent_news=True,
+                                    intent=intent,
+                                    entities=entities,
+                                    request_type=request_type
+                                )
+                        else:
+                            logger.info(f"[{request_id}] Performing real-time search...")
                             movie_info = await self.aggregator.get_movie_info(
-                                user_query, 
+                                user_query,
                                 include_recent_news=True,
                                 intent=intent,
                                 entities=entities,
                                 request_type=request_type
                             )
+                        
+                        search_results = movie_info.get("results", [])
+                        source_summary = movie_info.get("source_summary", {})
+                        search_time_ms = (time.time() - search_start) * 1000
                     else:
-                        logger.info(f"[{request_id}] Performing real-time search...")
-                        movie_info = await self.aggregator.get_movie_info(
-                            user_query,
-                            include_recent_news=True,
-                            intent=intent,
-                            entities=entities,
-                            request_type=request_type
-                        )
-                    
-                    search_results = movie_info.get("results", [])
-                    source_summary = movie_info.get("source_summary", {})
-                    search_time_ms = (time.time() - search_start) * 1000
+                        # Skip Tavily - use empty results (will rely on cache/structured sources)
+                        logger.info(f"[{request_id}] Skipping Tavily, using cache/structured sources only")
+                        search_results = []
+                        source_summary = {}
+                        search_time_ms = 0
                     
                     # Log source transparency
                     if tracker and source_summary:
@@ -353,41 +427,145 @@ class CineMind:
                         tracker.log_metric("has_tier_a_sources", 1.0 if source_summary.get("has_tier_a") else 0.0)
                         tracker.log_metric("has_tier_c_only", 1.0 if source_summary.get("has_tier_c_only") else 0.0)
                     
-                    # Perform verification for fact-based queries
+                    # Perform "candidate → verify → answer" pattern for fact-based queries
                     if request_type in ["info", "fact-check"] and structured_intent:
-                        if structured_intent.intent == "filmography_overlap" and len(structured_intent.entities) >= 2:
-                            # Extract candidate titles from search results
-                            candidate_titles = self._extract_candidate_titles(search_results, structured_intent.entities)
+                        # Convert search results to SourceMetadata for verification
+                        from .source_policy import SourceMetadata, SourceTier
+                        source_metadata_list = []
+                        for r in search_results:
+                            tier = self.source_policy.classify_source(
+                                r.get("url", ""), 
+                                r.get("title", ""), 
+                                r.get("content", "")
+                            )
+                            source_metadata_list.append(SourceMetadata(
+                                url=r.get("url", ""),
+                                domain=r.get("domain", ""),
+                                tier=tier,
+                                title=r.get("title", ""),
+                                content=r.get("content", ""),
+                                score=r.get("score", 0.0)
+                            ))
+                        
+                        # Step 1: Extract candidates based on intent
+                        people = structured_intent.entities.get("people", [])
+                        movies = structured_intent.entities.get("movies", [])
+                        
+                        if structured_intent.intent == "filmography_overlap" and len(people) >= 2:
+                            # Extract collaboration candidates
+                            candidates = self.candidate_extractor.extract_collaboration_candidates(
+                                search_results, 
+                                people[0],
+                                people[1]
+                            )
                             
-                            # Convert search results to SourceMetadata for verification
-                            from .source_policy import SourceMetadata, SourceTier
-                            source_metadata_list = []
-                            for r in search_results:
-                                tier = self.source_policy.classify_source(
-                                    r.get("url", ""), 
-                                    r.get("title", ""), 
-                                    r.get("content", "")
-                                )
-                                source_metadata_list.append(SourceMetadata(
-                                    url=r.get("url", ""),
-                                    domain=r.get("domain", ""),
-                                    tier=tier,
-                                    title=r.get("title", ""),
-                                    content=r.get("content", ""),
-                                    score=r.get("score", 0.0)
-                                ))
+                            logger.info(f"[{request_id}] Extracted {len(candidates)} collaboration candidates")
                             
-                            # Verify against Tier A sources
-                            try:
-                                verified_facts = self.verifier.verify_filmography_overlap(
-                                    structured_intent.entities[0],
-                                    structured_intent.entities[1],
-                                    candidate_titles,
-                                    source_metadata_list
+                            # Step 2: Verify each candidate against Tier A sources
+                            verified_facts = []
+                            for candidate in candidates:
+                                # Parse title and year from candidate value
+                                title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                if title_year_match:
+                                    movie_title = title_year_match.group(1)
+                                    year = int(title_year_match.group(2))
+                                    
+                                    # Verify both people have credits in this movie
+                                    person1_verified, source1, conf1 = self.verifier.verify_movie_credit(
+                                        movie_title, people[0], year, source_metadata_list
+                                    )
+                                    person2_verified, source2, conf2 = self.verifier.verify_movie_credit(
+                                        movie_title, people[1], year, source_metadata_list
+                                    )
+                                    
+                                    if person1_verified and person2_verified:
+                                        # Both verified - use higher confidence source
+                                        best_source = source1 if conf1 >= conf2 else source2
+                                        best_conf = max(conf1, conf2)
+                                        
+                                        verified_facts.append(VerifiedFact(
+                                            fact_type="collaboration",
+                                            value=candidate.value,
+                                            verified=True,
+                                            source_url=best_source,
+                                            source_tier="A",
+                                            confidence=best_conf
+                                        ))
+                                        logger.info(f"[{request_id}] Verified collaboration: {candidate.value}")
+                            
+                            logger.info(f"[{request_id}] Verified {len([f for f in verified_facts if f.verified])} collaborations out of {len(candidates)} candidates")
+                        
+                        elif structured_intent.intent in ["director_info", "cast_info"]:
+                            # Extract movie candidates
+                            all_entities = structured_intent.get_all_entities()
+                            candidates = self.candidate_extractor.extract_movie_candidates(
+                                search_results,
+                                all_entities
+                            )
+                            
+                            logger.info(f"[{request_id}] Extracted {len(candidates)} movie candidates")
+                            
+                            # Verify each candidate
+                            verified_facts = []
+                            for candidate in candidates:
+                                title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                if title_year_match:
+                                    movie_title = title_year_match.group(1)
+                                    year = int(title_year_match.group(2))
+                                    
+                                    # Verify person has credit in movie
+                                    if people:
+                                        person = people[0]
+                                        verified, source, conf = self.verifier.verify_movie_credit(
+                                            movie_title, person, year, source_metadata_list
+                                        )
+                                        
+                                        if verified:
+                                            verified_facts.append(VerifiedFact(
+                                                fact_type="credit",
+                                                value=candidate.value,
+                                                verified=True,
+                                                source_url=source,
+                                                source_tier="A",
+                                                confidence=conf
+                                            ))
+                        
+                        elif structured_intent.intent == "release_date":
+                            # Extract release year candidates
+                            if movies:
+                                movie_title = movies[0]
+                                candidates = self.candidate_extractor.extract_release_year_candidates(
+                                    search_results,
+                                    movie_title
                                 )
-                                logger.info(f"[{request_id}] Verified {len([f for f in verified_facts if f.verified])} facts")
-                            except Exception as e:
-                                logger.warning(f"Verification failed: {e}")
+                                
+                                logger.info(f"[{request_id}] Extracted {len(candidates)} year candidates for {movie_title}")
+                                
+                                # Verify release year
+                                verified_facts = []
+                                year, source, conf = self.verifier.verify_release_year(
+                                    movie_title, source_metadata_list
+                                )
+                                
+                                if year:
+                                    verified_facts.append(VerifiedFact(
+                                        fact_type="release_year",
+                                        value=str(year),
+                                        verified=True,
+                                        source_url=source,
+                                        source_tier="A",
+                                        confidence=conf
+                                    ))
+                                    logger.info(f"[{request_id}] Verified release year: {year} for {movie_title}")
+                        
+                        # Store verified facts for use in response generation
+                        if verified_facts:
+                            # Add verified facts to search context for LLM
+                            verified_context = "\n\n=== VERIFIED FACTS (Tier A Sources) ===\n"
+                            for fact in verified_facts:
+                                if fact.verified:
+                                    verified_context += f"- {fact.value} (verified via {fact.source_url})\n"
+                            search_context += verified_context
                     
                     # Log search operation
                     if tracker:
@@ -591,6 +769,13 @@ class CineMind:
                                     entities = request_plan.entities if request_plan else []
                                     need_freshness = request_plan.need_freshness if request_plan else False
                                     
+                                    # Get freshness metadata from structured_intent if available
+                                    freshness_reason = None
+                                    freshness_ttl_hours = None
+                                    if structured_intent:
+                                        freshness_reason = getattr(structured_intent, 'freshness_reason', None)
+                                        freshness_ttl_hours = getattr(structured_intent, 'freshness_ttl_hours', None)
+                                    
                                     self.cache.put(
                                         prompt=user_query,
                                         response_text=agent_response,
@@ -605,7 +790,9 @@ class CineMind:
                                         cost_metrics={
                                             "saved_cost": cost_usd,  # Cost that would be saved on cache hit
                                             "original_cost": cost_usd
-                                        }
+                                        },
+                                        freshness_reason=freshness_reason,
+                                        freshness_ttl_hours=freshness_ttl_hours
                                     )
                                 except Exception as e:
                                     logger.warning(f"Failed to cache response: {e}")

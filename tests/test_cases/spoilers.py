@@ -4,7 +4,7 @@ from .base import TestCase, contains_all_substrings, contains_spoiler_warning, m
 SPOILER_TESTS = [
     TestCase(
         name="spoiler_request",
-        prompt="Explain the ending of Shutter Island (spoilers OK).",
+        prompt="Explain the ending of Shutter Island.",
         expected_type="spoiler",
         acceptance_criteria=[
             contains_all_substrings("shutter island", "ending"),

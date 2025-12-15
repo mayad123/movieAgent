@@ -18,26 +18,27 @@ from cinemind.prompts.versions import get_prompt_version
 import cinemind.config as config
 
 
-async def run_multi_hop_v4():
-    """Run multi-hop test with prompt version v4 and show observability and cache status."""
+async def run_simple_facts_v4():
+    """Run simple facts test with prompt version v4 and show observability and cache status."""
     
     # Set prompt version to v4
     config.SYSTEM_PROMPT = get_prompt_version("v4")
     config.PROMPT_VERSION = "v4"
     
     print("=" * 80)
-    print("MULTI-HOP TEST WITH PROMPT VERSION V4 (CACHE TEST)")
+    print("FACT CHECKING TEST - MATRIX (GLADIATOR II) WITH PROMPT VERSION V4")
     print("=" * 80)
     print(f"\nPrompt Version: v4")
     print(f"Prompt Length: {len(config.SYSTEM_PROMPT)} characters\n")
     
-    # Get the multi-hop test case
-    test_cases = TEST_SUITES.get("multi_hop", [])
-    if not test_cases:
-        print("No multi-hop test cases found!")
+    # Get the fact_checking test case (specifically the second test case - Gladiator II)
+    fact_checking_cases = TEST_SUITES.get("fact_check", [])
+    if not fact_checking_cases or len(fact_checking_cases) < 2:
+        print(f"No fact_checking test cases found! Available: {list(TEST_SUITES.keys())}")
+        print(f"fact_check cases: {len(fact_checking_cases) if fact_checking_cases else 0}")
         return
     
-    test_case = test_cases[0]  # Get first multi-hop test
+    test_case = fact_checking_cases[1]  # Get the second test case (Gladiator II)
     print(f"Test Case: {test_case.name}")
     print(f"Query: {test_case.prompt}")
     print(f"Expected Type: {test_case.expected_type}")
@@ -250,5 +251,5 @@ async def run_multi_hop_v4():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_multi_hop_v4())
+    asyncio.run(run_simple_facts_v4())
 

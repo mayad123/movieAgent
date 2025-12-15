@@ -178,8 +178,9 @@ class RequestPlanner:
         )
         
         # Step 3: Determine freshness requirements
-        need_freshness = classification.need_freshness
-        ttl_hours = self.TTL_BY_TYPE.get(classification.predicted_type, 168.0)
+        # Use freshness hints from StructuredIntent if available, otherwise use classification
+        need_freshness = structured_intent.need_freshness if hasattr(structured_intent, 'need_freshness') and structured_intent.need_freshness else classification.need_freshness
+        ttl_hours = structured_intent.freshness_ttl_hours if hasattr(structured_intent, 'freshness_ttl_hours') and structured_intent.freshness_ttl_hours else self.TTL_BY_TYPE.get(classification.predicted_type, 168.0)
         
         # Step 4: Determine source policy
         allowed_tiers, require_tier_a, reject_tier_c = self._determine_source_policy(
@@ -197,12 +198,17 @@ class RequestPlanner:
         )
         
         # Step 7: Extract entity years if present
-        entity_years = self._extract_entity_years(prompt, structured_intent.entities)
+        # Get all entities as flat list for RequestPlan (backward compatibility)
+        all_entities = structured_intent.get_all_entities() if hasattr(structured_intent, 'get_all_entities') else (
+            structured_intent.entities if isinstance(structured_intent.entities, list) 
+            else structured_intent.entities.get("movies", []) + structured_intent.entities.get("people", [])
+        )
+        entity_years = self._extract_entity_years(prompt, all_entities)
         
         return RequestPlan(
             intent=structured_intent.intent,
             request_type=classification.predicted_type,
-            entities=structured_intent.entities or classification.entities or [],
+            entities=all_entities,  # RequestPlan stores as flat list for now
             entity_years=entity_years,
             need_freshness=need_freshness,
             freshness_ttl_hours=ttl_hours,

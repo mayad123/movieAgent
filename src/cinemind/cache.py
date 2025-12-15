@@ -616,7 +616,9 @@ class SemanticCache:
             return False
     
     def _extract_structured_facts(self, response_text: str, predicted_type: str, 
-                                 entities: List[str], sources: List[Dict]) -> Dict:
+                                 entities: List[str], sources: List[Dict],
+                                 need_freshness: bool = False, freshness_reason: Optional[str] = None,
+                                 freshness_ttl_hours: Optional[float] = None) -> Dict:
         """
         Extract structured facts from response for safe regeneration.
         
@@ -670,6 +672,13 @@ class SemanticCache:
         if entities:
             facts["entities"] = entities
         
+        # Store freshness metadata
+        facts["need_freshness"] = need_freshness
+        if freshness_reason:
+            facts["freshness_reason"] = freshness_reason
+        if freshness_ttl_hours:
+            facts["freshness_ttl_hours"] = freshness_ttl_hours
+        
         # Store source URLs for verification
         tier_a_sources = [s.get("url", "") for s in sources if s.get("tier") == "A"]
         if tier_a_sources:
@@ -680,7 +689,8 @@ class SemanticCache:
     def put(self, prompt: str, response_text: str, sources: List[Dict],
            predicted_type: str, entities: List[str], need_freshness: bool,
            classifier_type: str, tool_config_version: str, agent_version: str,
-           prompt_version: str, cost_metrics: Dict = None, structured_facts: Dict = None):
+           prompt_version: str, cost_metrics: Dict = None, structured_facts: Dict = None,
+           freshness_reason: Optional[str] = None, freshness_ttl_hours: Optional[float] = None):
         """
         Store entry in cache with structured facts.
         
@@ -707,7 +717,19 @@ class SemanticCache:
         
         # Extract structured facts if not provided
         if structured_facts is None:
-            structured_facts = self._extract_structured_facts(response_text, predicted_type, entities, sources)
+            structured_facts = self._extract_structured_facts(
+                response_text, predicted_type, entities, sources,
+                need_freshness=need_freshness,
+                freshness_reason=freshness_reason,
+                freshness_ttl_hours=freshness_ttl_hours
+            )
+        else:
+            # Ensure freshness metadata is in structured_facts
+            if freshness_reason:
+                structured_facts["freshness_reason"] = freshness_reason
+            if freshness_ttl_hours:
+                structured_facts["freshness_ttl_hours"] = freshness_ttl_hours
+            structured_facts["need_freshness"] = need_freshness
         
         # Compute TTL and expiration
         ttl = self._compute_ttl(predicted_type, entities, need_freshness)
