@@ -18,26 +18,26 @@ from cinemind.prompts.versions import get_prompt_version
 import cinemind.config as config
 
 
-async def run_recommendations_v4():
-    """Run recommendations test with prompt version v4 and show observability."""
+async def run_multi_hop_v4():
+    """Run multi-hop test with prompt version v4 and show observability and cache status."""
     
     # Set prompt version to v4
     config.SYSTEM_PROMPT = get_prompt_version("v4")
     config.PROMPT_VERSION = "v4"
     
     print("=" * 80)
-    print("RECOMMENDATIONS TEST WITH PROMPT VERSION V4")
+    print("MULTI-HOP TEST WITH PROMPT VERSION V4 (CACHE TEST)")
     print("=" * 80)
     print(f"\nPrompt Version: v4")
     print(f"Prompt Length: {len(config.SYSTEM_PROMPT)} characters\n")
     
-    # Get the recommendations test case
-    test_cases = TEST_SUITES.get("recommendations", [])
+    # Get the multi-hop test case
+    test_cases = TEST_SUITES.get("multi_hop", [])
     if not test_cases:
-        print("No recommendations test cases found!")
+        print("No multi-hop test cases found!")
         return
     
-    test_case = test_cases[0]  # Get first recommendations test
+    test_case = test_cases[0]  # Get first multi-hop test
     print(f"Test Case: {test_case.name}")
     print(f"Query: {test_case.prompt}")
     print(f"Expected Type: {test_case.expected_type}")
@@ -49,13 +49,70 @@ async def run_recommendations_v4():
     agent = CineMind(enable_observability=True)
     
     try:
-        # Run the test
-        result = await agent.search_and_analyze(
+        print("\n" + "=" * 80)
+        print("FIRST RUN (Should populate cache)")
+        print("=" * 80 + "\n")
+        
+        # Run the test - FIRST RUN (should populate cache)
+        result1 = await agent.search_and_analyze(
             test_case.prompt,
             use_live_data=True
         )
         
-        request_id = result.get("request_id")
+        request_id1 = result1.get("request_id")
+        cache_hit1 = result1.get("cache_hit", False)
+        
+        print(f"\nFirst Run Results:")
+        print(f"  Request ID: {request_id1}")
+        print(f"  Cache Hit: {cache_hit1}")
+        print(f"  Live Data Used: {result1.get('live_data_used', False)}")
+        print(f"  Response Time: {result1.get('timestamp', 'N/A')}")
+        
+        # Wait a moment for cache to be written
+        import asyncio
+        await asyncio.sleep(2)
+        
+        print("\n" + "=" * 80)
+        print("SECOND RUN (Should use cache, NO Tavily call)")
+        print("=" * 80 + "\n")
+        
+        # Run the test again - SECOND RUN (should use cache)
+        result2 = await agent.search_and_analyze(
+            test_case.prompt,
+            use_live_data=True
+        )
+        
+        request_id2 = result2.get("request_id")
+        cache_hit2 = result2.get("cache_hit", False)
+        cache_tier2 = result2.get("cache_tier", "N/A")
+        live_data_used2 = result2.get("live_data_used", False)
+        
+        print(f"\nSecond Run Results:")
+        print(f"  Request ID: {request_id2}")
+        print(f"  Cache Hit: {cache_hit2}")
+        print(f"  Cache Tier: {cache_tier2}")
+        print(f"  Live Data Used: {live_data_used2}")
+        print(f"  Cost: ${result2.get('cost_usd', 0):.6f}")
+        
+        # Check if cache worked
+        if cache_hit2:
+            print("\n[SUCCESS] CACHE WORKING: Second run used cache (no Tavily call)")
+            if not live_data_used2:
+                print("[SUCCESS] CONFIRMED: Live data was NOT used (cache served the response)")
+            else:
+                print("[WARNING] Cache hit but live_data_used is True (unexpected)")
+        else:
+            print("\n[FAILURE] CACHE NOT WORKING: Second run did NOT use cache (Tavily was called)")
+            print("   This indicates a cache miss - need to investigate why")
+            print("   Possible reasons:")
+            print("   - Cache entry expired (check TTL)")
+            print("   - Hash mismatch (normalization differences)")
+            print("   - Classification type mismatch")
+            print("   - PROMPT_VERSION mismatch")
+        
+        # Use second result for observability display
+        request_id = request_id2
+        result = result2
         
         # Print agent response
         print("\n" + "=" * 80)
@@ -193,5 +250,5 @@ async def run_recommendations_v4():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_recommendations_v4())
+    asyncio.run(run_multi_hop_v4())
 
