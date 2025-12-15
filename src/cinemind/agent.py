@@ -29,6 +29,7 @@ from .cache import SemanticCache
 from .source_policy import SourcePolicy
 from .intent_extraction import IntentExtractor
 from .verification import FactVerifier
+from .request_plan import RequestPlanner, RequestPlan
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -87,6 +88,9 @@ class CineMind:
         self.tagger = RequestTagger()
         self.classifier = HybridClassifier()
         
+        # Initialize request planner (single source of truth for routing)
+        self.planner = RequestPlanner(self.classifier, self.intent_extractor)
+        
         # Initialize semantic cache
         if enable_observability:
             self.cache = SemanticCache(self.observability.db)
@@ -118,106 +122,164 @@ class CineMind:
         if not request_id:
             request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
         
-        # Auto-classify request type if not provided using hybrid classifier
-        classification_result = None
-        if not request_type:
-            # Use hybrid classifier (rules → LLM → guardrails)
-            classification_result = await self.classifier.classify(user_query, self.client)
-            request_type = classification_result.predicted_type
-            
-            # Log classification metadata
-            if self.observability:
-                self.observability.log_classification_metadata(
-                    request_id,
-                    predicted_type=classification_result.predicted_type,
-                    rule_hit=classification_result.rule_hit,
-                    llm_used=classification_result.llm_used,
-                    confidence=classification_result.confidence,
-                    entities=classification_result.entities,
-                    need_freshness=classification_result.need_freshness
-                )
-        else:
-            # If request_type was provided, create a minimal classification result
-            classification_result = type('obj', (object,), {
-                'predicted_type': request_type,
-                'entities': [],
-                'need_freshness': False
-            })()
-            # Still log it
-            if self.observability:
-                self.observability.log_classification_metadata(
-                    request_id,
-                    predicted_type=request_type,
-                    rule_hit="user_provided",
-                    llm_used=False,
-                    confidence=1.0
-                )
-        
-        # Check cache before making API calls
+        # CRITICAL: Check cache FIRST before any OpenAI calls
+        # This prevents unnecessary API calls for intent extraction
         cache_hit = None
+        request_plan = None
+        
         if self.cache and use_live_data:  # Only check cache if we would normally use live data
             try:
-                entities = getattr(classification_result, 'entities', []) if classification_result else []
-                need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                from .config import PROMPT_VERSION
                 
+                # Try cache lookup with minimal classification (rule-based only, no LLM)
+                # We need a quick classification to know what to look for in cache
+                # Use rule-based classification first (fast, no API calls)
+                # For exact cache lookup, we don't need classification - hash is enough
+                # For semantic cache, we'll try with default "info" type
+                # The cache.get() method will handle exact hash matching first
+                
+                # Try cache lookup - exact match doesn't need classification
+                # For semantic match, we'll use a default type
                 cache_hit = self.cache.get(
                     prompt=user_query,
                     classifier_type="hybrid",
                     tool_config_version=f"cine_prompt_{PROMPT_VERSION}",
-                    predicted_type=request_type,
-                    entities=entities,
-                    need_freshness=need_freshness
+                    predicted_type="info",  # Default type for cache lookup (exact match doesn't need this)
+                    entities=[],  # Empty for now - exact match doesn't need entities
+                    need_freshness=False,  # Default - exact match doesn't need this
+                    current_agent_version=self.version,
+                    current_prompt_version=PROMPT_VERSION
                 )
+                
+                # If cache hit, reconstruct RequestPlan from cached data
+                if cache_hit:
+                    # Reconstruct plan from cache entry (no OpenAI calls needed)
+                    request_plan = RequestPlan(
+                        intent=cache_hit.structured_facts.get("type", "general_info") if cache_hit.structured_facts else "general_info",
+                        request_type=cache_hit.predicted_type,
+                        entities=cache_hit.entities or [],
+                        need_freshness=cache_hit.structured_facts.get("need_freshness", False) if cache_hit.structured_facts else False,
+                        freshness_ttl_hours=6.0 if cache_hit.predicted_type == "release-date" else 168.0,
+                        original_query=user_query,
+                        rule_hit="cached",  # Mark as from cache
+                        llm_used=False,  # No LLM used for cached response
+                        confidence=1.0
+                    )
+                    request_type = request_plan.request_type
+                    
             except Exception as e:
                 logger.warning(f"Cache lookup failed: {e}, proceeding with normal flow")
         
-        # If cache hit, return cached response
-        if cache_hit:
-            logger.info(f"[{request_id}] Cache {cache_hit.cache_tier} hit! Returning cached response")
-            
-            # Track request for metrics
-            if self.observability:
-                track_ctx = self.observability.track_request(
-                    request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
-                )
-                tracker = track_ctx.__enter__()
-                tracker.log_metric("cache_hit", 1.0, {
-                    "cache_tier": cache_hit.cache_tier,
-                    "similarity_score": cache_hit.similarity_score
-                })
-                tracker.log_metric("cache_savings_usd", cache_hit.cost_metrics.get("saved_cost", 0))
+        # Only create RequestPlan if cache miss (this will call OpenAI)
+        if not cache_hit:
+            # Step 1: Create RequestPlan (single source of truth for routing)
+            # This will call OpenAI for classification and intent extraction
+            if not request_type:
+                try:
+                    request_plan = await self.planner.plan_request(user_query, self.client)
+                    request_type = request_plan.request_type
+                except Exception as e:
+                    logger.warning(f"[{request_id}] Planning failed: {e}, defaulting to 'info'")
+                    request_type = "info"
+                    # Create minimal plan as fallback
+                    request_plan = RequestPlan(
+                        intent="general_info",
+                        request_type="info",
+                        original_query=user_query
+                    )
             else:
-                tracker = None
-                track_ctx = None
+                # If request_type provided, still create plan for consistency
+                try:
+                    request_plan = await self.planner.plan_request(user_query, self.client)
+                except Exception as e:
+                    logger.warning(f"[{request_id}] Planning failed: {e}, using provided type")
+                    request_plan = RequestPlan(
+                        intent="general_info",
+                        request_type=request_type,
+                        original_query=user_query
+                    )
+        
+        # Log classification metadata (from plan)
+        if request_plan and self.observability:
+            self.observability.log_classification_metadata(
+                request_id,
+                predicted_type=request_plan.request_type,
+                rule_hit=request_plan.rule_hit,
+                llm_used=request_plan.llm_used,
+                confidence=request_plan.confidence,
+                entities=request_plan.entities,
+                need_freshness=request_plan.need_freshness
+            )
+        
+        # If cache hit, check decision tree using RequestPlan
+        if cache_hit and request_plan:
+            # Prepare plan dict for cache validation
+            plan_dict = request_plan.to_dict()
+            plan_dict["agent_version"] = self.version
+            plan_dict["prompt_version"] = PROMPT_VERSION
+            plan_dict["tool_config_version"] = f"cine_prompt_{PROMPT_VERSION}"
             
-            # Get configuration versions
-            from .config import PROMPT_VERSION, AGENT_VERSION
+            should_call_openai, reason = self.cache.should_call_openai_on_cache_hit(
+                cache_hit, plan_dict, cache_hit.similarity_score
+            )
             
-            result = {
-                "agent": self.agent_name,
-                "version": self.version,
-                "request_id": request_id,
-                "query": user_query,
-                "response": cache_hit.response_text,
-                "sources": cache_hit.sources,
-                "timestamp": datetime.now().isoformat(),
-                "live_data_used": False,  # Cache hit means no live data needed
-                "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-                "cost_usd": 0.0,  # No cost for cache hit
-                "request_type": request_type,
-                "outcome": outcome or "success",
-                "model_version": OPENAI_MODEL,
-                "prompt_version": PROMPT_VERSION,
-                "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",
-                "cache_hit": True,
-                "cache_tier": cache_hit.cache_tier,
-                "cache_similarity": cache_hit.similarity_score
-            }
+            logger.info(f"[{request_id}] Cache {cache_hit.cache_tier} hit! (similarity: {cache_hit.similarity_score:.3f})")
+            logger.info(f"[{request_id}] Decision: {'Call OpenAI' if should_call_openai else 'Serve cached'} - Reason: {reason}")
             
-            if track_ctx:
-                track_ctx.__exit__(None, None, None)
+            # If decision tree says NO OpenAI, serve cached directly
+            if not should_call_openai:
+                # Track request for metrics
+                if self.observability:
+                    track_ctx = self.observability.track_request(
+                        request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
+                    )
+                    tracker = track_ctx.__enter__()
+                    tracker.log_metric("cache_hit", 1.0, {
+                        "cache_tier": cache_hit.cache_tier,
+                        "similarity_score": cache_hit.similarity_score,
+                        "openai_skipped": True,
+                        "skip_reason": reason
+                    })
+                    tracker.log_metric("cache_savings_usd", cache_hit.cost_metrics.get("saved_cost", 0))
+                else:
+                    tracker = None
+                    track_ctx = None
+                
+                # Get configuration versions
+                from .config import PROMPT_VERSION, AGENT_VERSION
+                
+                result = {
+                    "agent": self.agent_name,
+                    "version": self.version,
+                    "request_id": request_id,
+                    "query": user_query,
+                    "response": cache_hit.response_text,
+                    "sources": cache_hit.sources,
+                    "timestamp": datetime.now().isoformat(),
+                    "live_data_used": False,  # Cache hit means no live data needed
+                    "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                    "cost_usd": 0.0,  # No cost for cache hit
+                    "request_type": request_type,
+                    "outcome": outcome or "success",
+                    "model_version": OPENAI_MODEL,
+                    "prompt_version": PROMPT_VERSION,
+                    "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",
+                    "cache_hit": True,
+                    "cache_tier": cache_hit.cache_tier,
+                    "cache_similarity": cache_hit.similarity_score,
+                    "openai_skipped": True,
+                    "skip_reason": reason
+                }
+                
+                if track_ctx:
+                    track_ctx.__exit__(None, None, None)
+                
+                return result
             
-            return result
+            # Decision tree says YES OpenAI (e.g., re-verify, rewrite, etc.)
+            # Fall through to normal flow but use cached sources/data
+            logger.info(f"[{request_id}] Cache hit but OpenAI needed for: {reason}")
+            # Continue to normal flow but can use cached structured_facts if available
         
         # No cache hit - proceed with normal flow
         logger.info(f"[{request_id}] Cache miss, proceeding with API calls")
@@ -260,7 +322,7 @@ class CineMind:
                     # Use structured intent for optimized search
                     intent = structured_intent.intent if structured_intent else None
                     entities = structured_intent.entities if structured_intent else []
-                    need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                    need_freshness = request_plan.need_freshness if request_plan else False
                     
                     if tracker:
                         with tracker.time_operation("search"):
@@ -526,8 +588,8 @@ class CineMind:
                             # Store in cache for future use
                             if self.cache:
                                 try:
-                                    entities = getattr(classification_result, 'entities', []) if classification_result else []
-                                    need_freshness = getattr(classification_result, 'need_freshness', False) if classification_result else False
+                                    entities = request_plan.entities if request_plan else []
+                                    need_freshness = request_plan.need_freshness if request_plan else False
                                     
                                     self.cache.put(
                                         prompt=user_query,

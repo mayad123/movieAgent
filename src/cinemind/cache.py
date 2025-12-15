@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import logging
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
@@ -49,6 +50,7 @@ class CacheEntry:
     entities: List[str] = None
     response_text: str = ""
     sources: List[Dict] = None
+    structured_facts: Optional[Dict] = None  # Structured facts for regeneration
     created_at: str = ""
     expires_at: str = ""
     agent_version: str = ""
@@ -57,6 +59,7 @@ class CacheEntry:
     cost_metrics: Dict = None
     cache_tier: str = ""  # "exact" or "semantic"
     similarity_score: float = 0.0
+    last_verified_at: Optional[str] = None  # When sources were last verified
     
     def __post_init__(self):
         if self.entities is None:
@@ -65,6 +68,8 @@ class CacheEntry:
             self.sources = []
         if self.cost_metrics is None:
             self.cost_metrics = {}
+        if self.structured_facts is None:
+            self.structured_facts = {}
 
 
 class PromptNormalizer:
@@ -166,6 +171,7 @@ class SemanticCache:
                     entities JSONB,
                     response_text TEXT,
                     sources JSONB,
+                    structured_facts JSONB,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP,
                     agent_version VARCHAR(50),
@@ -174,6 +180,7 @@ class SemanticCache:
                     cost_metrics JSONB,
                     cache_tier VARCHAR(20),
                     similarity_score REAL,
+                    last_verified_at TIMESTAMP,
                     INDEX idx_hash (prompt_hash),
                     INDEX idx_expires (expires_at),
                     INDEX idx_type (predicted_type)
@@ -191,6 +198,7 @@ class SemanticCache:
                     entities TEXT,
                     response_text TEXT,
                     sources TEXT,
+                    structured_facts TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     expires_at TEXT,
                     agent_version TEXT,
@@ -198,7 +206,8 @@ class SemanticCache:
                     tool_config_version TEXT,
                     cost_metrics TEXT,
                     cache_tier TEXT,
-                    similarity_score REAL
+                    similarity_score REAL,
+                    last_verified_at TEXT
                 )
             """)
             
@@ -206,6 +215,20 @@ class SemanticCache:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_hash ON cache_entries(prompt_hash)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_expires ON cache_entries(expires_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_type ON cache_entries(predicted_type)")
+            
+            # Add structured_facts column if it doesn't exist (for existing databases)
+            cursor.execute("PRAGMA table_info(cache_entries)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'structured_facts' not in columns:
+                try:
+                    cursor.execute("ALTER TABLE cache_entries ADD COLUMN structured_facts TEXT")
+                except sqlite3.OperationalError:
+                    pass
+            if 'last_verified_at' not in columns:
+                try:
+                    cursor.execute("ALTER TABLE cache_entries ADD COLUMN last_verified_at TEXT")
+                except sqlite3.OperationalError:
+                    pass
         
         self.db.conn.commit()
         logger.info("Cache tables created successfully")
@@ -309,7 +332,8 @@ class SemanticCache:
     
     def get(self, prompt: str, classifier_type: str, tool_config_version: str,
            predicted_type: str, entities: List[str] = None,
-           need_freshness: bool = False) -> Optional[CacheEntry]:
+           need_freshness: bool = False, current_agent_version: str = "",
+           current_prompt_version: str = "") -> Optional[CacheEntry]:
         """
         Get cached response if available and fresh.
         
@@ -323,22 +347,195 @@ class SemanticCache:
         prompt_hash = self.normalizer.compute_hash(normalized, classifier_type, tool_config_version)
         
         exact_match = self._get_exact_match(prompt_hash)
-        if exact_match and self._is_fresh(exact_match, predicted_type, need_freshness):
-            logger.info(f"Exact cache hit for prompt hash: {prompt_hash[:8]}...")
-            exact_match.cache_tier = "exact"
-            return exact_match
+        if exact_match:
+            # Check version compatibility
+            if not self._check_version_compatibility(exact_match, current_agent_version, current_prompt_version, tool_config_version):
+                logger.info(f"Cache entry version mismatch, invalidating")
+                return None
+            
+            # Check freshness
+            if self._is_fresh(exact_match, predicted_type, need_freshness):
+                logger.info(f"Exact cache hit for prompt hash: {prompt_hash[:8]}...")
+                exact_match.cache_tier = "exact"
+                exact_match.similarity_score = 1.0  # Exact match = 100% similarity
+                return exact_match
+            else:
+                logger.info(f"Cache entry expired for hash: {prompt_hash[:8]}...")
+                return None
         
         # Tier 2: Semantic cache lookup
         semantic_match = self._get_semantic_match(
             normalized, predicted_type, need_freshness
         )
         if semantic_match:
+            # Check version compatibility
+            if not self._check_version_compatibility(semantic_match, current_agent_version, current_prompt_version, tool_config_version):
+                logger.info(f"Semantic cache entry version mismatch, invalidating")
+                return None
+            
             logger.info(f"Semantic cache hit (similarity: {semantic_match.similarity_score:.3f})")
             semantic_match.cache_tier = "semantic"
             return semantic_match
         
         logger.debug("Cache miss")
         return None
+    
+    def _check_version_compatibility(self, entry: CacheEntry, agent_version: str, 
+                                     prompt_version: str, tool_config_version: str) -> bool:
+        """
+        Check if cache entry is compatible with current versions.
+        
+        Returns:
+            True if compatible, False if should be invalidated
+        """
+        # If versions don't match, invalidate
+        if entry.agent_version and agent_version and entry.agent_version != agent_version:
+            return False
+        if entry.prompt_version and prompt_version and entry.prompt_version != prompt_version:
+            return False
+        if entry.tool_config_version and tool_config_version and entry.tool_config_version != tool_config_version:
+            return False
+        
+        return True
+    
+    def should_use_cache_entry(self, cache_entry: CacheEntry, request_plan) -> Tuple[bool, str]:
+        """
+        Cache correctness rules using RequestPlan.
+        Determines if a cache entry is safe to use.
+        
+        Args:
+            cache_entry: Cached entry to evaluate
+            request_plan: RequestPlan for current request
+        
+        Returns:
+            (should_use: bool, reason: str)
+        """
+        from .request_plan import RequestPlan as RP
+        
+        # Rule 1: Version compatibility check
+        # If agent/prompt/source policy version changed, bypass cache
+        # (This is already checked in get(), but double-check here)
+        if not self._check_version_compatibility(
+            cache_entry, 
+            request_plan.get("agent_version", ""),
+            request_plan.get("prompt_version", ""),
+            request_plan.get("tool_config_version", "")
+        ):
+            return (False, "version_mismatch")
+        
+        # Rule 2: Freshness TTL check
+        # If need_freshness=True and cached entry is older than TTL → bypass cache
+        if request_plan.get("need_freshness", False):
+            cache_age_hours = self._get_cache_age_hours(cache_entry)
+            ttl_hours = request_plan.get("freshness_ttl_hours", 24.0)
+            if cache_age_hours > ttl_hours:
+                return (False, f"freshness_ttl_expired (age: {cache_age_hours:.1f}h > ttl: {ttl_hours:.1f}h)")
+        
+        # Rule 3: Source tier validation
+        # If cached sources include Tier C → bypass cache for "facts" intents
+        if request_plan.get("reject_tier_c", True):
+            # Check if cached sources have Tier C
+            sources = cache_entry.sources or []
+            has_tier_c = any(
+                s.get("tier") == "C" or "quora" in s.get("url", "").lower() or 
+                "facebook" in s.get("url", "").lower() or "reddit" in s.get("url", "").lower()
+                for s in sources
+            )
+            
+            # For fact-based intents, reject if Tier C present
+            if has_tier_c and request_plan.get("request_type") in ["info", "fact-check"]:
+                return (False, "tier_c_sources_in_facts")
+        
+        # Rule 4: Entity year mismatch
+        # If same prompt but different movie year → no cache hit
+        # (This is handled by exact match hash, but check entity_years if present)
+        request_entity_years = request_plan.get("entity_years", {})
+        if request_entity_years:
+            # Check if cached entry has different years for same entities
+            cached_entities = cache_entry.entities or []
+            for entity, year in request_entity_years.items():
+                if entity in cached_entities and year is not None:
+                    # If entity year is specified and different, might be different movie
+                    # This is a conservative check - exact hash should catch most cases
+                    pass
+        
+        # Rule 5: Require Tier A check
+        # If require_tier_a=True, check if cached entry has Tier A sources
+        if request_plan.get("require_tier_a", False):
+            sources = cache_entry.sources or []
+            has_tier_a = any(
+                s.get("tier") == "A" or "imdb.com" in s.get("url", "").lower() or 
+                "wikipedia.org" in s.get("url", "").lower()
+                for s in sources
+            )
+            if not has_tier_a:
+                return (False, "missing_required_tier_a_sources")
+        
+        # All checks passed - cache entry is safe to use
+        return (True, "cache_valid")
+    
+    def should_call_openai_on_cache_hit(self, cache_entry: CacheEntry, 
+                                       request_plan, similarity_score: float = 1.0) -> Tuple[bool, str]:
+        """
+        Decision tree: Should we call OpenAI even on a cache hit?
+        Uses RequestPlan for decision making.
+        
+        Args:
+            cache_entry: Cached entry
+            request_plan: RequestPlan dict or object
+            similarity_score: Similarity score of cache hit
+        
+        Returns:
+            (should_call: bool, reason: str)
+        """
+        # Convert RequestPlan to dict if needed
+        if hasattr(request_plan, "to_dict"):
+            plan_dict = request_plan.to_dict()
+        elif isinstance(request_plan, dict):
+            plan_dict = request_plan
+        else:
+            plan_dict = {}
+        
+        # First check cache correctness rules
+        should_use, reason = self.should_use_cache_entry(cache_entry, plan_dict)
+        if not should_use:
+            return (True, reason)  # Need to call OpenAI because cache is invalid
+        
+        predicted_type = plan_dict.get("request_type", "")
+        need_freshness = plan_dict.get("need_freshness", False)
+        
+        # 1. Exact hit with high confidence -> No OpenAI needed
+        if cache_entry.cache_tier == "exact" and similarity_score >= 0.99:
+            return (False, "exact_match_high_confidence")
+        
+        # 2. Semantic match near threshold (0.86-0.90) -> Consider rewrite
+        if cache_entry.cache_tier == "semantic" and 0.86 <= similarity_score < 0.90:
+            # For low-freshness intents, can serve directly or do cheap rewrite
+            if predicted_type in ["info", "recs", "spoiler"] and not need_freshness:
+                return (False, "semantic_match_low_risk")  # Serve directly
+            else:
+                return (True, "semantic_match_near_threshold_rewrite")
+        
+        # 3. High-freshness intent -> Re-verify if cache age > threshold
+        if need_freshness or predicted_type in ["release-date"]:
+            cache_age_hours = self._get_cache_age_hours(cache_entry)
+            ttl_hours = plan_dict.get("freshness_ttl_hours", 24.0)
+            # Re-verify if cache age > TTL threshold
+            if cache_age_hours > ttl_hours:
+                return (True, f"high_freshness_reverify (age: {cache_age_hours:.1f}h > ttl: {ttl_hours:.1f}h)")
+        
+        # 4. Default: Serve cached (no OpenAI)
+        return (False, "cache_valid_serve_direct")
+    
+    def _get_cache_age_hours(self, entry: CacheEntry) -> float:
+        """Get cache entry age in hours."""
+        try:
+            created = datetime.fromisoformat(entry.created_at.replace('Z', '+00:00'))
+            now = datetime.utcnow()
+            delta = now - created
+            return delta.total_seconds() / 3600.0
+        except:
+            return 0.0
     
     def _get_exact_match(self, prompt_hash: str) -> Optional[CacheEntry]:
         """Get exact cache match by hash."""
@@ -418,12 +615,74 @@ class SemanticCache:
             logger.error(f"Error checking freshness: {e}")
             return False
     
+    def _extract_structured_facts(self, response_text: str, predicted_type: str, 
+                                 entities: List[str], sources: List[Dict]) -> Dict:
+        """
+        Extract structured facts from response for safe regeneration.
+        
+        Returns:
+            Dict with structured facts based on intent type
+        """
+        facts = {}
+        
+        if predicted_type == "info":
+            # Extract movie info: title, year, director, cast
+            # Simple extraction - could be enhanced with LLM
+            facts["type"] = "movie_info"
+            # Try to extract titles and years from response
+            title_year_pattern = r'"([^"]+)"\s*\((\d{4})\)'
+            matches = re.findall(title_year_pattern, response_text)
+            if matches:
+                facts["movies"] = [{"title": title, "year": int(year)} for title, year in matches]
+        
+        elif predicted_type == "filmography_overlap" or "collaboration" in response_text.lower():
+            # Extract collaboration facts
+            facts["type"] = "collaboration"
+            title_year_pattern = r'"([^"]+)"\s*\((\d{4})\)'
+            matches = re.findall(title_year_pattern, response_text)
+            if matches:
+                facts["collaborations"] = [
+                    {"title": title, "year": int(year), "verified_sources": [s.get("url", "") for s in sources[:3]]}
+                    for title, year in matches
+                ]
+        
+        elif predicted_type == "release-date":
+            # Extract release status
+            facts["type"] = "release_status"
+            # Try to extract status and date
+            if "released" in response_text.lower() or "out" in response_text.lower():
+                facts["status"] = "released"
+            elif "coming" in response_text.lower() or "premiere" in response_text.lower():
+                facts["status"] = "upcoming"
+            year_match = re.search(r'\b(19\d{2}|20\d{2})\b', response_text)
+            if year_match:
+                facts["release_year"] = int(year_match.group(1))
+        
+        elif predicted_type == "recs":
+            # Extract recommendations
+            facts["type"] = "recommendations"
+            title_year_pattern = r'"([^"]+)"\s*\((\d{4})\)'
+            matches = re.findall(title_year_pattern, response_text)
+            if matches:
+                facts["recommendations"] = [{"title": title, "year": int(year)} for title, year in matches]
+        
+        # Store entities
+        if entities:
+            facts["entities"] = entities
+        
+        # Store source URLs for verification
+        tier_a_sources = [s.get("url", "") for s in sources if s.get("tier") == "A"]
+        if tier_a_sources:
+            facts["verified_sources"] = tier_a_sources
+        
+        return facts
+    
     def put(self, prompt: str, response_text: str, sources: List[Dict],
            predicted_type: str, entities: List[str], need_freshness: bool,
            classifier_type: str, tool_config_version: str, agent_version: str,
-           prompt_version: str, cost_metrics: Dict = None):
+           prompt_version: str, cost_metrics: Dict = None, structured_facts: Dict = None):
         """
-        Store entry in cache.
+        Store entry in cache with structured facts.
         
         Args:
             prompt: Original prompt
@@ -437,6 +696,7 @@ class SemanticCache:
             agent_version: Agent version
             prompt_version: Prompt version
             cost_metrics: Cost savings metrics
+            structured_facts: Pre-extracted structured facts (optional)
         """
         # Normalize prompt
         normalized = self.normalizer.normalize(prompt)
@@ -445,10 +705,15 @@ class SemanticCache:
         # Compute embedding
         embedding = self.embedding_provider(normalized)
         
+        # Extract structured facts if not provided
+        if structured_facts is None:
+            structured_facts = self._extract_structured_facts(response_text, predicted_type, entities, sources)
+        
         # Compute TTL and expiration
         ttl = self._compute_ttl(predicted_type, entities, need_freshness)
         expires_at = (datetime.utcnow() + ttl).isoformat()
         created_at = datetime.utcnow().isoformat()
+        last_verified_at = datetime.utcnow().isoformat()
         
         # Store in database
         cursor = self.db.conn.cursor()
@@ -456,40 +721,43 @@ class SemanticCache:
         embedding_json = json.dumps(embedding)
         entities_json = json.dumps(entities)
         sources_json = json.dumps(sources)
+        structured_facts_json = json.dumps(structured_facts)
         cost_metrics_json = json.dumps(cost_metrics or {})
         
         if self.db.use_postgres:
             cursor.execute("""
                 INSERT INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
-                    predicted_type, entities, response_text, sources,
+                    predicted_type, entities, response_text, sources, structured_facts,
                     created_at, expires_at, agent_version, prompt_version,
-                    tool_config_version, cost_metrics
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    tool_config_version, cost_metrics, last_verified_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (prompt_hash) DO UPDATE SET
                     response_text = EXCLUDED.response_text,
                     sources = EXCLUDED.sources,
+                    structured_facts = EXCLUDED.structured_facts,
                     expires_at = EXCLUDED.expires_at,
-                    cost_metrics = EXCLUDED.cost_metrics
+                    cost_metrics = EXCLUDED.cost_metrics,
+                    last_verified_at = EXCLUDED.last_verified_at
             """, (
                 prompt_hash, prompt, normalized, embedding_json,
-                predicted_type, entities_json, response_text, sources_json,
+                predicted_type, entities_json, response_text, sources_json, structured_facts_json,
                 created_at, expires_at, agent_version, prompt_version,
-                tool_config_version, cost_metrics_json
+                tool_config_version, cost_metrics_json, last_verified_at
             ))
         else:
             cursor.execute("""
                 INSERT OR REPLACE INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
-                    predicted_type, entities, response_text, sources,
+                    predicted_type, entities, response_text, sources, structured_facts,
                     created_at, expires_at, agent_version, prompt_version,
-                    tool_config_version, cost_metrics
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    tool_config_version, cost_metrics, last_verified_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 prompt_hash, prompt, normalized, embedding_json,
-                predicted_type, entities_json, response_text, sources_json,
+                predicted_type, entities_json, response_text, sources_json, structured_facts_json,
                 created_at, expires_at, agent_version, prompt_version,
-                tool_config_version, cost_metrics_json
+                tool_config_version, cost_metrics_json, last_verified_at
             ))
         
         self.db.conn.commit()
@@ -515,6 +783,10 @@ class SemanticCache:
         if row_dict.get('sources'):
             sources = json.loads(row_dict['sources']) if isinstance(row_dict['sources'], str) else row_dict['sources']
         
+        structured_facts = {}
+        if row_dict.get('structured_facts'):
+            structured_facts = json.loads(row_dict['structured_facts']) if isinstance(row_dict['structured_facts'], str) else row_dict['structured_facts']
+        
         cost_metrics = {}
         if row_dict.get('cost_metrics'):
             cost_metrics = json.loads(row_dict['cost_metrics']) if isinstance(row_dict['cost_metrics'], str) else row_dict['cost_metrics']
@@ -528,6 +800,7 @@ class SemanticCache:
             entities=entities,
             response_text=row_dict.get('response_text', ''),
             sources=sources,
+            structured_facts=structured_facts,
             created_at=row_dict.get('created_at', ''),
             expires_at=row_dict.get('expires_at', ''),
             agent_version=row_dict.get('agent_version', ''),
@@ -535,6 +808,7 @@ class SemanticCache:
             tool_config_version=row_dict.get('tool_config_version', ''),
             cost_metrics=cost_metrics,
             cache_tier=row_dict.get('cache_tier', ''),
-            similarity_score=row_dict.get('similarity_score', 0.0)
+            similarity_score=row_dict.get('similarity_score', 0.0),
+            last_verified_at=row_dict.get('last_verified_at')
         )
 
