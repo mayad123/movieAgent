@@ -150,18 +150,38 @@ mentions_movie("Inception")
 
 ### Compare Prompt Versions
 
+**Option 1: Dedicated Prompt Comparison Script** (recommended for prompt-focused comparisons)
+
 ```bash
+# Compare all prompt versions
 python tests/test_prompt_versions.py
+
+# Compare specific versions
+python tests/test_prompt_versions.py --versions v1 v2_optimized v4
+
+# Compare on specific test suite
+python tests/test_prompt_versions.py --suite simple --versions v1 v4
+
+# Skip confirmation
+python tests/test_prompt_versions.py --yes
 ```
 
-Compare all versions:
-```bash
-python tests/test_prompt_versions.py --versions v1 v2 v3
-```
+This script saves:
+- Individual results per version (with full prompt text)
+- `comparison.json` (includes all prompts)
+- `prompts.json` (just the prompt texts for easy viewing)
 
-Compare specific versions:
+**Option 2: Interactive Test Runner** (for flexible test case + version selection)
+
 ```bash
-python tests/test_prompt_versions.py --versions v1 v3
+# Interactive mode
+python tests/test_runner_interactive.py
+
+# Command-line - compare all versions with all tests
+python tests/test_runner_interactive.py --tests all --versions all
+
+# Compare specific versions with specific tests
+python tests/test_runner_interactive.py --tests simple_fact_director --versions v1,v2_optimized
 ```
 
 ### Available Prompt Versions

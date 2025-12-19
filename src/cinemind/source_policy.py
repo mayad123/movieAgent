@@ -32,6 +32,7 @@ class SourceMetadata:
     published_date: Optional[str] = None
     last_updated: Optional[str] = None
     is_structured: bool = False  # True for APIs/structured data
+    source_name: str = "unknown"  # Original source name (tavily, kaggle_imdb, etc.)
 
 
 class SourcePolicy:
@@ -106,7 +107,7 @@ class SourcePolicy:
         """Initialize source policy."""
         pass
     
-    def classify_source(self, url: str, title: str = "", content: str = "") -> SourceTier:
+    def classify_source(self, url: str, title: str = "", content: str = "", source_name: str = "") -> SourceTier:
         """
         Classify a source into Tier A, B, C, or UNKNOWN.
         
@@ -114,10 +115,15 @@ class SourcePolicy:
             url: Source URL
             title: Source title
             content: Source content (for pattern matching)
+            source_name: Original source name (kaggle_imdb, tavily, etc.)
         
         Returns:
             SourceTier
         """
+        # Kaggle IMDB dataset is Tier A (authoritative structured data)
+        if source_name == "kaggle_imdb":
+            return SourceTier.TIER_A
+        
         if not url:
             return SourceTier.UNKNOWN
         
@@ -176,7 +182,8 @@ class SourcePolicy:
             title = result.get("title", "")
             content = result.get("content", "")
             
-            tier = self.classify_source(url, title, content)
+            source_name = result.get("source", "unknown")
+            tier = self.classify_source(url, title, content, source_name)
             
             # Extract domain
             try:
@@ -184,6 +191,9 @@ class SourcePolicy:
                 domain = parsed.netloc.lower()
             except:
                 domain = ""
+                # For Kaggle sources, set domain to indicate it's from IMDB dataset
+                if source_name == "kaggle_imdb":
+                    domain = "imdb.com (via Kaggle dataset)"
             
             source = SourceMetadata(
                 url=url,
@@ -194,7 +204,8 @@ class SourcePolicy:
                 score=result.get("score", 0.0),
                 published_date=result.get("published_date"),
                 last_updated=result.get("last_updated"),
-                is_structured=result.get("source") == "tavily_answer"  # Tavily answers are structured
+                is_structured=result.get("source") in ["tavily_answer", "kaggle_imdb"],  # Structured data sources
+                source_name=source_name
             )
             sources.append(source)
         

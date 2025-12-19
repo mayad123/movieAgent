@@ -126,6 +126,11 @@ class CineMind:
         if not request_id:
             request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
         
+        # PIPELINE ORDER:
+        # 1. Check cache FIRST (if nothing correlating returns, proceed to step 2)
+        # 2. Check Kaggle dataset (if nothing correlating returns, proceed to step 3)
+        # 3. Check Tavily API (fallback web search)
+        #
         # CRITICAL: Check cache FIRST before any OpenAI calls
         # This prevents unnecessary API calls for intent extraction
         cache_hit = None
@@ -390,36 +395,38 @@ class CineMind:
                     entities = structured_intent.get_all_entities() if structured_intent else []
                     need_freshness = request_plan.need_freshness if request_plan else False
                     
-                    # Only call Tavily if tool plan allows it
-                    if not should_skip_tavily:
-                        if tracker:
-                            with tracker.time_operation("search"):
-                                movie_info = await self.aggregator.get_movie_info(
-                                    user_query, 
-                                    include_recent_news=True,
-                                    intent=intent,
-                                    entities=entities,
-                                    request_type=request_type
-                                )
-                        else:
-                            logger.info(f"[{request_id}] Performing real-time search...")
+                    # Search pipeline order (after cache miss):
+                    # 1. Cache was checked first (above) - if nothing correlating, proceed here
+                    # 2. Check Kaggle dataset (local lookup, free and fast)
+                    # 3. If Kaggle doesn't have highly correlated results, call Tavily API
+                    #    (overrides tool plan skip_tavily flag - Tavily will be used if Kaggle correlation is low)
+                    if tracker:
+                        with tracker.time_operation("search"):
                             movie_info = await self.aggregator.get_movie_info(
-                                user_query,
-                                include_recent_news=True,
+                                user_query, 
+                                include_recent_news=not should_skip_tavily,  # Only include news if Tavily allowed
                                 intent=intent,
                                 entities=entities,
-                                request_type=request_type
+                                request_type=request_type,
+                                skip_tavily=should_skip_tavily  # Pass flag to skip Tavily but still check Kaggle
                             )
-                        
-                        search_results = movie_info.get("results", [])
-                        source_summary = movie_info.get("source_summary", {})
-                        search_time_ms = (time.time() - search_start) * 1000
                     else:
-                        # Skip Tavily - use empty results (will rely on cache/structured sources)
-                        logger.info(f"[{request_id}] Skipping Tavily, using cache/structured sources only")
-                        search_results = []
-                        source_summary = {}
-                        search_time_ms = 0
+                        logger.info(f"[{request_id}] Performing search (Kaggle first, Tavily: {'enabled' if not should_skip_tavily else 'skipped'})...")
+                        movie_info = await self.aggregator.get_movie_info(
+                            user_query,
+                            include_recent_news=not should_skip_tavily,
+                            intent=intent,
+                            entities=entities,
+                            request_type=request_type,
+                            skip_tavily=should_skip_tavily
+                        )
+                    
+                    search_results = movie_info.get("results", [])
+                    source_summary = movie_info.get("source_summary", {})
+                    search_time_ms = (time.time() - search_start) * 1000
+                    
+                    if should_skip_tavily and search_results:
+                        logger.info(f"[{request_id}] Kaggle provided {len(search_results)} results (Tavily skipped per tool plan)")
                     
                     # Log source transparency
                     if tracker and source_summary:
@@ -587,12 +594,27 @@ class CineMind:
                     
                     # Format search results for context (prioritize Tier A sources)
                     if search_results:
-                        search_context = "\n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n"
+                        # Identify source types
+                        kaggle_results = [r for r in search_results if r.get("source") == "kaggle_imdb"]
+                        tavily_results = [r for r in search_results if "tavily" in r.get("source", "").lower()]
                         
-                        # Sort by tier (A first)
+                        # Determine header based on sources
+                        if kaggle_results and not tavily_results:
+                            search_context = "\n\n=== KAGGLE IMDB DATASET RESULTS ===\n"
+                            search_context += "(These results are from the Kaggle IMDB dataset - authoritative structured data)\n"
+                        elif kaggle_results and tavily_results:
+                            search_context = "\n\n=== SEARCH RESULTS (Kaggle Dataset + Tavily) ===\n"
+                        else:
+                            search_context = "\n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n"
+                        
+                        # Sort by tier (A first), then by source (Kaggle first if same tier)
                         tier_order = {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}
-                        sorted_results = sorted(search_results, 
-                                               key=lambda x: tier_order.get(x.get("tier", "UNKNOWN"), 3))
+                        def sort_key(result):
+                            tier_val = tier_order.get(result.get("tier", "UNKNOWN"), 3)
+                            source_val = 0 if result.get("source") == "kaggle_imdb" else 1
+                            return (tier_val, source_val, -result.get("score", 0.0))
+                        
+                        sorted_results = sorted(search_results, key=sort_key)
                         
                         tier_a_count = sum(1 for r in sorted_results if r.get("tier") == "A")
                         tier_c_count = sum(1 for r in sorted_results if r.get("tier") == "C")
@@ -601,14 +623,31 @@ class CineMind:
                             source = result.get("source", "unknown")
                             tier = result.get("tier", "UNKNOWN")
                             title = result.get("title", "No title")
-                            content = result.get("content", "")[:500]  # Truncate long content
+                            # For Kaggle results, content is already well-formatted, allow more length
+                            # For other sources, truncate to 500 chars
+                            raw_content = result.get("content", "")
+                            if source == "kaggle_imdb":
+                                content = raw_content  # Already formatted and truncated in kaggle_search.py
+                            else:
+                                content = raw_content[:500]  # Truncate long content
                             url = result.get("url", "")
+                            correlation = result.get("correlation")  # Kaggle correlation score
                             
-                            search_context += f"\n[{i}] Source: {source} (Tier {tier})\n"
+                            # Format source name nicely
+                            if source == "kaggle_imdb":
+                                source_display = "Kaggle IMDB Dataset"
+                                if correlation:
+                                    source_display += f" (correlation: {correlation:.2f})"
+                            else:
+                                source_display = source.replace("_", " ").title()
+                            
+                            search_context += f"\n[{i}] Source: {source_display} (Tier {tier})\n"
                             search_context += f"Title: {title}\n"
                             if url:
                                 search_context += f"URL: {url}\n"
-                            search_context += f"Content: {content}\n"
+                            elif source == "kaggle_imdb":
+                                search_context += f"Source: IMDB Dataset (via Kaggle)\n"
+                            search_context += f"Content:\n{content}\n"
                         
                         # Add verification results if available
                         if verified_facts:

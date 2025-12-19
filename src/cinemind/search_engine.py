@@ -4,11 +4,12 @@ Real-time web search engine for movie data.
 Performance optimizations:
 - Parallel search execution: Multiple searches run concurrently using asyncio.gather
 - Parallel movie and news searches: Movie info and news searches run simultaneously
+- Kaggle dataset search first: Checks IMDB dataset before calling Tavily API
 """
 import os
 import requests
 import httpx
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import logging
 
@@ -18,9 +19,34 @@ logger = logging.getLogger(__name__)
 class SearchEngine:
     """Handles real-time web searches for movie information."""
     
-    def __init__(self, tavily_api_key: Optional[str] = None):
+    def __init__(self, tavily_api_key: Optional[str] = None, enable_kaggle: Optional[bool] = None):
+        """
+        Initialize search engine.
+        
+        Args:
+            tavily_api_key: Tavily API key for real-time search
+            enable_kaggle: Whether to enable Kaggle dataset search (default: from config)
+        """
         self.tavily_api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
         self.session = httpx.AsyncClient(timeout=30.0)
+        
+        # Initialize Kaggle searcher if enabled
+        from .config import ENABLE_KAGGLE_SEARCH, KAGGLE_CORRELATION_THRESHOLD, KAGGLE_DATASET_PATH
+        self.enable_kaggle = enable_kaggle if enable_kaggle is not None else ENABLE_KAGGLE_SEARCH
+        self.kaggle_searcher = None
+        
+        if self.enable_kaggle:
+            try:
+                from .kaggle_search import KaggleDatasetSearcher
+                self.kaggle_searcher = KaggleDatasetSearcher(
+                    dataset_path=KAGGLE_DATASET_PATH,
+                    correlation_threshold=KAGGLE_CORRELATION_THRESHOLD
+                )
+                logger.info(f"Kaggle dataset search enabled (threshold: {KAGGLE_CORRELATION_THRESHOLD})")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Kaggle searcher: {e}. Continuing without Kaggle search.")
+                self.kaggle_searcher = None
+                self.enable_kaggle = False
     
     def build_intent_queries(self, intent: str, entities: List[str], 
                            request_type: str = "info") -> List[str]:
@@ -80,29 +106,74 @@ class SearchEngine:
         
         return queries
     
-    async def search(self, query: str, max_results: int = 5) -> List[Dict]:
+    async def search(self, query: str, max_results: int = 5, skip_tavily: bool = False) -> List[Dict]:
         """
         Perform real-time search for movie information.
+        
+        NOTE: This is called AFTER cache check. Pipeline order:
+        1. Cache (checked in agent.py before this method)
+        2. Kaggle IMDB dataset (if enabled and highly correlated)
+        3. Tavily API (if Kaggle results not highly correlated, OVERRIDES skip_tavily flag)
+        4. Web search fallback (if above methods fail)
+        
+        IMPORTANT: If Kaggle correlation is low (< threshold), Tavily will be used
+        even if skip_tavily=True (overriding tool plan decision for stable intents).
         
         Args:
             query: Search query
             max_results: Maximum number of results to return
+            skip_tavily: Tool plan suggestion to skip Tavily (will be overridden if Kaggle correlation is low)
             
         Returns:
             List of search results with title, url, content, and timestamp
         """
         results = []
         
-        # Try Tavily first if API key is available
-        if self.tavily_api_key:
+        # Step 1: Try Kaggle dataset first if enabled
+        kaggle_tried_and_low_correlation = False
+        max_correlation = 0.0
+        if self.enable_kaggle and self.kaggle_searcher:
+            try:
+                # Run Kaggle search in thread pool to avoid blocking event loop
+                import asyncio
+                loop = asyncio.get_event_loop()
+                is_highly_correlated, kaggle_results, max_correlation = await loop.run_in_executor(
+                    None,
+                    self.kaggle_searcher.is_highly_correlated,
+                    query,
+                    max_results
+                )
+                
+                if is_highly_correlated:
+                    logger.info(f"Using Kaggle dataset results (correlation: {max_correlation:.3f})")
+                    results.extend(kaggle_results)
+                    # If we have highly correlated results, skip Tavily API call
+                    return results[:max_results]
+                else:
+                    kaggle_tried_and_low_correlation = True
+                    logger.info(f"Kaggle results not highly correlated ({max_correlation:.3f}), {('overriding skip_tavily to use Tavily' if skip_tavily else 'proceeding to Tavily')}")
+            except Exception as e:
+                logger.warning(f"Kaggle search failed: {e}, {('overriding skip_tavily to use Tavily' if skip_tavily else 'proceeding to Tavily')}")
+                kaggle_tried_and_low_correlation = True
+        
+        # Step 2: Try Tavily if API key is available
+        # Override skip_tavily flag if Kaggle was tried and correlation is low (even for stable intents)
+        # If Kaggle is not enabled, respect the skip_tavily flag from tool plan
+        should_use_tavily = not skip_tavily or kaggle_tried_and_low_correlation
+        
+        if should_use_tavily and self.tavily_api_key:
+            if skip_tavily and kaggle_tried_and_low_correlation:
+                logger.info(f"Kaggle correlation ({max_correlation:.3f}) is low - overriding tool plan to use Tavily API")
             try:
                 tavily_results = await self._search_tavily(query, max_results)
                 results.extend(tavily_results)
             except Exception as e:
                 logger.warning(f"Tavily search failed: {e}")
+        elif not should_use_tavily:
+            logger.info(f"Skipping Tavily API (high Kaggle correlation or tool plan override)")
         
-        # Fallback to direct web search if needed
-        if not results:
+        # Step 3: Fallback to direct web search if needed (use same logic as Tavily)
+        if not results and should_use_tavily:
             try:
                 web_results = await self._search_web_fallback(query, max_results)
                 results.extend(web_results)
@@ -267,7 +338,7 @@ class MovieDataAggregator:
     
     async def get_movie_info(self, query: str, include_recent_news: bool = True,
                            intent: Optional[str] = None, entities: Optional[List[str]] = None,
-                           request_type: str = "info") -> Dict:
+                           request_type: str = "info", skip_tavily: bool = False) -> Dict:
         """
         Get comprehensive movie information from multiple sources with source policy.
         
@@ -292,11 +363,11 @@ class MovieDataAggregator:
         # Run searches in parallel
         tasks = []
         for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
-            tasks.append(self.search_engine.search(q, max_results=5))
+            tasks.append(self.search_engine.search(q, max_results=5, skip_tavily=skip_tavily))
         
-        if include_recent_news:
+        if include_recent_news and not skip_tavily:
             news_query = f"{query} movie news 2024 2025"
-            tasks.append(self.search_engine.search(news_query, max_results=3))
+            tasks.append(self.search_engine.search(news_query, max_results=3, skip_tavily=skip_tavily))
         
         results_lists = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -326,7 +397,7 @@ class MovieDataAggregator:
                     "content": source.content,
                     "score": source.score,
                     "published_date": source.published_date,
-                    "source": "tavily",
+                    "source": source.source_name,  # Preserve original source (kaggle_imdb, tavily, etc.)
                     "tier": source.tier.value,
                     "domain": source.domain
                 })
