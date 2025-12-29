@@ -37,7 +37,7 @@ class ClassificationResult:
     llm_used: bool = False
     confidence: float = 1.0
     entities: List[str] = None  # Extracted entities (titles, persons)
-    need_freshness: bool = False  # Whether query needs up-to-date data
+    freshness_signal: bool = False  # Weak signal: whether query might need fresh data (final decision made by ToolPlanner)
     original_llm_type: Optional[str] = None  # LLM prediction before guardrails
     
     def __post_init__(self):
@@ -141,7 +141,7 @@ class HybridClassifier:
     async def classify_with_llm(self, query: str, client) -> ClassificationResult:
         """
         Layer B: LLM classification for ambiguous cases.
-        Returns structured JSON with type, entities, need_freshness, confidence.
+        Returns structured JSON with type, entities, freshness_signal, confidence.
         """
         try:
             from .config import OPENAI_MODEL
@@ -154,14 +154,14 @@ Respond with ONLY valid JSON in this exact format:
 {{
   "type": "one of: info, recs, comparison, spoiler, release-date, fact-check",
   "entities": ["movie title", "person name", ...],
-  "need_freshness": true or false,
+  "freshness_signal": true or false,
   "confidence": 0.0 to 1.0
 }}
 
 Rules:
 - type: The primary intent category
 - entities: List of movie titles, director names, actor names mentioned (empty array if none)
-- need_freshness: true if query needs current/up-to-date data (release dates, recent news, etc.)
+- freshness_signal: true if query might need current/up-to-date data (this is a weak signal - final decision is made by tool planner based on intent and entity year)
 - confidence: How confident you are (0.0-1.0)
 
 Respond with ONLY the JSON, nothing else."""
@@ -227,7 +227,7 @@ Respond with ONLY the JSON, nothing else."""
             
             predicted_type = result_json.get("type", "info").lower()
             entities = result_json.get("entities", [])
-            need_freshness = result_json.get("need_freshness", False)
+            freshness_signal = result_json.get("freshness_signal", False)
             confidence = float(result_json.get("confidence", 0.7))
             
             # Validate type
@@ -240,7 +240,7 @@ Respond with ONLY the JSON, nothing else."""
                 llm_used=True,
                 confidence=confidence,
                 entities=entities if isinstance(entities, list) else [],
-                need_freshness=bool(need_freshness),
+                freshness_signal=bool(freshness_signal),
                 original_llm_type=predicted_type
             )
             
@@ -253,13 +253,15 @@ Respond with ONLY the JSON, nothing else."""
                     predicted_type=rule_result[0],
                     rule_hit=rule_result[1],
                     llm_used=False,
-                    confidence=0.6  # Lower confidence for fallback
+                    confidence=0.6,  # Lower confidence for fallback
+                    freshness_signal=False
                 )
             return ClassificationResult(
                 predicted_type="info",
                 rule_hit="fallback:default",
                 llm_used=False,
-                confidence=0.3
+                confidence=0.3,
+                freshness_signal=False
             )
     
     def apply_guardrails(self, query: str, classification: ClassificationResult) -> ClassificationResult:
@@ -299,7 +301,8 @@ Respond with ONLY the JSON, nothing else."""
                     predicted_type=rule_result[0],
                     rule_hit=rule_result[1],
                     llm_used=False,
-                    confidence=0.85  # High confidence for clear rule matches
+                    confidence=0.85,  # High confidence for clear rule matches
+                    freshness_signal=False  # Rules don't set freshness signal
                 )
                 # Apply guardrails even for rule-based results
                 classification = self.apply_guardrails(query, classification)
@@ -316,14 +319,16 @@ Respond with ONLY the JSON, nothing else."""
                     predicted_type=rule_result[0],
                     rule_hit=rule_result[1],
                     llm_used=False,
-                    confidence=0.7
+                    confidence=0.7,
+                    freshness_signal=False
                 )
             else:
                 classification = ClassificationResult(
                     predicted_type="info",
                     rule_hit="fallback:no_client",
                     llm_used=False,
-                    confidence=0.5
+                    confidence=0.5,
+                    freshness_signal=False
                 )
         
         # Layer C: Apply guardrails

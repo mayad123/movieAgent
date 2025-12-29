@@ -20,13 +20,15 @@ class StructuredIntent:
     original_query: str
     confidence: float = 1.0
     requires_disambiguation: bool = False  # True if title is ambiguous (e.g., "Crash", "Glory")
-    candidate_year: Optional[int] = None  # Optional year for disambiguation
+    candidate_year: Optional[int] = None  # Optional year for disambiguation ONLY (must be None if requires_disambiguation is False)
+    mentioned_year: Optional[int] = None  # Any year mentioned in query (for awards, etc.), even when not ambiguous
     need_freshness: bool = False  # Whether query needs up-to-date data
     freshness_reason: Optional[str] = None  # Reason for freshness requirement
     freshness_ttl_hours: Optional[float] = None  # Suggested TTL in hours
+    needs_clarification: bool = False  # True if query is too ambiguous/vague and needs user clarification
     
     def __post_init__(self):
-        """Normalize entities to typed format."""
+        """Normalize entities to typed format and validate constraints."""
         # If entities is a list (old format), convert to typed dict
         if isinstance(self.entities, list):
             # Try to infer types (simple heuristic)
@@ -48,6 +50,10 @@ class StructuredIntent:
             self.entities["movies"] = []
         if "people" not in self.entities:
             self.entities["people"] = []
+        
+        # Enforce constraint: candidate_year can only be set when requires_disambiguation is True
+        if not self.requires_disambiguation and self.candidate_year is not None:
+            self.candidate_year = None
     
     def get_all_entities(self) -> List[str]:
         """Get all entities as a flat list (for backward compatibility)."""
@@ -157,6 +163,9 @@ class IntentExtractor:
         # Check for ambiguity
         requires_disambiguation, candidate_year = self._check_ambiguity(query, typed_entities)
         
+        # Extract mentioned_year (any year in query, even when not ambiguous)
+        mentioned_year = self._extract_mentioned_year(query)
+        
         # Determine freshness needs (with reason)
         need_freshness, freshness_reason = self._determine_freshness_needs(intent, request_type, query)
         freshness_ttl_hours = self._suggest_ttl(intent, request_type)
@@ -169,10 +178,194 @@ class IntentExtractor:
             confidence=0.9 if typed_entities.get("movies") or typed_entities.get("people") else 0.7,
             requires_disambiguation=requires_disambiguation,
             candidate_year=candidate_year,
+            mentioned_year=mentioned_year,
             need_freshness=need_freshness,
             freshness_reason=freshness_reason,
-            freshness_ttl_hours=freshness_ttl_hours
+            freshness_ttl_hours=freshness_ttl_hours,
+            needs_clarification=False
         )
+    
+    def _assess_rule_based_confidence(self, intent: StructuredIntent, query: str) -> Tuple[float, bool]:
+        """
+        Assess confidence level of rule-based extraction and whether LLM extraction is needed.
+        
+        Returns:
+            (confidence: float, should_use_llm: bool)
+        """
+        query_lower = query.lower()
+        
+        # High confidence indicators (simple, well-structured queries)
+        high_confidence_patterns = [
+            r"who directed",
+            r"who (played|starred|acted)",
+            r"when was .* released",
+            r"release date",
+            r"director of",
+            r"cast of",
+        ]
+        
+        # Check if query matches known simple templates
+        matches_template = any(re.search(pattern, query_lower) for pattern in high_confidence_patterns)
+        
+        # Low confidence indicators (complex/vague queries)
+        vague_patterns = [
+            r"something like",
+            r"similar to.*but",
+            r"compare.*style",
+            r"recommend.*based on",
+            r"that movie with",
+            r"the one where",
+        ]
+        
+        is_vague = any(re.search(pattern, query_lower) for pattern in vague_patterns)
+        
+        # Check for multi-intent indicators
+        multi_intent_keywords = ["then", "and then", "also", "plus", "after that"]
+        has_multiple_intents = any(keyword in query_lower for keyword in multi_intent_keywords)
+        
+        # Calculate base confidence
+        base_confidence = intent.confidence
+        
+        # Adjust based on indicators
+        has_entities = bool(intent.entities.get("movies") or intent.entities.get("people"))
+        if matches_template and has_entities:
+            # High confidence: matches template and has entities
+            confidence = min(0.95, base_confidence + 0.1)
+            use_llm = False
+        elif is_vague or has_multiple_intents:
+            # Low confidence: vague or multi-intent
+            confidence = max(0.3, base_confidence - 0.3)
+            use_llm = True
+        elif base_confidence >= 0.85:
+            # Medium-high confidence
+            confidence = base_confidence
+            use_llm = False
+        else:
+            # Medium-low confidence
+            confidence = base_confidence
+            use_llm = True
+        
+        return confidence, use_llm
+    
+    def _validate_and_correct_intent(self, intent: StructuredIntent) -> Tuple[StructuredIntent, List[str]]:
+        """
+        Validate StructuredIntent and auto-correct obvious issues.
+        
+        Returns:
+            (corrected_intent: StructuredIntent, warnings: List[str])
+        """
+        warnings = []
+        
+        # Enforce candidate_year rule
+        if not intent.requires_disambiguation and intent.candidate_year is not None:
+            warnings.append(f"Corrected: candidate_year set to None (requires_disambiguation is False)")
+            intent.candidate_year = None
+        
+        # Validate order_by values
+        order_by = intent.constraints.get("order_by")
+        valid_order_by = {"release_year_asc", "release_year_desc", "chronological", None}
+        if order_by not in valid_order_by:
+            warnings.append(f"Corrected: invalid order_by value '{order_by}', set to None")
+            intent.constraints["order_by"] = None
+        
+        # Validate entities structure
+        if not isinstance(intent.entities, dict):
+            warnings.append("Corrected: entities must be a dict")
+            intent.entities = {"movies": [], "people": []}
+        
+        if "movies" not in intent.entities:
+            intent.entities["movies"] = []
+        if "people" not in intent.entities:
+            intent.entities["people"] = []
+        
+        # Validate intent is one of known types
+        valid_intents = {
+            "filmography_overlap", "director_info", "release_date", "cast_info",
+            "comparison", "recommendation", "general_info", "fact_check", "spoiler_info"
+        }
+        if intent.intent not in valid_intents:
+            warnings.append(f"Corrected: invalid intent '{intent.intent}', set to 'general_info'")
+            intent.intent = "general_info"
+        
+        return intent, warnings
+    
+    async def extract_smart(
+        self, 
+        query: str, 
+        client=None, 
+        request_type: str = "info",
+        force_llm: bool = False
+    ) -> Tuple[StructuredIntent, str, float]:
+        """
+        Smart routing: try rule-based extraction first, use LLM only if needed.
+        
+        Routing policy:
+        1. Run rule-based extractor first
+        2. Assess confidence
+        3. If high confidence → return result
+        4. If medium/low confidence → try LLM extraction
+        5. Validate/sanitize LLM output
+        6. If still uncertain → mark needs_clarification
+        
+        Args:
+            query: User query
+            client: OpenAI client (required if LLM extraction is needed)
+            request_type: Classified request type
+            force_llm: If True, skip rule-based and go straight to LLM
+        
+        Returns:
+            Tuple of (StructuredIntent, extraction_mode: str, confidence: float)
+            extraction_mode: "rules" or "llm"
+            confidence: Final confidence score (0-1)
+        """
+        # Step 1: Try rule-based extraction first (unless forced to LLM)
+        if not force_llm:
+            rule_intent = self.extract(query, request_type)
+            confidence, should_use_llm = self._assess_rule_based_confidence(rule_intent, query)
+            
+            # Update confidence in intent
+            rule_intent.confidence = confidence
+            
+            # If high confidence, return immediately
+            if not should_use_llm and confidence >= 0.8:
+                logger.info(f"Using rule-based extraction (confidence: {confidence:.2f})")
+                rule_intent, warnings = self._validate_and_correct_intent(rule_intent)
+                if warnings:
+                    logger.debug(f"Rule-based validation warnings: {warnings}")
+                return (rule_intent, "rules", rule_intent.confidence)
+        
+        # Step 2: Use LLM extraction (either low confidence or forced)
+        if client is None:
+            logger.warning("LLM extraction requested but no client provided, using rule-based")
+            rule_intent = self.extract(query, request_type)
+            rule_intent.confidence = 0.6  # Lower confidence since we wanted LLM
+            rule_intent.needs_clarification = True
+            return (rule_intent, "rules", 0.6)  # Falls back to rules, but low confidence
+        
+        try:
+            logger.info("Using LLM extraction")
+            llm_intent = await self.extract_with_llm(query, client, request_type)
+            
+            # Step 3: Validate and correct LLM output
+            llm_intent, warnings = self._validate_and_correct_intent(llm_intent)
+            if warnings:
+                logger.info(f"LLM validation corrections: {warnings}")
+            
+            # Step 4: Assess final confidence
+            # If LLM extraction has low confidence or validation found issues, mark for clarification
+            if llm_intent.confidence < 0.6 or len(warnings) > 2:
+                llm_intent.needs_clarification = True
+                logger.info(f"Marking intent for clarification (confidence: {llm_intent.confidence:.2f}, warnings: {len(warnings)})")
+            
+            return (llm_intent, "llm", llm_intent.confidence)
+            
+        except Exception as e:
+            logger.warning(f"LLM extraction failed: {e}, falling back to rule-based")
+            # Fallback to rule-based
+            rule_intent = self.extract(query, request_type)
+            rule_intent.confidence = 0.6  # Lower confidence since LLM failed
+            rule_intent.needs_clarification = True
+            return (rule_intent, "rules", 0.6)  # Falls back to rules due to LLM failure
     
     def _detect_intent(self, query_lower: str, request_type: str) -> str:
         """Detect intent from query."""
@@ -237,6 +430,17 @@ class IntentExtractor:
         
         return {"movies": movies, "people": people}
     
+    def _extract_mentioned_year(self, query: str) -> Optional[int]:
+        """
+        Extract any year mentioned in the query (for awards, etc.).
+        
+        Returns:
+            Optional[int]: First year found in query, or None
+        """
+        year_pattern = r"\b(19\d{2}|20\d{2})\b"
+        years = re.findall(year_pattern, query)
+        return int(years[0]) if years else None
+    
     def _check_ambiguity(self, query: str, typed_entities: Dict[str, List[str]]) -> Tuple[bool, Optional[int]]:
         """
         Check if query requires disambiguation (e.g., "Crash", "Glory", "It").
@@ -255,10 +459,8 @@ class IntentExtractor:
             movie_lower = movie.lower()
             # Check if it's a single word and in ambiguous list
             if len(movie.split()) == 1 and movie_lower in ambiguous_titles:
-                # Try to extract year from query
-                year_pattern = r"\b(19\d{2}|20\d{2})\b"
-                years = re.findall(year_pattern, query)
-                candidate_year = int(years[0]) if years else None
+                # Extract year from query for disambiguation
+                candidate_year = self._extract_mentioned_year(query)
                 return (True, candidate_year)
         
         return (False, None)
@@ -377,11 +579,33 @@ class IntentExtractor:
             }
             constraints["min_count"] = count_map.get(count_str.lower(), 3)
         
-        # Extract ordering constraints
-        if re.search(r"ordered by|in.*order|by (release year|year|chronological)", query_lower):
-            if "release year" in query_lower or "year" in query_lower:
-                constraints["order_by"] = "release_year"
-            elif "chronological" in query_lower:
+        # Extract ordering constraints - only when explicitly requested
+        # Always include order_by key for predictable JSON (None when not requested)
+        constraints["order_by"] = None
+        
+        # Check for explicit ordering requests with specific patterns
+        # Order matters: check most specific patterns first
+        
+        # "newest first" or "newest" → release_year_desc
+        if re.search(r"\b(newest first|newest|most recent first|recent first)\b", query_lower):
+            constraints["order_by"] = "release_year_desc"
+        # "oldest first" or "oldest" → release_year_asc
+        elif re.search(r"\b(oldest first|oldest|earliest first)\b", query_lower):
+            constraints["order_by"] = "release_year_asc"
+        # "in chronological order" → chronological
+        elif re.search(r"\bin\s+chronological\s+order\b", query_lower):
+            constraints["order_by"] = "chronological"
+        # "chronological order" (without "in") → chronological
+        elif re.search(r"\bchronological\s+order\b", query_lower):
+            constraints["order_by"] = "chronological"
+        # "sorted by release year" or "ordered by release year" → release_year_asc (default when direction not specified)
+        elif re.search(r"\b(sorted|ordered|arranged)\s+by\s+(release\s+)?year\b", query_lower):
+            constraints["order_by"] = "release_year_asc"
+        # "in release year order" → release_year_asc
+        elif re.search(r"\bin\s+release\s+year\s+order\b", query_lower):
+            constraints["order_by"] = "release_year_asc"
+        # "in order" (by itself, likely means chronological) → chronological
+        elif re.search(r"\bin\s+order\b", query_lower):
                 constraints["order_by"] = "chronological"
         
         # Extract format constraints
@@ -425,18 +649,28 @@ Respond with ONLY valid JSON in this exact format:
   }},
   "requires_disambiguation": true or false,
   "candidate_year": number or null,
+  "mentioned_year": number or null,
   "need_freshness": true or false,
   "freshness_ttl_hours": number or null
 }}
 
 Rules:
-- intent: The specific intent category
-- entities: Object with "movies" and "people" arrays (separate movie titles from person names)
-- constraints: Object with min_count, order_by (use release_year_asc/desc, not just release_year), format
-- requires_disambiguation: true if movie title is ambiguous (e.g., "Crash", "Glory", "It")
-- candidate_year: Year mentioned in query if disambiguation needed (null otherwise)
-- need_freshness: true if query needs up-to-date data (release dates, upcoming movies)
-- freshness_ttl_hours: Suggested TTL in hours (6 for release dates, 720 for director/cast info, etc.)
+- intent: The specific intent category. For award queries (e.g., "Best Picture", "Oscar winner"), use "general_info" or appropriate category.
+- entities: Object with "movies" and "people" arrays. Extract all movie titles and person names mentioned in the query, including those in award contexts. For award queries, extract any movies or people mentioned (winners, nominees, etc.).
+- constraints: Object with min_count, order_by, format
+  - order_by: CRITICAL - ONLY set when query EXPLICITLY requests ordering (e.g., "in chronological order", "sorted by release year", "newest first", "oldest first"). Use null if no ordering is requested. Valid values: "release_year_asc", "release_year_desc", "chronological", or null. DO NOT set order_by just because the query mentions a year (e.g., "best picture by year" is NOT an ordering request, "Best Picture in 2000" is NOT an ordering request).
+  - min_count: Only set if query explicitly requests a minimum count (e.g., "three movies", "at least 5")
+  - format: Only set if query explicitly requests a format (e.g., "list", "compare")
+- requires_disambiguation: true ONLY if movie title is ambiguous (e.g., "Crash", "Glory", "It" - single-word common English words that could refer to multiple movies). Award queries do NOT require disambiguation.
+- candidate_year: STRICT RULE - ONLY set if requires_disambiguation is true AND a year is mentioned for disambiguation. MUST be null if requires_disambiguation is false. DO NOT use for award years (e.g., "Best Picture in 2000" - use mentioned_year instead, not candidate_year).
+- mentioned_year: Any year mentioned in the query (award years, release years, etc.), even when not ambiguous. Set to null if no year is mentioned. Use this for award queries, not candidate_year.
+- need_freshness: true if query needs up-to-date data (release dates, upcoming movies, recent awards)
+- freshness_ttl_hours: Suggested TTL in hours (6 for release dates, 720 for director/cast info, 168 for general info, etc.)
+
+CRITICAL RULES:
+1. If requires_disambiguation is false, candidate_year MUST be null (use mentioned_year for award years instead).
+2. order_by MUST be null unless the query explicitly requests sorting/ordering.
+3. Extract all movies and people mentioned in entities, including those in award contexts.
 
 Respond with ONLY the JSON, nothing else."""
 
@@ -447,7 +681,7 @@ Respond with ONLY the JSON, nothing else."""
                     {"role": "user", "content": extraction_prompt}
                 ],
                 temperature=0.1,
-                max_tokens=200
+                max_tokens=300
             )
             
             result_text = response.choices[0].message.content.strip()
@@ -488,14 +722,24 @@ Respond with ONLY the JSON, nothing else."""
             if candidate_year is not None:
                 candidate_year = int(candidate_year)
             
+            # ENFORCE RULE: candidate_year can only be set when requires_disambiguation is True
+            if not requires_disambiguation:
+                candidate_year = None
+            
+            # Parse mentioned_year (any year in query, even when not ambiguous)
+            mentioned_year = result_json.get("mentioned_year")
+            if mentioned_year is not None:
+                mentioned_year = int(mentioned_year)
+            else:
+                # Fallback: extract mentioned_year from query if LLM didn't provide it
+                mentioned_year = self._extract_mentioned_year(query)
+            
             need_freshness = result_json.get("need_freshness", False)
-            freshness_reason = result_json.get("freshness_reason")
             freshness_ttl_hours = result_json.get("freshness_ttl_hours")
             if freshness_ttl_hours is not None:
                 freshness_ttl_hours = float(freshness_ttl_hours)
             
-            # If LLM didn't provide freshness_reason, determine it
-            if not freshness_reason:
+            # Always derive freshness_reason (not included in LLM JSON format for consistency)
                 _, freshness_reason = self._determine_freshness_needs(
                     result_json.get("intent", "general_info"), 
                     request_type, 
@@ -510,9 +754,11 @@ Respond with ONLY the JSON, nothing else."""
                 confidence=0.95,
                 requires_disambiguation=requires_disambiguation,
                 candidate_year=candidate_year,
+                mentioned_year=mentioned_year,
                 need_freshness=need_freshness,
                 freshness_reason=freshness_reason,
-                freshness_ttl_hours=freshness_ttl_hours
+                freshness_ttl_hours=freshness_ttl_hours,
+                needs_clarification=False
             )
             
         except Exception as e:

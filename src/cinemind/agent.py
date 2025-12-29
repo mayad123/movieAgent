@@ -12,7 +12,7 @@ import logging
 import uuid
 import time
 import re
-from typing import List, Dict, Optional, AsyncGenerator
+from typing import List, Dict, Optional, AsyncGenerator, Tuple
 from datetime import datetime
 
 try:
@@ -314,18 +314,13 @@ class CineMind:
             if request_plan:
                 # Reconstruct StructuredIntent from RequestPlan (no OpenAI call needed)
                 from .intent_extraction import StructuredIntent
-                # RequestPlan.entities is a list, convert to typed format
-                typed_entities = {"movies": [], "people": []}
-                if isinstance(request_plan.entities, list):
-                    # Old format - try to infer types (simple heuristic)
-                    for entity in request_plan.entities:
-                        words = entity.split()
-                        if len(words) >= 2 and all(w[0].isupper() if w else False for w in words):
-                            typed_entities["people"].append(entity)
-                        else:
-                            typed_entities["movies"].append(entity)
-                elif isinstance(request_plan.entities, dict):
-                    typed_entities = request_plan.entities
+                # Use typed entities from RequestPlan (preferred over flat list)
+                typed_entities = request_plan.entities_typed if hasattr(request_plan, 'entities_typed') and request_plan.entities_typed else {"movies": [], "people": []}
+                # Ensure required keys exist
+                if "movies" not in typed_entities:
+                    typed_entities["movies"] = []
+                if "people" not in typed_entities:
+                    typed_entities["people"] = []
                 
                 structured_intent = StructuredIntent(
                     intent=request_plan.intent,
@@ -375,18 +370,25 @@ class CineMind:
                 # Check if we should skip Tavily based on tool plan
                 should_skip_tavily = False
                 skip_reason = ""
+                need_freshness = request_plan.need_freshness if request_plan else False
                 if tool_plan:
                     should_skip_tavily, skip_reason = self.tool_planner.should_skip_tavily(
                         tool_plan,
                         cache_hit=False,  # We're in the live data path, so no cache hit yet
-                        entity_resolved=len(structured_intent.get_all_entities() if structured_intent else []) > 0
+                        need_freshness=need_freshness
                     )
                     
                     if should_skip_tavily:
                         logger.info(f"[{request_id}] Skipping Tavily based on tool plan: {skip_reason}")
-                        # For stable intents without freshness, we can try to answer from cache/structured sources
-                        # For now, we'll still proceed but log the decision
-                        # In future, we could implement structured source lookup here
+                
+                # Determine override reason for Tavily (only valid reasons can override skip_tavily)
+                override_reason = None
+                from .search_engine import TavilyOverrideReason
+                
+                # Check for disambiguation_needed
+                if structured_intent and hasattr(structured_intent, 'requires_disambiguation') and structured_intent.requires_disambiguation:
+                    override_reason = TavilyOverrideReason.DISAMBIGUATION_NEEDED.value
+                    logger.info(f"[{request_id}] Override reason: {override_reason}")
                 
                 try:
                     # Use structured intent for optimized search
@@ -398,8 +400,8 @@ class CineMind:
                     # Search pipeline order (after cache miss):
                     # 1. Cache was checked first (above) - if nothing correlating, proceed here
                     # 2. Check Kaggle dataset (local lookup, free and fast)
-                    # 3. If Kaggle doesn't have highly correlated results, call Tavily API
-                    #    (overrides tool plan skip_tavily flag - Tavily will be used if Kaggle correlation is low)
+                    # 3. Tavily API (only if skip_tavily=False OR valid override_reason provided)
+                    #    NOTE: Low Kaggle correlation does NOT override skip_tavily flag
                     if tracker:
                         with tracker.time_operation("search"):
                             movie_info = await self.aggregator.get_movie_info(
@@ -408,22 +410,95 @@ class CineMind:
                                 intent=intent,
                                 entities=entities,
                                 request_type=request_type,
-                                skip_tavily=should_skip_tavily  # Pass flag to skip Tavily but still check Kaggle
+                                skip_tavily=should_skip_tavily,
+                                override_reason=override_reason,
+                                request_plan=request_plan
                             )
                     else:
-                        logger.info(f"[{request_id}] Performing search (Kaggle first, Tavily: {'enabled' if not should_skip_tavily else 'skipped'})...")
+                        logger.info(f"[{request_id}] Performing search (Kaggle first, Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
                         movie_info = await self.aggregator.get_movie_info(
                             user_query,
                             include_recent_news=not should_skip_tavily,
                             intent=intent,
                             entities=entities,
                             request_type=request_type,
-                            skip_tavily=should_skip_tavily
+                            skip_tavily=should_skip_tavily,
+                            override_reason=override_reason,
+                            request_plan=request_plan
                         )
                     
                     search_results = movie_info.get("results", [])
                     source_summary = movie_info.get("source_summary", {})
                     search_time_ms = (time.time() - search_start) * 1000
+                    
+                    # Check for additional override reasons after initial search
+                    final_override_reason = override_reason
+                    if should_skip_tavily and not movie_info.get("tavily_used", False):
+                        # Check for structured_lookup_empty (no results at all)
+                        if not search_results:
+                            final_override_reason = TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value
+                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (no results)")
+                            # Retry with override
+                            movie_info = await self.aggregator.get_movie_info(
+                                user_query,
+                                include_recent_news=False,
+                                intent=intent,
+                                entities=entities,
+                                request_type=request_type,
+                                skip_tavily=True,
+                                override_reason=final_override_reason,
+                                request_plan=request_plan
+                            )
+                            search_results = movie_info.get("results", [])
+                            source_summary = movie_info.get("source_summary", {})
+                        # Check for tier_a_required_but_missing (info/fact-check requires Tier A)
+                        elif request_type in ["info", "fact-check"] and not source_summary.get("has_tier_a", False):
+                            final_override_reason = TavilyOverrideReason.TIER_A_REQUIRED_BUT_MISSING.value
+                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (Tier A required but missing)")
+                            # Retry with override
+                            movie_info = await self.aggregator.get_movie_info(
+                                user_query,
+                                include_recent_news=False,
+                                intent=intent,
+                                entities=entities,
+                                request_type=request_type,
+                                skip_tavily=True,
+                                override_reason=final_override_reason,
+                                request_plan=request_plan
+                            )
+                            search_results = movie_info.get("results", [])
+                            source_summary = movie_info.get("source_summary", {})
+                    
+                    # Update tool plan with actual Tavily usage info
+                    if tool_plan:
+                        tool_plan.tavily_used = movie_info.get("tavily_used", False)
+                        tool_plan.override_used = movie_info.get("override_used", False)
+                        tool_plan.override_reason = movie_info.get("override_reason") or final_override_reason
+                        
+                        # Log Tavily usage with override info
+                        if tool_plan.tavily_used:
+                            if tool_plan.override_used:
+                                logger.info(
+                                    f"[{request_id}] Tavily used (OVERRIDE): "
+                                    f"tool_plan_skip_tavily={tool_plan.tool_plan_skip_tavily}, "
+                                    f"override_reason={tool_plan.override_reason}"
+                                )
+                            else:
+                                logger.info(f"[{request_id}] Tavily used (per tool plan)")
+                        else:
+                            logger.info(
+                                f"[{request_id}] Tavily skipped: "
+                                f"tool_plan_skip_tavily={tool_plan.tool_plan_skip_tavily}, "
+                                f"override_used={tool_plan.override_used}"
+                            )
+                    
+                    # Log metrics for observability
+                    if tracker and tool_plan:
+                        tracker.log_metric("tool_plan_skip_tavily", 1.0 if tool_plan.tool_plan_skip_tavily else 0.0)
+                        tracker.log_metric("tavily_used", 1.0 if tool_plan.tavily_used else 0.0)
+                        tracker.log_metric("override_used", 1.0 if tool_plan.override_used else 0.0)
+                        if tool_plan.override_reason:
+                            tracker.log_metric(f"override_reason_{tool_plan.override_reason}", 1.0)
                     
                     if should_skip_tavily and search_results:
                         logger.info(f"[{request_id}] Kaggle provided {len(search_results)} results (Tavily skipped per tool plan)")
@@ -574,29 +649,44 @@ class CineMind:
                                     verified_context += f"- {fact.value} (verified via {fact.source_url})\n"
                             search_context += verified_context
                     
-                    # Log search operation
+                    # Step 1: Deduplicate search results
+                    deduplicated_results, dedup_stats = self._deduplicate_search_results(search_results)
+                    
+                    # Step 2: Filter for relevance based on query entities
+                    query_entities = structured_intent.entities if structured_intent else {"movies": [], "people": []}
+                    mentioned_year = getattr(structured_intent, 'mentioned_year', None) if structured_intent else None
+                    relevant_results, exclusion_reasons = self._filter_relevant_results(
+                        deduplicated_results,
+                        query_entities,
+                        mentioned_year
+                    )
+                    
+                    # Step 3: Log search operation with detailed stats (single call, no duplicates)
                     if tracker:
                         tracker.log_search(
                             query=user_query,
-                            provider="tavily",
-                            results_count=len(search_results),
+                            provider="mixed",  # Combined Kaggle + Tavily
+                            results_count=len(relevant_results),
                             search_time_ms=search_time_ms
                         )
                     
-                    # Log search operation
-                    if tracker:
-                        tracker.log_search(
-                            query=user_query,
-                            provider="tavily",
-                            results_count=len(search_results),
-                            search_time_ms=search_time_ms
-                        )
+                    # Log detailed stats for debugging
+                    logger.info(
+                        f"[{request_id}] Search results: "
+                        f"retrieved={dedup_stats['candidates_retrieved']}, "
+                        f"deduped={dedup_stats['candidates_deduped']}, "
+                        f"evidence_used={len(relevant_results)}, "
+                        f"excluded={len(exclusion_reasons)}"
+                    )
+                    if exclusion_reasons and logger.isEnabledFor(logging.DEBUG):
+                        for excl in exclusion_reasons[:5]:  # Log first 5 exclusions
+                            logger.debug(f"[{request_id}] Excluded: {excl['title']} - {excl['reason']}")
                     
-                    # Format search results for context (prioritize Tier A sources)
-                    if search_results:
-                        # Identify source types
-                        kaggle_results = [r for r in search_results if r.get("source") == "kaggle_imdb"]
-                        tavily_results = [r for r in search_results if "tavily" in r.get("source", "").lower()]
+                    # Format search results for context (prioritize Tier A sources) - only include relevant, deduplicated results
+                    if relevant_results:
+                        # Identify source types (using relevant_results, not raw search_results)
+                        kaggle_results = [r for r in relevant_results if r.get("source") == "kaggle_imdb"]
+                        tavily_results = [r for r in relevant_results if "tavily" in r.get("source", "").lower()]
                         
                         # Determine header based on sources
                         if kaggle_results and not tavily_results:
@@ -614,11 +704,12 @@ class CineMind:
                             source_val = 0 if result.get("source") == "kaggle_imdb" else 1
                             return (tier_val, source_val, -result.get("score", 0.0))
                         
-                        sorted_results = sorted(search_results, key=sort_key)
+                        sorted_results = sorted(relevant_results, key=sort_key)
                         
                         tier_a_count = sum(1 for r in sorted_results if r.get("tier") == "A")
                         tier_c_count = sum(1 for r in sorted_results if r.get("tier") == "C")
                         
+                        # Limit to top 5 results for search_context
                         for i, result in enumerate(sorted_results[:5], 1):
                             source = result.get("source", "unknown")
                             tier = result.get("tier", "UNKNOWN")
@@ -992,6 +1083,150 @@ class CineMind:
         
         # Remove duplicates and return
         return list(set(titles))[:10]  # Limit to 10 candidates
+    
+    def _deduplicate_search_results(self, results: List[Dict]) -> Tuple[List[Dict], Dict[str, int]]:
+        """
+        Deduplicate search results based on (source_name/url, title, year).
+        
+        Returns:
+            (deduplicated_results, stats) where stats contains counts of duplicates
+        """
+        seen_keys = {}
+        deduplicated = []
+        duplicate_count = 0
+        
+        for result in results:
+            # Extract dedup key components
+            source_name = result.get("source", "unknown")
+            url = result.get("url", "")
+            title = result.get("title", "").strip().lower()
+            
+            # Extract year from title if present (e.g., "The Matrix (1999)")
+            year = None
+            year_match = re.search(r'\((\d{4})\)', title)
+            if year_match:
+                year = year_match.group(1)
+            
+            # Create dedup key: (source_name or url, title_normalized, year)
+            # Use source_name for Kaggle, url for others
+            source_key = source_name if source_name == "kaggle_imdb" else url
+            # Normalize title: remove year, trim, lowercase
+            title_normalized = re.sub(r'\s*\(\d{4}\)', '', title).strip()
+            dedup_key = (source_key, title_normalized, year)
+            
+            # Check if we've seen this key
+            if dedup_key in seen_keys:
+                duplicate_count += 1
+                continue
+            
+            seen_keys[dedup_key] = True
+            deduplicated.append(result)
+        
+        stats = {
+            "candidates_retrieved": len(results),
+            "duplicates_removed": duplicate_count,
+            "candidates_deduped": len(deduplicated)
+        }
+        
+        return deduplicated, stats
+    
+    def _filter_relevant_results(
+        self, 
+        results: List[Dict], 
+        query_entities: Dict[str, List[str]],
+        mentioned_year: Optional[int] = None
+    ) -> Tuple[List[Dict], List[Dict[str, str]]]:
+        """
+        Filter search results for relevance to query entities.
+        
+        Args:
+            results: Search results to filter
+            query_entities: Dict with "movies" and "people" keys
+            mentioned_year: Optional year from query (for award queries, etc.)
+        
+        Returns:
+            (relevant_results, exclusion_reasons) where exclusion_reasons is a list of dicts with 
+            reason and result info
+        """
+        relevant = []
+        exclusion_reasons = []
+        movies = [m.lower() for m in query_entities.get("movies", [])]
+        people = [p.lower() for p in query_entities.get("people", [])]
+        
+        for result in results:
+            title = result.get("title", "").lower()
+            content = result.get("content", "").lower()
+            source = result.get("source", "")
+            
+            # Extract year from result title if present
+            result_year = None
+            year_match = re.search(r'\((\d{4})\)', title)
+            if year_match:
+                result_year = int(year_match.group(1))
+            
+            # Check if result matches query entities
+            is_relevant = False
+            match_reason = ""
+            
+            # Check movie title matches
+            if movies:
+                for movie in movies:
+                    # Exact title match (with or without year)
+                    title_normalized = re.sub(r'\s*\(\d{4}\)', '', title).strip()
+                    movie_normalized = re.sub(r'\s*\(\d{4}\)', '', movie).strip()
+                    if movie_normalized in title_normalized or title_normalized in movie_normalized:
+                        is_relevant = True
+                        match_reason = f"title_match:{movie}"
+                        break
+                    # Content match
+                    if movie in content or movie in title:
+                        is_relevant = True
+                        match_reason = f"content_match:{movie}"
+                        break
+            
+            # Check person name matches
+            if not is_relevant and people:
+                for person in people:
+                    if person in content or person in title:
+                        is_relevant = True
+                        match_reason = f"person_match:{person}"
+                        break
+            
+            # For Kaggle results, also check correlation score (if high, likely relevant)
+            if not is_relevant and source == "kaggle_imdb":
+                correlation = result.get("correlation", 0.0)
+                if correlation > 0.7:  # High correlation threshold
+                    is_relevant = True
+                    match_reason = f"high_correlation:{correlation:.2f}"
+            
+            # Year matching for award queries (if year mentioned and matches)
+            if not is_relevant and mentioned_year and result_year:
+                if abs(result_year - mentioned_year) <= 1:  # Allow ±1 year for award queries
+                    # Only consider year match if no entities, or if it's an award-related query
+                    if not movies and not people:
+                        is_relevant = True
+                        match_reason = f"year_match:{mentioned_year}"
+            
+            # Fallback: If no entities extracted, allow high-scoring results through
+            # (Query might be too vague for entity extraction, but results could still be relevant)
+            if not is_relevant and not movies and not people:
+                score = result.get("score", 0.0)
+                correlation = result.get("correlation", 0.0)
+                if score > 0.8 or correlation > 0.8:
+                    is_relevant = True
+                    match_reason = f"high_score_fallback:{score:.2f}"
+            
+            if is_relevant:
+                relevant.append(result)
+            else:
+                exclusion_reasons.append({
+                    "reason": "low_relevance",
+                    "title": result.get("title", "")[:50],
+                    "source": source,
+                    "details": f"no_match_for_entities"
+                })
+        
+        return relevant, exclusion_reasons
     
     async def close(self):
         """Close connections and cleanup."""

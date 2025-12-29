@@ -4,10 +4,11 @@ Implements Tier A/B/C source ranking with strict enforcement.
 """
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from typing import List, Dict, Optional, Tuple, Union, Any
+from dataclasses import dataclass, field
 from enum import Enum
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,37 @@ class SourceMetadata:
     last_updated: Optional[str] = None
     is_structured: bool = False  # True for APIs/structured data
     source_name: str = "unknown"  # Original source name (tavily, kaggle_imdb, etc.)
+
+
+@dataclass
+class SourceConstraints:
+    """
+    Constraints for source filtering and ranking derived from RequestPlan.
+    """
+    allowed_source_tiers: List[str] = field(default_factory=lambda: ["A", "B"])  # Which tiers are allowed
+    require_tier_a: bool = False  # Must have at least one Tier A source
+    reject_tier_c: bool = True  # Reject Tier C sources
+    need_freshness: bool = False  # Whether query needs fresh data (affects ranking)
+    request_type: str = "info"  # Request type (for fallback behavior)
+    
+    @classmethod
+    def from_request_plan(cls, plan) -> "SourceConstraints":
+        """
+        Create SourceConstraints from RequestPlan.
+        
+        Args:
+            plan: RequestPlan instance
+            
+        Returns:
+            SourceConstraints
+        """
+        return cls(
+            allowed_source_tiers=getattr(plan, 'allowed_source_tiers', ["A", "B"]),
+            require_tier_a=getattr(plan, 'require_tier_a', False),
+            reject_tier_c=getattr(plan, 'reject_tier_c', True),
+            need_freshness=getattr(plan, 'need_freshness', False),
+            request_type=getattr(plan, 'request_type', 'info')
+        )
 
 
 class SourcePolicy:
@@ -162,19 +194,60 @@ class SourcePolicy:
         
         return SourceTier.UNKNOWN
     
-    def rank_and_filter(self, results: List[Dict], request_type: str, 
-                       need_freshness: bool = False) -> List[SourceMetadata]:
+    def rank_and_filter(self, results: List[Dict], 
+                       plan_or_constraints: Union[SourceConstraints, str, None] = None,
+                       request_type: Optional[str] = None,
+                       need_freshness: bool = False) -> Tuple[List[SourceMetadata], Dict[str, Any]]:
         """
-        Rank and filter search results by tier.
+        Rank and filter search results by tier using RequestPlan or SourceConstraints.
         
         Args:
             results: Raw search results from search engine
-            request_type: Request classification type
-            need_freshness: Whether query needs fresh data
+            plan_or_constraints: RequestPlan, SourceConstraints, or request_type string (for backward compatibility)
+            request_type: Request type (only used if plan_or_constraints is a string, for backward compatibility)
+            need_freshness: Whether query needs fresh data (only used if plan_or_constraints is a string, for backward compatibility)
         
         Returns:
-            List of SourceMetadata, ranked by tier (A first, then B, then C)
+            Tuple of (filtered_sources: List[SourceMetadata], metadata: Dict) where metadata contains:
+            - tiers_present_in_candidates: Dict[str, int] - Count of each tier in input results
+            - tiers_used_in_evidence: Dict[str, int] - Count of each tier in final results
+            - filtering_reasons: List[str] - Reasons why results were filtered out
         """
+        # Handle backward compatibility: if plan_or_constraints is a string, treat it as request_type
+        if isinstance(plan_or_constraints, str):
+            request_type = plan_or_constraints
+            constraints = SourceConstraints(
+                allowed_source_tiers=["A", "B"],
+                require_tier_a=False,
+                reject_tier_c=True,
+                need_freshness=need_freshness,
+                request_type=request_type or "info"
+            )
+        elif plan_or_constraints is None:
+            # Fallback to old behavior if nothing provided
+            constraints = SourceConstraints(
+                allowed_source_tiers=["A", "B"],
+                require_tier_a=False,
+                reject_tier_c=True,
+                need_freshness=need_freshness,
+                request_type=request_type or "info"
+            )
+        elif isinstance(plan_or_constraints, SourceConstraints):
+            # It's already a SourceConstraints
+            constraints = plan_or_constraints
+        elif hasattr(plan_or_constraints, 'allowed_source_tiers'):
+            # It's a RequestPlan-like object - convert to SourceConstraints
+            constraints = SourceConstraints.from_request_plan(plan_or_constraints)
+        else:
+            # Unknown type, fallback to default
+            constraints = SourceConstraints(
+                allowed_source_tiers=["A", "B"],
+                require_tier_a=False,
+                reject_tier_c=True,
+                need_freshness=need_freshness,
+                request_type=request_type or "info"
+            )
+        
         # Classify all sources
         sources = []
         for result in results:
@@ -209,61 +282,120 @@ class SourcePolicy:
             )
             sources.append(source)
         
-        # Filter based on request type
-        if request_type in ["info", "fact-check"]:
-            # For facts: Tier A only, unless no Tier A exists
-            tier_a_sources = [s for s in sources if s.tier == SourceTier.TIER_A]
-            if tier_a_sources:
-                # Return Tier A only, ranked by score
-                return sorted(tier_a_sources, key=lambda x: x.score, reverse=True)
-            else:
-                # No Tier A, allow Tier B but mark as lower confidence
-                tier_b_sources = [s for s in sources if s.tier == SourceTier.TIER_B]
-                if tier_b_sources:
-                    logger.warning(f"No Tier A sources found for {request_type}, using Tier B")
-                    return sorted(tier_b_sources, key=lambda x: x.score, reverse=True)
-                # Last resort: Tier C, but log warning
-                tier_c_sources = [s for s in sources if s.tier == SourceTier.TIER_C]
-                if tier_c_sources:
-                    logger.warning(f"Only Tier C sources available for {request_type} - low confidence")
-                    return sorted(tier_c_sources, key=lambda x: x.score, reverse=True)
+        # Log tiers present in candidates
+        tiers_present = {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0}
+        for source in sources:
+            tiers_present[source.tier.value] = tiers_present.get(source.tier.value, 0) + 1
         
-        elif request_type == "release-date":
-            # Release dates: Tier A preferred, Tier B allowed for news
-            tier_a_sources = [s for s in sources if s.tier == SourceTier.TIER_A]
-            tier_b_sources = [s for s in sources if s.tier == SourceTier.TIER_B]
+        # Step 1: Filter by allowed_source_tiers
+        filtered_sources = [s for s in sources if s.tier.value in constraints.allowed_source_tiers]
+        filtering_reasons = []
+        if len(filtered_sources) < len(sources):
+            removed_count = len(sources) - len(filtered_sources)
+            removed_tiers = set(s.tier.value for s in sources if s.tier.value not in constraints.allowed_source_tiers)
+            filtering_reasons.append(f"Removed {removed_count} sources with tiers {removed_tiers} (not in allowed_source_tiers: {constraints.allowed_source_tiers})")
+        
+        # Step 2: Filter by reject_tier_c
+        if constraints.reject_tier_c:
+            tier_c_count = sum(1 for s in filtered_sources if s.tier == SourceTier.TIER_C)
+            if tier_c_count > 0:
+                filtering_reasons.append(f"Removed {tier_c_count} Tier C sources (reject_tier_c=True)")
+            filtered_sources = [s for s in filtered_sources if s.tier != SourceTier.TIER_C]
+        
+        # Step 3: Group by tier for require_tier_a logic
+        tier_a_sources = [s for s in filtered_sources if s.tier == SourceTier.TIER_A]
+        tier_b_sources = [s for s in filtered_sources if s.tier == SourceTier.TIER_B]
+        tier_c_sources = [s for s in filtered_sources if s.tier == SourceTier.TIER_C]
+        
+        # Step 4: Apply require_tier_a logic
+        if constraints.require_tier_a:
+            if not tier_a_sources:
+                # If Tier A is required but none exist, return empty list
+                logger.warning(f"require_tier_a=True but no Tier A sources found - returning empty set")
+                filtering_reasons.append("No Tier A sources found (require_tier_a=True)")
+                tiers_used = {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0}
+                return ([], {
+                    "tiers_present_in_candidates": tiers_present,
+                    "tiers_used_in_evidence": tiers_used,
+                    "filtering_reasons": filtering_reasons
+                })
+            # Only use Tier A sources if required
+            filtered_sources = tier_a_sources
+        
+        # Step 5: Apply freshness-based ranking if needed
+        if constraints.need_freshness:
+            # Weight recency higher - rank by recency (newer first), then score
+            filtered_sources = self._rank_by_freshness(filtered_sources)
+        else:
+            # Standard ranking: tier first, then score
+            filtered_sources = sorted(filtered_sources, 
+                                    key=lambda x: (
+                                        {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}.get(x.tier.value, 3),
+                                        -x.score
+                                    ))
+        
+        # Log tiers used in evidence
+        tiers_used = {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0}
+        for source in filtered_sources:
+            tiers_used[source.tier.value] = tiers_used.get(source.tier.value, 0) + 1
+        
+        logger.info(f"Source filtering: present={tiers_present}, used={tiers_used}, reasons={filtering_reasons}")
+        
+        return (filtered_sources, {
+            "tiers_present_in_candidates": tiers_present,
+            "tiers_used_in_evidence": tiers_used,
+            "filtering_reasons": filtering_reasons
+        })
+    
+    def _rank_by_freshness(self, sources: List[SourceMetadata]) -> List[SourceMetadata]:
+        """
+        Rank sources by freshness (newer first) when need_freshness=True.
+        
+        Args:
+            sources: List of sources to rank
             
-            # Combine A and B, A first
-            combined = sorted(tier_a_sources + tier_b_sources, 
-                            key=lambda x: (x.tier.value != "A", -x.score))
-            return combined
+        Returns:
+            Sorted list of sources (newer first, then by score)
+        """
+        def freshness_score(source: SourceMetadata) -> Tuple[int, float]:
+            """
+            Calculate freshness score for ranking.
+            Returns: (days_old: int, -score: float) for sorting (lower days_old = newer = better)
+            """
+            score = source.score or 0.0
+            
+            # Try to extract date from published_date
+            days_old = 999999  # Default: very old (sorts last)
+            
+            if source.published_date:
+                try:
+                    # Try parsing ISO format dates
+                    date_str = str(source.published_date)
+                    # Handle timezone-aware dates
+                    if date_str.endswith('Z'):
+                        date_str = date_str.replace('Z', '+00:00')
+                    try:
+                        date_obj = datetime.fromisoformat(date_str)
+                        # Handle timezone-aware dates
+                        if date_obj.tzinfo:
+                            now = datetime.now(date_obj.tzinfo)
+                            days_old = (now - date_obj).days
+                        else:
+                            days_old = (datetime.now() - date_obj).days
+                        if days_old < 0:
+                            days_old = 0  # Future dates count as 0 days old
+                    except ValueError:
+                        # Try extracting year from string if ISO parsing fails
+                        year_match = re.search(r'\b(19|20)\d{2}\b', date_str)
+                        if year_match:
+                            year = int(year_match.group(0))
+                            days_old = (datetime.now().year - year) * 365  # Approximate
+                except (ValueError, AttributeError, TypeError):
+                    pass
+            
+            return (days_old, -score)
         
-        elif request_type in ["recs", "comparison"]:
-            # Recommendations/comparisons: All tiers allowed, but rank by tier
-            return sorted(sources, 
-                         key=lambda x: (
-                             {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}.get(x.tier.value, 3),
-                             -x.score
-                         ))
-        
-        elif request_type == "spoiler":
-            # Spoilers: Tier A preferred (Wikipedia plot summaries)
-            tier_a_sources = [s for s in sources if s.tier == SourceTier.TIER_A]
-            if tier_a_sources:
-                return sorted(tier_a_sources, key=lambda x: x.score, reverse=True)
-            # Fallback to others
-            return sorted(sources, 
-                         key=lambda x: (
-                             {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}.get(x.tier.value, 3),
-                             -x.score
-                         ))
-        
-        # Default: Return all, ranked by tier
-        return sorted(sources, 
-                     key=lambda x: (
-                         {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}.get(x.tier.value, 3),
-                         -x.score
-                     ))
+        return sorted(sources, key=freshness_score)
     
     def filter_tier_c(self, sources: List[SourceMetadata], 
                      allow_tier_c: bool = False) -> List[SourceMetadata]:

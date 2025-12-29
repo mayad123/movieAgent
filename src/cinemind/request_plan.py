@@ -40,12 +40,15 @@ class RequestPlan:
     request_type: str  # Classified type: "info", "recs", "comparison", etc.
     
     # Entities
-    entities: List[str] = field(default_factory=list)  # Movie/person names
+    entities: List[str] = field(default_factory=list)  # Movie/person names (backward compatibility - flat list)
+    entities_typed: Dict[str, List[str]] = field(default_factory=lambda: {"movies": [], "people": []})  # Typed entities: {"movies": [...], "people": [...]}
     entity_years: Dict[str, Optional[int]] = field(default_factory=dict)  # Optional year disambiguation
     
     # Freshness requirements
-    need_freshness: bool = False
+    freshness_signal: bool = False  # Weak signal from classifier (might need fresh data)
+    need_freshness: bool = False  # Final decision made by ToolPlanner (based on intent + entity year + signal)
     freshness_ttl_hours: float = 24.0  # TTL in hours for this request type
+    freshness_reason: Optional[str] = None  # Reason for final freshness decision
     
     # Source policy
     allowed_source_tiers: List[str] = field(default_factory=lambda: ["A", "B"])  # Which tiers are allowed
@@ -64,6 +67,10 @@ class RequestPlan:
     llm_used: bool = False
     original_query: str = ""
     
+    # Intent extraction metadata
+    intent_extraction_mode: str = "rules"  # "rules" or "llm" - which extractor path was used
+    intent_confidence: float = 1.0  # Confidence of intent extraction (0-1)
+    
     def __post_init__(self):
         """Validate and normalize the plan."""
         # Ensure tools_to_call is a list of ToolType enums
@@ -78,6 +85,18 @@ class RequestPlan:
         # Normalize allowed_source_tiers
         if not self.allowed_source_tiers:
             self.allowed_source_tiers = ["A", "B"]
+        
+        # Ensure entities_typed has required keys
+        if not isinstance(self.entities_typed, dict):
+            self.entities_typed = {"movies": [], "people": []}
+        if "movies" not in self.entities_typed:
+            self.entities_typed["movies"] = []
+        if "people" not in self.entities_typed:
+            self.entities_typed["people"] = []
+        
+        # If entities_typed is populated but entities is empty, populate entities for backward compatibility
+        if not self.entities and self.entities_typed:
+            self.entities = self.entities_typed.get("movies", []) + self.entities_typed.get("people", [])
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -85,9 +104,12 @@ class RequestPlan:
             "intent": self.intent,
             "request_type": self.request_type,
             "entities": self.entities,
+            "entities_typed": self.entities_typed,
             "entity_years": self.entity_years,
+            "freshness_signal": self.freshness_signal,
             "need_freshness": self.need_freshness,
             "freshness_ttl_hours": self.freshness_ttl_hours,
+            "freshness_reason": self.freshness_reason,
             "allowed_source_tiers": self.allowed_source_tiers,
             "require_tier_a": self.require_tier_a,
             "reject_tier_c": self.reject_tier_c,
@@ -97,6 +119,8 @@ class RequestPlan:
             "rule_hit": self.rule_hit,
             "llm_used": self.llm_used,
             "original_query": self.original_query,
+            "intent_extraction_mode": self.intent_extraction_mode,
+            "intent_confidence": self.intent_confidence,
         }
     
     @classmethod
@@ -172,22 +196,44 @@ class RequestPlanner:
         # Step 1: Classify the request
         classification = await self.classifier.classify(prompt, client)
         
-        # Step 2: Extract structured intent
-        structured_intent = await self.intent_extractor.extract_with_llm(
-            prompt, client, classification.predicted_type
+        # Step 2: Extract structured intent using smart routing (rules-first + LLM fallback)
+        structured_intent, extraction_mode, intent_confidence = await self.intent_extractor.extract_smart(
+            prompt, client, classification.predicted_type, force_llm=False
         )
         
-        # Step 3: Determine freshness requirements
-        # Use freshness hints from StructuredIntent if available, otherwise use classification
-        need_freshness = structured_intent.need_freshness if hasattr(structured_intent, 'need_freshness') and structured_intent.need_freshness else classification.need_freshness
-        ttl_hours = structured_intent.freshness_ttl_hours if hasattr(structured_intent, 'freshness_ttl_hours') and structured_intent.freshness_ttl_hours else self.TTL_BY_TYPE.get(classification.predicted_type, 168.0)
+        # Step 3: Extract typed entities (needed for freshness decision)
+        entities_typed = structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
+        if "movies" not in entities_typed:
+            entities_typed["movies"] = []
+        if "people" not in entities_typed:
+            entities_typed["people"] = []
         
-        # Step 4: Determine source policy
+        # Step 4: Determine freshness requirements
+        # Get freshness signal from classifier (weak signal)
+        freshness_signal = classification.freshness_signal if hasattr(classification, 'freshness_signal') else False
+        
+        # Get entity year for freshness decision
+        candidate_year = structured_intent.candidate_year if hasattr(structured_intent, 'candidate_year') else None
+        mentioned_year = structured_intent.mentioned_year if hasattr(structured_intent, 'mentioned_year') else None
+        
+        # Use ToolPlanner to make final freshness decision
+        from .tool_plan import ToolPlanner
+        tool_planner = ToolPlanner()
+        need_freshness, ttl_hours, freshness_reason = tool_planner.determine_freshness(
+            structured_intent.intent,
+            freshness_signal,
+            entities_typed,
+            candidate_year=candidate_year,
+            mentioned_year=mentioned_year
+        )
+        logger.info(f"Freshness decision: signal={freshness_signal}, final={need_freshness}, reason={freshness_reason}, ttl={ttl_hours}h")
+        
+        # Step 5: Determine source policy
         allowed_tiers, require_tier_a, reject_tier_c = self._determine_source_policy(
             classification.predicted_type, structured_intent.intent
         )
         
-        # Step 5: Select tools
+        # Step 6: Select tools
         tools = self._select_tools(structured_intent.intent, classification.predicted_type)
         
         # Step 6: Determine response format
@@ -197,21 +243,34 @@ class RequestPlanner:
             structured_intent.constraints
         )
         
-        # Step 7: Extract entity years if present
-        # Get all entities as flat list for RequestPlan (backward compatibility)
-        all_entities = structured_intent.get_all_entities() if hasattr(structured_intent, 'get_all_entities') else (
-            structured_intent.entities if isinstance(structured_intent.entities, list) 
-            else structured_intent.entities.get("movies", []) + structured_intent.entities.get("people", [])
-        )
+        # Step 8: Extract entity years (entities_typed already extracted in Step 3)
+        all_entities = entities_typed.get("movies", []) + entities_typed.get("people", [])
         entity_years = self._extract_entity_years(prompt, all_entities)
+        
+        # Step 9: Ensure schema consistency (candidate_year and order_by validation)
+        # candidate_year must be None unless requires_disambiguation is True
+        if not structured_intent.requires_disambiguation and structured_intent.candidate_year is not None:
+            logger.warning(f"Schema validation: candidate_year set to None (requires_disambiguation is False)")
+            structured_intent.candidate_year = None
+        
+        # constraints.order_by must be None unless user explicitly requested sorting
+        order_by = structured_intent.constraints.get("order_by")
+        if order_by and order_by not in {"release_year_asc", "release_year_desc", "chronological"}:
+            logger.warning(f"Schema validation: invalid order_by value '{order_by}', set to None")
+            structured_intent.constraints["order_by"] = None
+        
+        logger.info(f"Intent extraction: mode={extraction_mode}, confidence={intent_confidence:.2f}")
         
         return RequestPlan(
             intent=structured_intent.intent,
             request_type=classification.predicted_type,
-            entities=all_entities,  # RequestPlan stores as flat list for now
+            entities=all_entities,  # Flat list for backward compatibility
+            entities_typed=entities_typed,  # Typed entities (preferred)
             entity_years=entity_years,
-            need_freshness=need_freshness,
+            freshness_signal=freshness_signal,  # Signal from classifier
+            need_freshness=need_freshness,  # Final decision from ToolPlanner
             freshness_ttl_hours=ttl_hours,
+            freshness_reason=freshness_reason,  # Reason for final decision
             allowed_source_tiers=allowed_tiers,
             require_tier_a=require_tier_a,
             reject_tier_c=reject_tier_c,
@@ -220,7 +279,9 @@ class RequestPlanner:
             confidence=classification.confidence,
             rule_hit=classification.rule_hit,
             llm_used=classification.llm_used,
-            original_query=prompt
+            original_query=prompt,
+            intent_extraction_mode=extraction_mode,  # "rules" or "llm"
+            intent_confidence=intent_confidence  # Confidence from intent extraction (0-1)
         )
     
     def _determine_source_policy(self, request_type: str, intent: str) -> Tuple[List[str], bool, bool]:

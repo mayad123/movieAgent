@@ -3,11 +3,13 @@ Kaggle dataset search module for IMDB dataset.
 
 This module provides functionality to search the IMDB dataset from Kaggle
 and check if results are highly correlated with user queries.
+
+Optimization: Two-stage pipeline with fast candidate retrieval + expensive correlation scorer.
 """
 import os
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 from datetime import datetime
 import pandas as pd
 
@@ -16,6 +18,59 @@ logger = logging.getLogger(__name__)
 # Default correlation threshold (0.0 to 1.0)
 # Higher values mean stricter matching
 DEFAULT_CORRELATION_THRESHOLD = 0.7
+
+# Stage A: Number of candidates to retrieve for Stage B correlation scoring
+STAGE_A_CANDIDATE_LIMIT = 200
+
+
+def normalize_title(title: str) -> str:
+    """
+    Normalize a movie title for matching.
+    
+    Removes:
+    - Special characters
+    - Extra whitespace
+    - Converts to lowercase
+    - Removes common articles (the, a, an)
+    
+    Args:
+        title: Original title
+        
+    Returns:
+        Normalized title
+    """
+    if not title or not isinstance(title, str):
+        return ""
+    
+    # Convert to lowercase
+    normalized = title.lower().strip()
+    
+    # Remove special characters (keep letters, numbers, spaces)
+    normalized = re.sub(r'[^a-z0-9\s]', '', normalized)
+    
+    # Remove extra whitespace
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    # Remove leading articles (optional - can be kept for some matching strategies)
+    # normalized = re.sub(r'^(the|a|an)\s+', '', normalized).strip()
+    
+    return normalized
+
+
+def tokenize(title: str) -> Set[str]:
+    """
+    Tokenize a title into a set of words.
+    
+    Args:
+        title: Title string
+        
+    Returns:
+        Set of token strings
+    """
+    normalized = normalize_title(title)
+    tokens = set(normalized.split())
+    # Filter out very short tokens
+    return {t for t in tokens if len(t) > 2}
 
 
 class KaggleDatasetSearcher:
@@ -36,6 +91,11 @@ class KaggleDatasetSearcher:
         self._dataset = None
         self._dataset_loaded = False
         self.kaggle_dataset_name = "parthdande/imdb-dataset-2024-updated"
+        
+        # Stage A: Precomputed normalized title index (built once on init)
+        self._normalized_title_index: Dict[int, str] = {}  # row_index -> normalized_title
+        self._token_index: Dict[str, Set[int]] = {}  # token -> set of row_indices
+        self._title_index_loaded = False
     
     def _load_dataset(self) -> Optional[pd.DataFrame]:
         """Load the Kaggle dataset. Caches the result."""
@@ -133,6 +193,9 @@ class KaggleDatasetSearcher:
             self._dataset_loaded = True
             logger.info(f"Loaded dataset with {len(df)} records. Columns: {list(df.columns)}")
             
+            # Build normalized title index
+            self._build_title_index()
+            
             return df
             
         except ImportError:
@@ -195,6 +258,151 @@ class KaggleDatasetSearcher:
                     entities["people"].extend(potential_names[:2])  # Limit to 2
         
         return entities
+    
+    def _build_title_index(self) -> None:
+        """
+        Build normalized title index for fast candidate retrieval.
+        Called once when dataset is loaded.
+        """
+        if self._title_index_loaded:
+            return
+        
+        df = self._dataset
+        if df is None or df.empty:
+            return
+        
+        logger.info("Building normalized title index for fast candidate retrieval...")
+        
+        # Find title column
+        title_cols = ["Title", "title", "movie_title", "name", "Movie"]
+        title_col = None
+        for col in title_cols:
+            if col in df.columns:
+                title_col = col
+                break
+        
+        if not title_col:
+            # Fallback: use first string column
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    title_col = col
+                    break
+        
+        if not title_col:
+            logger.warning("Could not find title column for indexing")
+            return
+        
+        # Build indexes
+        self._normalized_title_index = {}
+        self._token_index = {}
+        
+        for idx, row in df.iterrows():
+            title = row.get(title_col)
+            if pd.notna(title) and title:
+                title_str = str(title)
+                normalized = normalize_title(title_str)
+                if normalized:
+                    self._normalized_title_index[idx] = normalized
+                    # Build token index for fast token overlap matching
+                    tokens = tokenize(title_str)
+                    for token in tokens:
+                        if token not in self._token_index:
+                            self._token_index[token] = set()
+                        self._token_index[token].add(idx)
+        
+        self._title_index_loaded = True
+        logger.info(f"Built title index: {len(self._normalized_title_index)} titles, {len(self._token_index)} unique tokens")
+    
+    def _stage_a_candidate_retrieval(self, query: str, top_n: int = STAGE_A_CANDIDATE_LIMIT) -> List[Tuple[int, float, str]]:
+        """
+        Stage A: Fast candidate retrieval using title normalization + simple lookup.
+        
+        Uses multiple strategies:
+        1. Exact normalized title match
+        2. Substring match
+        3. Token overlap (fast token-based matching)
+        4. Optional fuzzy matching (if rapidfuzz is available)
+        
+        Args:
+            query: Search query
+            top_n: Maximum number of candidates to return
+            
+        Returns:
+            List of (row_index, match_score, match_reason) tuples, sorted by match_score descending
+        """
+        if not self._title_index_loaded:
+            self._build_title_index()
+        
+        query_normalized = normalize_title(query)
+        query_tokens = tokenize(query)
+        
+        candidates: Dict[int, Tuple[float, str]] = {}  # row_index -> (score, reason)
+        
+        # Strategy 1: Exact normalized title match (highest priority)
+        for row_idx, normalized_title in self._normalized_title_index.items():
+            if query_normalized == normalized_title:
+                candidates[row_idx] = (1.0, "exact_title")
+            elif query_normalized in normalized_title or normalized_title in query_normalized:
+                # Substring match (one contains the other)
+                if row_idx not in candidates:  # Don't override exact matches
+                    candidates[row_idx] = (0.9, "substring_match")
+        
+        # Strategy 2: Token overlap (high priority, fast)
+        if query_tokens:
+            token_matches: Dict[int, int] = {}  # row_index -> number of matching tokens
+            for token in query_tokens:
+                if token in self._token_index:
+                    for row_idx in self._token_index[token]:
+                        token_matches[row_idx] = token_matches.get(row_idx, 0) + 1
+            
+            # Calculate token overlap score
+            for row_idx, match_count in token_matches.items():
+                if row_idx not in candidates:  # Don't override exact/substring matches
+                    overlap_score = match_count / len(query_tokens)
+                    if overlap_score >= 0.3:  # At least 30% token overlap
+                        candidates[row_idx] = (overlap_score * 0.8, "token_overlap")  # Max 0.8 for token overlap
+        
+        # Strategy 3: Optional fuzzy matching with rapidfuzz (if available)
+        try:
+            from rapidfuzz import fuzz, process
+            # Use rapidfuzz to find fuzzy matches if we don't have enough candidates
+            if len(candidates) < top_n:
+                # Extract titles and indices for fuzzy matching
+                title_list = [(idx, normalized) for idx, normalized in self._normalized_title_index.items() if idx not in candidates]
+                
+                if title_list:
+                    # Use rapidfuzz to get best matches
+                    # Extract just the titles for process.extract
+                    titles_only = [t[1] for t in title_list]
+                    matches = process.extract(query_normalized, titles_only, limit=min(top_n - len(candidates), len(titles_only)), scorer=fuzz.ratio)
+                    
+                    # Map back to row indices
+                    for match_title, score, _ in matches:
+                        # Find the row index for this title
+                        for idx, norm_title in title_list:
+                            if norm_title == match_title and idx not in candidates:
+                                # Normalize rapidfuzz score (0-100) to 0.0-1.0, then scale to max 0.7 for fuzzy
+                                normalized_score = (score / 100.0) * 0.7
+                                if normalized_score >= 0.5:  # Only include if similarity >= 50%
+                                    candidates[idx] = (normalized_score, "fuzzy_match")
+                                break
+        except ImportError:
+            # rapidfuzz not available, skip fuzzy matching
+            pass
+        
+        # Strategy 4: Substring matching on individual words (lower priority fallback)
+        if len(candidates) < top_n:
+            query_words = [w for w in query_normalized.split() if len(w) > 3]
+            for word in query_words:
+                if len(candidates) >= top_n:
+                    break
+                for row_idx, normalized_title in self._normalized_title_index.items():
+                    if row_idx not in candidates and word in normalized_title:
+                        candidates[row_idx] = (0.5, "substring_match")
+        
+        # Sort by score and return top N
+        sorted_candidates = sorted(candidates.items(), key=lambda x: x[1][0], reverse=True)
+        return [(idx, score, reason) for idx, (score, reason) in sorted_candidates[:top_n]]
     
     def _calculate_correlation(self, query: str, dataset_row: Dict) -> float:
         """
@@ -267,6 +475,10 @@ class KaggleDatasetSearcher:
         """
         Search the Kaggle dataset for results correlated with the query.
         
+        Uses two-stage pipeline:
+        - Stage A: Fast candidate retrieval using normalized title lookup
+        - Stage B: Expensive correlation scorer on top N candidates
+        
         Args:
             query: Search query
             max_results: Maximum number of results to return
@@ -282,24 +494,45 @@ class KaggleDatasetSearcher:
             logger.warning("Kaggle dataset not available or empty")
             return [], 0.0
         
-        # Calculate correlation for each row
+        # Stage A: Fast candidate retrieval
+        candidates = self._stage_a_candidate_retrieval(query, top_n=STAGE_A_CANDIDATE_LIMIT)
+        
+        if not candidates:
+            logger.info(f"No candidates found in Stage A for query: {query}")
+            return [], 0.0
+        
+        logger.debug(f"Stage A found {len(candidates)} candidates, running Stage B correlation on top {min(len(candidates), STAGE_A_CANDIDATE_LIMIT)}")
+        
+        # Stage B: Run expensive correlation scorer only on top N candidates
         correlations = []
         
-        for idx, row in df.iterrows():
+        for row_idx, stage_a_score, match_reason in candidates:
             try:
-                correlation = self._calculate_correlation(query, row.to_dict())
-                if correlation > 0.0:  # Only store non-zero correlations
+                row = df.iloc[row_idx]
+                row_dict = row.to_dict()
+                
+                # Run expensive correlation scorer
+                correlation = self._calculate_correlation(query, row_dict)
+                
+                # Combine Stage A score (0.0-1.0) with Stage B correlation (0.0-1.0)
+                # Weight: 30% Stage A, 70% Stage B (Stage B is more accurate)
+                combined_score = (stage_a_score * 0.3) + (correlation * 0.7)
+                
+                if combined_score > 0.0:  # Only store non-zero correlations
                     correlations.append({
-                        "index": idx,
+                        "index": row_idx,
                         "correlation": correlation,
-                        "row_data": row.to_dict()
+                        "combined_score": combined_score,
+                        "match_reason": match_reason,
+                        "stage_a_score": stage_a_score,
+                        "row_data": row_dict
                     })
             except Exception as e:
-                logger.warning(f"Error calculating correlation for row {idx}: {e}")
+                logger.warning(f"Error calculating correlation for row {row_idx}: {e}")
                 continue
         
-        # Sort by correlation (highest first)
-        correlations.sort(key=lambda x: x["correlation"], reverse=True)
+        # Sort by combined score (highest first)
+        correlations.sort(key=lambda x: x["combined_score"], reverse=True)
         
         # Convert to result format
         results = []
@@ -307,7 +540,15 @@ class KaggleDatasetSearcher:
         
         for item in correlations[:max_results]:
             correlation = item["correlation"]
+            combined_score = item["combined_score"]
+            match_reason = item.get("match_reason", "correlation")
+            stage_a_score = item.get("stage_a_score", 0.0)
             row_data = item["row_data"]
+            
+            # Use combined_score for final ranking, but report correlation as the score
+            # (to preserve backward compatibility with existing code)
+            if correlation > max_correlation:
+                max_correlation = correlation
             
             if correlation > max_correlation:
                 max_correlation = correlation
@@ -388,9 +629,12 @@ class KaggleDatasetSearcher:
                 "title": title or "IMDB Dataset Result",
                 "url": "",  # No URL for dataset results
                 "content": content,  # Content already truncated above if needed
-                "score": correlation,
+                "score": correlation,  # Use correlation for backward compatibility
                 "source": "kaggle_imdb",
                 "correlation": correlation,
+                "match_score": combined_score,  # Combined Stage A + Stage B score
+                "match_reason": match_reason,  # "exact_title", "token_overlap", "substring_match", etc.
+                "stage_a_score": stage_a_score,  # Fast lookup score from Stage A
                 "published_date": None,
                 "row_index": item["index"]
             })
