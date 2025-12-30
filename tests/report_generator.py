@@ -27,6 +27,7 @@ class ScenarioResult:
     scenario_set: Optional[str] = None
     passed_clean: bool = True  # True if passed with zero violations
     has_violations: bool = False  # True if validation found violations
+    kaggle_outcome: Optional[Dict[str, Any]] = None  # Kaggle behavior outcome
 
 
 class ScenarioReportCollector:
@@ -55,7 +56,8 @@ class ScenarioReportCollector:
         evidence_max_snippet_len: int = 0,
         scenario_set: Optional[str] = None,
         passed_clean: bool = True,
-        has_violations: bool = False
+        has_violations: bool = False,
+        kaggle_outcome: Optional[Dict[str, Any]] = None
     ):
         """
         Record the result of a single scenario test.
@@ -84,7 +86,8 @@ class ScenarioReportCollector:
             evidence_max_snippet_len=evidence_max_snippet_len,
             scenario_set=scenario_set,
             passed_clean=passed_clean,
-            has_violations=has_violations
+            has_violations=has_violations,
+            kaggle_outcome=kaggle_outcome
         )
         self.results.append(result)
     

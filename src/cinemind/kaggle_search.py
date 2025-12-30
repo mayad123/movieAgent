@@ -11,6 +11,7 @@ import re
 import logging
 from typing import List, Dict, Optional, Tuple, Set
 from datetime import datetime
+from urllib.parse import quote
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -576,6 +577,10 @@ class KaggleDatasetSearcher:
                         title = val[:100]  # Limit length
                         break
             
+            # Ensure title is never empty (required for deduplication)
+            if not title:
+                title = f"IMDB Dataset Result (Row {item['index']})"
+            
             # Build structured content with important fields in readable format
             # Priority order for IMDB dataset: Director, Year, Genre, Star Cast, Rating, etc.
             priority_fields = {
@@ -625,20 +630,70 @@ class KaggleDatasetSearcher:
             
             # Join with newlines for better readability, but truncate total length
             content = "\n".join(content_lines)
+            
+            # EvidenceFormatter requirement: must have non-empty content
+            # If no content was built, use title as fallback
+            if not content or not content.strip():
+                content = title or "IMDB Dataset Result"
+            
             if len(content) > 800:  # Truncate if too long
                 content = content[:800] + "..."
             
+            # Extract year from row_data for deduplication
+            year = None
+            year_cols = ["Year", "year", "Release Year", "release_year", "Release Date"]
+            for col in year_cols:
+                if col in row_data and pd.notna(row_data[col]):
+                    year_val = row_data[col]
+                    if year_val:
+                        # Extract year if it's a string like "1999" or datetime
+                        if isinstance(year_val, (int, float)):
+                            year = int(year_val)
+                        elif isinstance(year_val, str):
+                            # Try to extract 4-digit year
+                            import re
+                            year_match = re.search(r'\b(19|20)\d{2}\b', year_val)
+                            if year_match:
+                                year = int(year_match.group())
+                        break
+            
+            # Build URL for deduplication (use dataset identifier + title + year)
+            # EvidenceFormatter uses url for deduplication, so we provide a meaningful identifier
+            # Format: kaggle://dataset/title/year (URL-encoded for safety)
+            url_parts = []
+            if self.kaggle_dataset_name:
+                # Use a simple identifier format that urlparse can handle
+                dataset_id = self.kaggle_dataset_name.replace("/", "_")
+                title_safe = quote(title.replace(" ", "_"), safe="") if title else ""
+                year_str = str(year) if year else ""
+                if title_safe and year_str:
+                    url = f"kaggle://{dataset_id}/{title_safe}/{year_str}"
+                elif title_safe:
+                    url = f"kaggle://{dataset_id}/{title_safe}"
+                else:
+                    url = f"kaggle://{dataset_id}/row_{item['index']}"
+            else:
+                # Fallback: use title+year as identifier
+                if title and year:
+                    url = f"kaggle://imdb/{quote(title.replace(' ', '_'), safe='')}/{year}"
+                elif title:
+                    url = f"kaggle://imdb/{quote(title.replace(' ', '_'), safe='')}"
+                else:
+                    url = ""
+            
             results.append({
                 "title": title or "IMDB Dataset Result",
-                "url": "",  # No URL for dataset results
-                "content": content,  # Content already truncated above if needed
+                "url": url,  # Dataset identifier for deduplication
+                "content": content,  # Must be non-empty (EvidenceFormatter requirement)
                 "score": correlation,  # Use correlation for backward compatibility
-                "source": "kaggle_imdb",
+                "source": "kaggle_imdb",  # EvidenceFormatter maps to "Structured IMDb dataset"
                 "correlation": correlation,
                 "match_score": combined_score,  # Combined Stage A + Stage B score
                 "match_reason": match_reason,  # "exact_title", "token_overlap", "substring_match", etc.
                 "stage_a_score": stage_a_score,  # Fast lookup score from Stage A
                 "published_date": None,
+                "year": year,  # For deduplication (EvidenceFormatter uses title+year)
+                "row_data": row_data,  # Include for adapter to extract additional fields
                 "row_index": item["index"]
             })
         

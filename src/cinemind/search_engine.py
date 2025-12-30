@@ -4,7 +4,9 @@ Real-time web search engine for movie data.
 Performance optimizations:
 - Parallel search execution: Multiple searches run concurrently using asyncio.gather
 - Parallel movie and news searches: Movie info and news searches run simultaneously
-- Kaggle dataset search first: Checks IMDB dataset before calling Tavily API
+
+Note: Kaggle dataset search is handled by KaggleRetrievalAdapter (called separately by the agent).
+This class only handles Tavily API and web search fallback.
 """
 import os
 import re
@@ -34,10 +36,7 @@ class SearchDecision:
     fallback_provider: Optional[str] = None
     override_used: bool = False
     override_reason: Optional[str] = None
-    kaggle_query_string: Optional[str] = None
-    kaggle_stage_a_candidates: int = 0
-    kaggle_max_score: float = 0.0
-    kaggle_threshold: float = 0.0
+    # Note: Kaggle-specific fields removed - Kaggle is now handled by KaggleRetrievalAdapter
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -46,11 +45,7 @@ class SearchDecision:
             "fallback_used": self.fallback_used,
             "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
-            "override_reason": self.override_reason,
-            "kaggle_query_string": self.kaggle_query_string,
-            "kaggle_stage_a_candidates": self.kaggle_stage_a_candidates,
-            "kaggle_max_score": self.kaggle_max_score,
-            "kaggle_threshold": self.kaggle_threshold
+            "override_reason": self.override_reason
         }
 
 
@@ -63,28 +58,15 @@ class SearchEngine:
         
         Args:
             tavily_api_key: Tavily API key for real-time search
-            enable_kaggle: Whether to enable Kaggle dataset search (default: from config)
+            enable_kaggle: Whether to enable Kaggle dataset search (deprecated - use KaggleRetrievalAdapter)
         """
         self.tavily_api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
         self.session = httpx.AsyncClient(timeout=30.0)
         
-        # Initialize Kaggle searcher if enabled
-        from .config import ENABLE_KAGGLE_SEARCH, KAGGLE_CORRELATION_THRESHOLD, KAGGLE_DATASET_PATH
-        self.enable_kaggle = enable_kaggle if enable_kaggle is not None else ENABLE_KAGGLE_SEARCH
-        self.kaggle_searcher = None
-        
-        if self.enable_kaggle:
-            try:
-                from .kaggle_search import KaggleDatasetSearcher
-                self.kaggle_searcher = KaggleDatasetSearcher(
-                    dataset_path=KAGGLE_DATASET_PATH,
-                    correlation_threshold=KAGGLE_CORRELATION_THRESHOLD
-                )
-                logger.info(f"Kaggle dataset search enabled (threshold: {KAGGLE_CORRELATION_THRESHOLD})")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Kaggle searcher: {e}. Continuing without Kaggle search.")
-                self.kaggle_searcher = None
-                self.enable_kaggle = False
+        # Note: Kaggle search is now handled by KaggleRetrievalAdapter (called from agent/search aggregator)
+        # This class no longer manages Kaggle directly
+        if enable_kaggle is not None:
+            logger.warning("enable_kaggle parameter is deprecated - Kaggle is now handled by KaggleRetrievalAdapter")
     
     def build_intent_queries(self, intent: str, entities: List[str], 
                            request_type: str = "info") -> List[str]:
@@ -144,55 +126,8 @@ class SearchEngine:
         
         return queries
     
-    def _derive_kaggle_query_string(self, query: str, entities_typed: Optional[Dict[str, List[str]]] = None, 
-                                     intent: Optional[str] = None) -> str:
-        """
-        Derive Kaggle query string using best extracted movie title for simple fact intents.
-        
-        Priority:
-        1. If entities_typed.movies is non-empty → use first movie title (optionally include year if present)
-        2. Else fallback to cleaned query (strip leading interrogatives and verbs)
-        
-        Args:
-            query: Original user query
-            entities_typed: Typed entities dict with "movies" and "people" keys
-            intent: Intent type (e.g., "director_info", "cast_info", "release_date", "general_info")
-            
-        Returns:
-            Query string optimized for Kaggle search
-        """
-        # Simple fact intents that should use movie title
-        simple_fact_intents = {"director_info", "cast_info", "release_date", "general_info"}
-        
-        # If we have a simple fact intent and entities_typed with movies, use the first movie
-        if intent in simple_fact_intents and entities_typed:
-            movies = entities_typed.get("movies", [])
-            if movies and len(movies) > 0:
-                # Use the first movie title
-                return movies[0]
-        
-        # Fallback: clean the query by stripping leading interrogatives and verbs
-        query_lower = query.lower().strip()
-        
-        # Remove leading interrogatives
-        interrogatives = ["who", "what", "when", "where", "why", "how"]
-        for interrogative in interrogatives:
-            if query_lower.startswith(interrogative + " "):
-                query_lower = query_lower[len(interrogative):].strip()
-                break
-        
-        # Remove leading verbs
-        verbs = ["is", "was", "were", "are", "do", "did", "does", "can", "could", "would", "should",
-                 "directed", "director", "played", "actor", "cast", "starring", "stars"]
-        for verb in verbs:
-            if query_lower.startswith(verb + " "):
-                query_lower = query_lower[len(verb):].strip()
-                break
-        
-        # Return cleaned query, or original if nothing matched
-        if query_lower != query.lower().strip():
-            return query_lower
-        return query
+    # Note: _derive_kaggle_query_string removed - Kaggle query derivation is now handled
+    # by KaggleRetrievalAdapter internally. This method is no longer needed.
     
     async def search(self, query: str, max_results: int = 5, skip_tavily: bool = False,
                     override_reason: Optional[str] = None, kaggle_query_string: Optional[str] = None,
@@ -200,23 +135,24 @@ class SearchEngine:
         """
         Perform real-time search for movie information.
         
-        NOTE: This is called AFTER cache check. Pipeline order:
+        NOTE: This is called AFTER cache check and Kaggle retrieval (if any).
+        Pipeline order:
         1. Cache (checked in agent.py before this method)
-        2. Kaggle IMDB dataset (if enabled and highly correlated)
+        2. Kaggle retrieval (handled by KaggleRetrievalAdapter in agent/search aggregator)
         3. Tavily API (only if skip_tavily=False OR valid override_reason provided)
         4. Web search fallback (if above methods fail)
         
-        IMPORTANT: Low Kaggle correlation does NOT override skip_tavily flag.
-        Tavily can only be used when skip_tavily=True if an explicit override_reason is provided:
-        - disambiguation_needed
-        - structured_lookup_empty (no usable Kaggle/structured results)
-        - tier_a_missing (fact-check/info requires Tier A but no Tier A evidence found)
+        IMPORTANT: Kaggle is now handled by KaggleRetrievalAdapter (called separately).
+        This method only handles Tavily and web search.
         
         Args:
             query: Search query
             max_results: Maximum number of results to return
             skip_tavily: Tool plan suggestion to skip Tavily
             override_reason: Optional explicit reason for overriding skip_tavily (must be one of TavilyOverrideReason values)
+            kaggle_query_string: Deprecated (unused - Kaggle handled by adapter)
+            entities_typed: Deprecated (unused - Kaggle handled by adapter)
+            intent: Deprecated (unused - Kaggle handled by adapter)
             
         Returns:
             (results: List[Dict], decision: SearchDecision) where decision contains:
@@ -229,58 +165,10 @@ class SearchEngine:
         results = []
         decision = SearchDecision()
         
-        # Step 1: Derive Kaggle query string if not provided
-        if kaggle_query_string is None:
-            kaggle_query_string = self._derive_kaggle_query_string(query, entities_typed, intent)
+        # Note: Kaggle retrieval is now handled by KaggleRetrievalAdapter (called from agent/search aggregator)
+        # This method only handles Tavily and web search
         
-        # Step 2: Try Kaggle dataset first if enabled
-        kaggle_has_results = False
-        max_correlation = 0.0
-        kaggle_stage_a_candidates = 0
-        if self.enable_kaggle and self.kaggle_searcher:
-            try:
-                # Run Kaggle search in thread pool to avoid blocking event loop
-                import asyncio
-                loop = asyncio.get_event_loop()
-                is_highly_correlated, kaggle_results, max_correlation = await loop.run_in_executor(
-                    None,
-                    self.kaggle_searcher.is_highly_correlated,
-                    kaggle_query_string,
-                    max_results
-                )
-                
-                # Get stage_a_candidates count (from search method, but we need to get it separately)
-                # For now, use length of results as approximation
-                kaggle_stage_a_candidates = len(kaggle_results) if kaggle_results else 0
-                
-                # Store kaggle metadata in decision for later retrieval
-                decision.kaggle_query_string = kaggle_query_string
-                decision.kaggle_stage_a_candidates = kaggle_stage_a_candidates
-                decision.kaggle_max_score = max_correlation
-                decision.kaggle_threshold = self.kaggle_searcher.correlation_threshold
-                
-                # Log structured metadata
-                logger.info(
-                    f"Kaggle search: kaggle_query_string='{kaggle_query_string}', "
-                    f"kaggle_stage_a_candidates={kaggle_stage_a_candidates}, "
-                    f"kaggle_max_score={max_correlation:.3f}"
-                )
-                
-                if is_highly_correlated and kaggle_results:
-                    logger.info(f"Using Kaggle dataset results (correlation: {max_correlation:.3f})")
-                    results.extend(kaggle_results)
-                    kaggle_has_results = True
-                    # If we have highly correlated results, skip Tavily API call
-                    decision.tavily_used = False
-                    decision.override_used = False
-                    decision.override_reason = None
-                    return (results[:max_results], decision)
-                else:
-                    logger.info(f"Kaggle results not highly correlated ({max_correlation:.3f}) or empty")
-            except Exception as e:
-                logger.warning(f"Kaggle search failed: {e}")
-        
-        # Step 2: Determine if Tavily should be used
+        # Step 1: Determine if Tavily should be used
         # Only allow Tavily if skip_tavily=False OR a valid override_reason is provided
         should_use_tavily = False
         if not skip_tavily:
@@ -589,18 +477,14 @@ class MovieDataAggregator:
         else:
             queries = [query]
         
-        # Derive Kaggle query string for simple fact intents
-        kaggle_query_string = None
-        if intent and entities_typed:
-            kaggle_query_string = self.search_engine._derive_kaggle_query_string(query, entities_typed, intent)
+        # Note: Kaggle retrieval is now handled by KaggleRetrievalAdapter (called from agent)
+        # SearchEngine.search() no longer handles Kaggle
         
         # Run searches in parallel
         tasks = []
         for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
             tasks.append(self.search_engine.search(
-                q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason,
-                kaggle_query_string=kaggle_query_string if q == queries[0] else None,  # Only for first query
-                entities_typed=entities_typed, intent=intent
+                q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason
             ))
         
         if include_recent_news and not skip_tavily:
@@ -616,10 +500,7 @@ class MovieDataAggregator:
         fallback_providers = set()
         override_used_any = False
         override_reasons = set()
-        kaggle_query_string_final = None
-        kaggle_stage_a_candidates_final = 0
-        kaggle_max_score_final = 0.0
-        kaggle_threshold_final = 0.0
+        # Note: Kaggle-specific metadata removed - Kaggle handled by KaggleRetrievalAdapter
         
         for result_tuple in results_tuples:
             if isinstance(result_tuple, Exception):
@@ -640,12 +521,7 @@ class MovieDataAggregator:
                         override_used_any = True
                     if decision.override_reason:
                         override_reasons.add(decision.override_reason)
-                    # Extract kaggle metadata from first search decision that has it
-                    if decision.kaggle_query_string and kaggle_query_string_final is None:
-                        kaggle_query_string_final = decision.kaggle_query_string
-                        kaggle_stage_a_candidates_final = decision.kaggle_stage_a_candidates
-                        kaggle_max_score_final = decision.kaggle_max_score
-                        kaggle_threshold_final = decision.kaggle_threshold
+                    # Note: Kaggle metadata extraction removed - Kaggle handled by KaggleRetrievalAdapter
                 elif isinstance(decision, dict):
                     # Backward compatibility: handle old dict format
                     raw_results.extend(results)
@@ -711,10 +587,7 @@ class MovieDataAggregator:
             "fallback_used": fallback_used_any,
             "fallback_provider": fallback_provider_final,
             "override_used": override_used_any,
-            "override_reason": override_reason_final,
-            "kaggle_query_string": kaggle_query_string_final,
-            "kaggle_stage_a_candidates": kaggle_stage_a_candidates_final,
-            "kaggle_max_score": kaggle_max_score_final,
-            "kaggle_threshold": kaggle_threshold_final
+            "override_reason": override_reason_final
+            # Note: Kaggle-specific fields removed - Kaggle handled by KaggleRetrievalAdapter
         }
 

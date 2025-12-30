@@ -199,31 +199,19 @@ class CineMind:
         # Only create RequestPlan if cache miss (this will call OpenAI)
         if not cache_hit:
             # Step 1: Create RequestPlan (single source of truth for routing)
-            # This will call OpenAI for classification and intent extraction
-            if not request_type:
-                try:
-                    request_plan = await self.planner.plan_request(user_query, self.client)
-                    request_type = request_plan.request_type
-                except Exception as e:
-                    logger.warning(f"[{request_id}] Planning failed: {e}, defaulting to 'info'")
-                    request_type = "info"
-                    # Create minimal plan as fallback
-                    request_plan = RequestPlan(
-                        intent="general_info",
-                        request_type="info",
-                        original_query=user_query
-                    )
-            else:
-                # If request_type provided, still create plan for consistency
-                try:
-                    request_plan = await self.planner.plan_request(user_query, self.client)
-                except Exception as e:
-                    logger.warning(f"[{request_id}] Planning failed: {e}, using provided type")
-                    request_plan = RequestPlan(
-                        intent="general_info",
-                        request_type=request_type,
-                        original_query=user_query
-                    )
+            # Router will automatically infer request_type if not provided (offline, no LLM)
+            try:
+                request_plan = await self.planner.plan_request(user_query, self.client, request_type=request_type)
+                request_type = request_plan.request_type
+            except Exception as e:
+                logger.warning(f"[{request_id}] Planning failed: {e}, defaulting to 'info'")
+                request_type = "info"
+                # Create minimal plan as fallback
+                request_plan = RequestPlan(
+                    intent="general_info",
+                    request_type="info",
+                    original_query=user_query
+                )
         
         # Log classification metadata (from plan)
         if request_plan and self.observability:
@@ -377,12 +365,57 @@ class CineMind:
                 )
                 logger.info(f"[{request_id}] Tool plan: Tavily={tool_plan.use_tavily}, Reason: {tool_plan.freshness_reason or tool_plan.skip_reason}")
             
+            # Step 0.5: Try Kaggle retrieval (works for both live and offline modes)
+            # This runs before normal search to potentially use Kaggle datasets
+            # All Kaggle logic (relevance gating, thresholds, timeouts) is inside the adapter
+            kaggle_search_results = []
+            if structured_intent:
+                # Try Kaggle retrieval adapter (configurable, with timeout)
+                from .kaggle_retrieval_adapter import get_kaggle_adapter
+                # Get Kaggle adapter (can be enabled/disabled via environment or config)
+                kaggle_enabled = os.getenv("CINEMIND_KAGGLE_ENABLED", "true").lower() == "true"
+                kaggle_timeout = float(os.getenv("CINEMIND_KAGGLE_TIMEOUT", "5.0"))
+                
+                if kaggle_enabled:
+                    try:
+                        kaggle_adapter = get_kaggle_adapter(
+                            enabled=kaggle_enabled,
+                            timeout_seconds=kaggle_timeout
+                        )
+                        
+                        kaggle_result = await kaggle_adapter.retrieve_evidence(
+                            prompt=user_query,
+                            intent=structured_intent.intent,
+                            entities=structured_intent.entities,
+                            max_results=5
+                        )
+                        
+                        if kaggle_result.success and kaggle_result.evidence_items:
+                            logger.info(f"[{request_id}] Kaggle retrieval successful: {len(kaggle_result.evidence_items)} items")
+                            # Convert to evidence bundle format (normalized for EvidenceFormatter)
+                            kaggle_evidence_bundle = kaggle_adapter.convert_to_evidence_bundle(kaggle_result)
+                            if kaggle_evidence_bundle:
+                                kaggle_search_results = kaggle_evidence_bundle.get("search_results", [])
+                                logger.info(f"[{request_id}] Kaggle evidence retrieved: {len(kaggle_search_results)} results (will merge with web search if applicable)")
+                        else:
+                            logger.debug(f"[{request_id}] Kaggle retrieval: {kaggle_result.error_message or 'no relevant results'}, continuing with web search")
+                    except Exception as e:
+                        logger.warning(f"[{request_id}] Kaggle retrieval failed: {e}, continuing with web search")
+            
             # Perform real-time search if requested AND tool plan allows it
+            # Kaggle results will be merged with web search results (not replace them)
             search_results = []
             source_summary = {}
             verified_facts = []
+            
+            # Start with Kaggle results (if any)
+            if kaggle_search_results:
+                search_results.extend(kaggle_search_results)
+                source_summary["kaggle"] = len(kaggle_search_results)
+            
             should_skip_tavily = False  # Initialize outside if block to avoid UnboundLocalError
             
+            # Perform live search (results will be merged with Kaggle results)
             if use_live_data:
                 # Check if we should skip Tavily based on tool plan
                 skip_reason = ""
@@ -415,9 +448,8 @@ class CineMind:
                     
                     # Search pipeline order (after cache miss):
                     # 1. Cache was checked first (above) - if nothing correlating, proceed here
-                    # 2. Check Kaggle dataset (local lookup, free and fast)
+                    # 2. Kaggle retrieval (handled by KaggleRetrievalAdapter above - already completed)
                     # 3. Tavily API (only if skip_tavily=False OR valid override_reason provided)
-                    #    NOTE: Low Kaggle correlation does NOT override skip_tavily flag
                     # Get typed entities from structured_intent
                     entities_typed = structured_intent.entities if structured_intent else None
                     
@@ -435,7 +467,7 @@ class CineMind:
                                 entities_typed=entities_typed
                             )
                     else:
-                        logger.info(f"[{request_id}] Performing search (Kaggle first, Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
+                        logger.info(f"[{request_id}] Performing search (Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
                         movie_info = await self.aggregator.get_movie_info(
                             user_query,
                             include_recent_news=not should_skip_tavily,
@@ -448,8 +480,21 @@ class CineMind:
                             entities_typed=entities_typed
                         )
                     
-                    search_results = movie_info.get("results", [])
-                    source_summary = movie_info.get("source_summary", {})
+                    web_search_results = movie_info.get("results", [])
+                    web_source_summary = movie_info.get("source_summary", {})
+                    
+                    # Merge Kaggle results with web search results
+                    # EvidenceFormatter will handle deduplication later
+                    if kaggle_search_results:
+                        # Add web search results (EvidenceFormatter will dedupe by url/title/year)
+                        search_results.extend(web_search_results)
+                        source_summary.update(web_source_summary)
+                        logger.info(f"[{request_id}] Merged Kaggle ({len(kaggle_search_results)}) + web ({len(web_search_results)}) = {len(search_results)} total results")
+                    else:
+                        # No Kaggle results, just use web search
+                        search_results = web_search_results
+                        source_summary = web_source_summary
+                    
                     search_time_ms = (time.time() - search_start) * 1000
                     
                     # Check for additional override reasons after initial search
@@ -537,6 +582,8 @@ class CineMind:
                         if not search_results or (candidates_retrieved > 0 and candidates_used == 0):
                             final_override_reason = TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value
                             logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (no usable evidence: {candidates_retrieved} candidates retrieved, {candidates_used} used)")
+                            # Preserve Kaggle results before retry
+                            kaggle_results_preserved = [r for r in search_results if r.get("source") == "kaggle_imdb"]
                             # Retry with override
                             # Get typed entities from structured_intent
                             entities_typed_for_search = structured_intent.entities if structured_intent else None
@@ -551,12 +598,18 @@ class CineMind:
                                 request_plan=request_plan,
                                 entities_typed=entities_typed_for_search
                             )
-                            search_results = movie_info.get("results", [])
+                            web_search_results_retry = movie_info.get("results", [])
+                            # Merge preserved Kaggle results with retry web search results
+                            search_results = kaggle_results_preserved + web_search_results_retry
                             source_summary = movie_info.get("source_summary", {})
+                            if kaggle_results_preserved:
+                                source_summary["kaggle"] = len(kaggle_results_preserved)
                         # Check for tier_a_missing (require_tier_a=True but no Tier A sources found)
                         elif source_summary.get("missing_required_tier", False):
                             final_override_reason = TavilyOverrideReason.TIER_A_MISSING.value
                             logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (require_tier_a=True but no Tier A sources found)")
+                            # Preserve Kaggle results before retry
+                            kaggle_results_preserved = [r for r in search_results if r.get("source") == "kaggle_imdb"]
                             # Retry with override
                             # Get typed entities from structured_intent
                             entities_typed_for_search = structured_intent.entities if structured_intent else None
@@ -571,8 +624,12 @@ class CineMind:
                                 request_plan=request_plan,
                                 entities_typed=entities_typed_for_search
                             )
-                            search_results = movie_info.get("results", [])
+                            web_search_results_retry = movie_info.get("results", [])
+                            # Merge preserved Kaggle results with retry web search results
+                            search_results = kaggle_results_preserved + web_search_results_retry
                             source_summary = movie_info.get("source_summary", {})
+                            if kaggle_results_preserved:
+                                source_summary["kaggle"] = len(kaggle_results_preserved)
                     
                     # Update tool plan with actual search usage info (exactly once per request)
                     if tool_plan:
@@ -823,10 +880,16 @@ class CineMind:
             # Initialize relevant_results if not already defined (for cache hit case)
             if 'relevant_results' not in locals():
                 relevant_results = []
+            
+            # Build evidence bundle from all sources (Kaggle + web search)
+            # EvidenceFormatter will handle deduplication and formatting
+            # Both live and offline modes use the same methodology: merge all results into EvidenceBundle
             evidence_bundle = EvidenceBundle(
-                search_results=relevant_results if use_live_data and relevant_results else [],
-                verified_facts=verified_facts if use_live_data and verified_facts else None
+                search_results=search_results if search_results else [],
+                verified_facts=verified_facts if verified_facts else None
             )
+            
+            logger.info(f"[{request_id}] Evidence bundle: {len(evidence_bundle.search_results)} total results (will be deduplicated and formatted by EvidenceFormatter)")
             
             messages, prompt_artifacts = self.prompt_builder.build_messages(
                 request_plan=request_plan,
@@ -1356,13 +1419,6 @@ class CineMind:
                         match_reason = f"person_match:{person}"
                         break
             
-            # For Kaggle results, also check correlation score (if high, likely relevant)
-            if not is_relevant and source == "kaggle_imdb":
-                correlation = result.get("correlation", 0.0)
-                if correlation > 0.7:  # High correlation threshold
-                    is_relevant = True
-                    match_reason = f"high_correlation:{correlation:.2f}"
-            
             # Year matching for award queries (if year mentioned and matches)
             if not is_relevant and mentioned_year and result_year:
                 if abs(result_year - mentioned_year) <= 1:  # Allow ±1 year for award queries
@@ -1434,24 +1490,7 @@ class CineMind:
         if structured_intent and hasattr(structured_intent, 'mentioned_year'):
             mentioned_year = structured_intent.mentioned_year
         
-        # Extract kaggle_query_string (derive if not in movie_info)
-        kaggle_query_string = movie_info.get("kaggle_query_string")
-        if not kaggle_query_string and structured_intent and entities_typed:
-            kaggle_query_string = self.search_engine._derive_kaggle_query_string(
-                "",  # query not needed if we have entities
-                entities_typed,
-                intent or (structured_intent.intent if structured_intent else None)
-            )
-        
-        # Extract Kaggle outcome
-        kaggle_stage_a_candidates = movie_info.get("kaggle_stage_a_candidates", 0)
-        kaggle_max_score = movie_info.get("kaggle_max_score", 0.0)
-        kaggle_threshold = movie_info.get("kaggle_threshold")
-        if kaggle_threshold is None:
-            from .config import KAGGLE_CORRELATION_THRESHOLD
-            kaggle_threshold = KAGGLE_CORRELATION_THRESHOLD
-        
-        # Count Kaggle results used
+        # Count Kaggle results used (just for tracking - no Kaggle-specific logic)
         kaggle_results_used = sum(1 for r in search_results if r.get("source") == "kaggle_imdb")
         
         # Extract tool plan info
@@ -1499,13 +1538,7 @@ class CineMind:
             "intent": intent,
             "entities_typed": entities_typed,
             "mentioned_year": mentioned_year,
-            "kaggle_query_string": kaggle_query_string,
-            "kaggle_outcome": {
-                "stage_a_candidates": kaggle_stage_a_candidates,
-                "max_score": kaggle_max_score,
-                "threshold": kaggle_threshold,
-                "used_results_count": kaggle_results_used
-            },
+            "kaggle_results_used": kaggle_results_used,  # Simple count - no Kaggle-specific logic
             "tool_plan": {
                 "skip_tavily": skip_tavily,
                 "need_freshness": need_freshness,
@@ -1533,10 +1566,10 @@ class CineMind:
         """
         Log compact routing decision summary.
         
-        Format: cache_hit, kaggle_max_score, tavily_used, override_reason, tiers_used
+        Format: cache_hit, kaggle_results_used, tavily_used, override_reason, tiers_used
         """
         cache_hit = routing_decision.get("tool_usage", {}).get("cache_hit", False)
-        kaggle_max_score = routing_decision.get("kaggle_outcome", {}).get("max_score", 0.0)
+        kaggle_results_used = routing_decision.get("kaggle_results_used", 0)
         tavily_used = routing_decision.get("tool_usage", {}).get("tavily_used", False)
         override_reason = routing_decision.get("override", {}).get("override_reason")
         
@@ -1552,7 +1585,7 @@ class CineMind:
         # Build summary
         summary_parts = [
             f"cache_hit={cache_hit}",
-            f"kaggle_max_score={kaggle_max_score:.3f}",
+            f"kaggle_results={kaggle_results_used}",
             f"tavily_used={tavily_used}",
             f"override_reason={override_reason or 'none'}",
             f"tiers_used={tiers_used}"

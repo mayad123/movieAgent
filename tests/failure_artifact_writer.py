@@ -78,7 +78,8 @@ def write_failure_artifact(
     failures: List[str],
     timing_ms: Optional[float] = None,
     artifacts_dir: Optional[Path] = None,
-    template: Optional[Any] = None  # ResponseTemplate for building repair instruction
+    template: Optional[Any] = None,  # ResponseTemplate for building repair instruction
+    kaggle_outcome: Optional[Dict[str, Any]] = None  # Kaggle behavior outcome
 ) -> Optional[Path]:
     """
     Write a failure artifact JSON file for a failed scenario test.
@@ -176,6 +177,44 @@ def write_failure_artifact(
                 # If we can't build repair instruction, just leave it out
                 pass
     
+    # Extract Kaggle metadata if available
+    kaggle_metadata = None
+    if kaggle_outcome:
+        # Count Kaggle items before and after formatter
+        kaggle_items_before = kaggle_outcome.get("evidence_count", 0)
+        # Count Kaggle items in formatted evidence (after formatter)
+        kaggle_items_after = 0
+        if formatted_evidence and hasattr(formatted_evidence, 'items'):
+            kaggle_items_after = sum(
+                1 for item in formatted_evidence.items 
+                if hasattr(item, 'source_label') and 'imdb' in item.source_label.lower()
+            )
+        
+        # Determine reason for fallback if Kaggle was attempted but not used
+        fallback_reason = None
+        if kaggle_outcome.get("attempted") and not kaggle_outcome.get("evidence_used"):
+            # Check warnings for reason
+            warnings = kaggle_outcome.get("warnings", [])
+            if any("not relevant" in w.lower() for w in warnings):
+                fallback_reason = "not_relevant"
+            elif any("threshold" in w.lower() for w in warnings):
+                fallback_reason = "below_threshold"
+            elif any("timeout" in w.lower() for w in warnings):
+                fallback_reason = "timeout"
+            elif any("error" in w.lower() or "failed" in w.lower() for w in warnings):
+                fallback_reason = "error"
+            else:
+                fallback_reason = "no_evidence"
+        
+        kaggle_metadata = {
+            "attempted": kaggle_outcome.get("attempted", False),
+            "used": kaggle_outcome.get("evidence_used", False),
+            "item_count_before_formatter": kaggle_items_before,
+            "item_count_after_formatter": kaggle_items_after,
+            "fallback_reason": fallback_reason,
+            "warnings": kaggle_outcome.get("warnings", [])
+        }
+    
     # Build artifact JSON
     artifact = {
         "scenario": {
@@ -188,6 +227,7 @@ def write_failure_artifact(
         "messages": [dict(msg) if not isinstance(msg, dict) else msg for msg in messages] if messages else [],
         "formatted_evidence": evidence_dict,
         "validator": validator_dict,
+        "kaggle": kaggle_metadata,  # Kaggle provenance and adapter decision metadata
         "failures": failures,
         "timing_ms": timing_ms,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")

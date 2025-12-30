@@ -5,9 +5,17 @@ Tests routing, prompt construction, evidence formatting, and validator behavior
 using YAML/JSON fixtures without calling external APIs.
 """
 import os
+import sys
 import pytest
 import time
-from typing import Dict, Any, List
+from pathlib import Path
+from typing import Dict, Any, List, Tuple
+
+# Add src to path so we can import cinemind
+project_root = Path(__file__).parent.parent
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
 from cinemind.request_plan import RequestPlan
 from cinemind.prompting import PromptBuilder, EvidenceBundle, get_template
@@ -237,6 +245,88 @@ class ScenarioTester:
                     )
         
         return failures
+    
+    def test_kaggle_behavior(
+        self,
+        evidence_bundle: EvidenceBundle,
+        expected: Dict[str, Any]
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Test Kaggle behavior and return (failures, kaggle_outcome).
+        
+        Args:
+            evidence_bundle: EvidenceBundle to check for Kaggle evidence
+            expected: Expected checks dictionary
+            
+        Returns:
+            Tuple of (failures: List[str], kaggle_outcome: Dict[str, Any])
+            kaggle_outcome contains:
+            - attempted: bool (whether Kaggle was attempted - inferred from evidence)
+            - evidence_used: bool (whether Kaggle evidence is present)
+            - evidence_count: int (number of Kaggle evidence items)
+            - warnings: List[str] (warnings about Kaggle behavior)
+        """
+        failures = []
+        kaggle_checks = expected.get("kaggle_checks", {})
+        
+        # Count Kaggle evidence items
+        kaggle_evidence_items = [
+            r for r in evidence_bundle.search_results 
+            if r.get("source") == "kaggle_imdb"
+        ]
+        kaggle_evidence_count = len(kaggle_evidence_items)
+        kaggle_evidence_used = kaggle_evidence_count > 0
+        
+        # Infer if Kaggle was attempted (if we have Kaggle evidence, it was attempted)
+        # Note: In offline tests, we can't know if Kaggle was attempted but returned nothing
+        # So we infer from presence of evidence
+        kaggle_attempted = kaggle_evidence_used
+        
+        # Build outcome dictionary
+        kaggle_outcome = {
+            "attempted": kaggle_attempted,
+            "evidence_used": kaggle_evidence_used,
+            "evidence_count": kaggle_evidence_count,
+            "warnings": []
+        }
+        
+        # Check expectations if kaggle_checks are specified
+        if kaggle_checks:
+            # Check if Kaggle was expected to be attempted
+            expected_attempted = kaggle_checks.get("expected_attempted")
+            if expected_attempted is not None:
+                if expected_attempted and not kaggle_attempted:
+                    failures.append(
+                        "Kaggle was expected to be attempted but no Kaggle evidence found"
+                    )
+                elif not expected_attempted and kaggle_attempted:
+                    failures.append(
+                        "Kaggle was not expected to be attempted but Kaggle evidence found"
+                    )
+            
+            # Check if Kaggle evidence was expected
+            expected_evidence_used = kaggle_checks.get("expected_evidence_used")
+            if expected_evidence_used is not None:
+                if expected_evidence_used and not kaggle_evidence_used:
+                    failures.append(
+                        "Kaggle evidence was expected but not found in evidence bundle"
+                    )
+                elif not expected_evidence_used and kaggle_evidence_used:
+                    # This is a warning, not a failure (unless explicitly required)
+                    kaggle_outcome["warnings"].append(
+                        "Kaggle evidence was not expected but found in evidence bundle"
+                    )
+            
+            # Check minimum evidence count
+            min_evidence_count = kaggle_checks.get("min_evidence_count")
+            if min_evidence_count is not None:
+                if kaggle_evidence_count < min_evidence_count:
+                    failures.append(
+                        f"Expected at least {min_evidence_count} Kaggle evidence items, "
+                        f"got {kaggle_evidence_count}"
+                    )
+        
+        return failures, kaggle_outcome
 
 
 # Load all scenarios once at module import time
@@ -367,6 +457,7 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
     
     all_failures = []
     violation_types = []
+    kaggle_outcome = None  # Will be set by test_kaggle_behavior
     
     # Build messages for artifact (do this early so we have them even if tests fail)
     messages = []
@@ -395,6 +486,12 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
         evidence_bundle, expected
     )
     all_failures.extend(evidence_failures)
+    
+    # Test Kaggle behavior
+    kaggle_failures, kaggle_outcome = scenario_tester.test_kaggle_behavior(
+        evidence_bundle, expected
+    )
+    all_failures.extend(kaggle_failures)
     
     # Collect evidence statistics using structured metadata
     evidence_format_result = scenario_tester.evidence_formatter.format(evidence_bundle)
@@ -453,11 +550,32 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
                     violations=validation_result.violations,
                     offending_text=sample_output,
                     fixed_text=validation_result.corrected_text,
-                    repair_instruction=repair_instruction
+                    repair_instruction=repair_instruction,
+                    kaggle_outcome=kaggle_outcome
                 )
             except Exception as e:
                 # Don't fail the test because violation artifact writing failed
                 print(f"Warning: Failed to write violation artifact for '{scenario_name}': {e}")
+    
+    # Write Kaggle warning artifact if there are Kaggle warnings (similar to violations)
+    if kaggle_outcome and kaggle_outcome.get("warnings"):
+        try:
+            # Write Kaggle warnings as a violation-like artifact
+            # This makes Kaggle behavior visible without breaking tests
+            kaggle_warnings = kaggle_outcome.get("warnings", [])
+            write_violation_artifact(
+                scenario_name=f"{scenario_name}_kaggle",
+                template_id=template_id,
+                user_query=user_query,
+                violations=kaggle_warnings,
+                offending_text="",  # No offending text for Kaggle warnings
+                fixed_text="",
+                repair_instruction=None,
+                kaggle_outcome=kaggle_outcome
+            )
+        except Exception as e:
+            # Don't fail the test because Kaggle artifact writing failed
+            print(f"Warning: Failed to write Kaggle artifact for '{scenario_name}': {e}")
     
     # Apply strictness policy: check if violations should cause failure
     scenario_set = scenario.get("scenario_set")
@@ -520,7 +638,8 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
                 validator_result=validation_result,
                 failures=all_failures,
                 timing_ms=duration_ms,
-                template=template_for_artifact
+                template=template_for_artifact,
+                kaggle_outcome=kaggle_outcome
             )
             if artifact_path:
                 # Add artifact path to failure message for easy access

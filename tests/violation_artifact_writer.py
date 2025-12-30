@@ -19,7 +19,8 @@ def write_violation_artifact(
     offending_text: str,
     fixed_text: Optional[str] = None,
     repair_instruction: Optional[str] = None,
-    artifacts_dir: Optional[Path] = None
+    artifacts_dir: Optional[Path] = None,
+    kaggle_outcome: Optional[Dict[str, Any]] = None  # Kaggle behavior outcome
 ) -> Optional[Path]:
     """
     Write a violation artifact JSON file for a scenario with validator violations.
@@ -79,6 +80,33 @@ def write_violation_artifact(
     # Extract unique violation types for summary
     violation_types = list(set(v["type"] for v in structured_violations))
     
+    # Extract Kaggle metadata if available
+    kaggle_metadata = None
+    if kaggle_outcome:
+        # Determine reason for fallback if Kaggle was attempted but not used
+        fallback_reason = None
+        if kaggle_outcome.get("attempted") and not kaggle_outcome.get("evidence_used"):
+            # Check warnings for reason
+            warnings = kaggle_outcome.get("warnings", [])
+            if any("not relevant" in w.lower() for w in warnings):
+                fallback_reason = "not_relevant"
+            elif any("threshold" in w.lower() for w in warnings):
+                fallback_reason = "below_threshold"
+            elif any("timeout" in w.lower() for w in warnings):
+                fallback_reason = "timeout"
+            elif any("error" in w.lower() or "failed" in w.lower() for w in warnings):
+                fallback_reason = "error"
+            else:
+                fallback_reason = "no_evidence"
+        
+        kaggle_metadata = {
+            "attempted": kaggle_outcome.get("attempted", False),
+            "used": kaggle_outcome.get("evidence_used", False),
+            "item_count": kaggle_outcome.get("evidence_count", 0),
+            "fallback_reason": fallback_reason,
+            "warnings": kaggle_outcome.get("warnings", [])
+        }
+    
     # Build artifact JSON
     artifact = {
         "scenario_name": scenario_name,
@@ -90,6 +118,7 @@ def write_violation_artifact(
         "offending_text": offending_text,
         "fixed_text": fixed_text,
         "repair_instruction": repair_instruction,
+        "kaggle": kaggle_metadata,  # Kaggle provenance and adapter decision metadata
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
     }
     

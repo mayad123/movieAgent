@@ -18,12 +18,14 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")  # Can be: gpt-4o, gpt
 
 # Search Configuration
 SEARCH_PROVIDERS = [
-    "kaggle",  # First: Kaggle IMDB dataset (if highly correlated)
-    "tavily",  # Secondary: Primary real-time search
+    "tavily",  # Primary real-time search
     "web"      # Fallback: Web search
 ]
+# Note: Kaggle is handled by KaggleRetrievalAdapter (not listed here as it's not a search provider)
 
 # Kaggle Dataset Configuration
+# NOTE: These constants are ONLY used by KaggleRetrievalAdapter.
+# No other part of the system should reference these directly.
 KAGGLE_CORRELATION_THRESHOLD = float(os.getenv("KAGGLE_CORRELATION_THRESHOLD", "0.7"))  # 0.0-1.0
 KAGGLE_DATASET_PATH = os.getenv("KAGGLE_DATASET_PATH", "")  # Optional: specific file path
 ENABLE_KAGGLE_SEARCH = os.getenv("ENABLE_KAGGLE_SEARCH", "true").lower() == "true"
