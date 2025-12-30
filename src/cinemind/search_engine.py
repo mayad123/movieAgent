@@ -34,6 +34,10 @@ class SearchDecision:
     fallback_provider: Optional[str] = None
     override_used: bool = False
     override_reason: Optional[str] = None
+    kaggle_query_string: Optional[str] = None
+    kaggle_stage_a_candidates: int = 0
+    kaggle_max_score: float = 0.0
+    kaggle_threshold: float = 0.0
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -42,7 +46,11 @@ class SearchDecision:
             "fallback_used": self.fallback_used,
             "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
-            "override_reason": self.override_reason
+            "override_reason": self.override_reason,
+            "kaggle_query_string": self.kaggle_query_string,
+            "kaggle_stage_a_candidates": self.kaggle_stage_a_candidates,
+            "kaggle_max_score": self.kaggle_max_score,
+            "kaggle_threshold": self.kaggle_threshold
         }
 
 
@@ -244,6 +252,12 @@ class SearchEngine:
                 # Get stage_a_candidates count (from search method, but we need to get it separately)
                 # For now, use length of results as approximation
                 kaggle_stage_a_candidates = len(kaggle_results) if kaggle_results else 0
+                
+                # Store kaggle metadata in decision for later retrieval
+                decision.kaggle_query_string = kaggle_query_string
+                decision.kaggle_stage_a_candidates = kaggle_stage_a_candidates
+                decision.kaggle_max_score = max_correlation
+                decision.kaggle_threshold = self.kaggle_searcher.correlation_threshold
                 
                 # Log structured metadata
                 logger.info(
@@ -602,6 +616,10 @@ class MovieDataAggregator:
         fallback_providers = set()
         override_used_any = False
         override_reasons = set()
+        kaggle_query_string_final = None
+        kaggle_stage_a_candidates_final = 0
+        kaggle_max_score_final = 0.0
+        kaggle_threshold_final = 0.0
         
         for result_tuple in results_tuples:
             if isinstance(result_tuple, Exception):
@@ -622,6 +640,12 @@ class MovieDataAggregator:
                         override_used_any = True
                     if decision.override_reason:
                         override_reasons.add(decision.override_reason)
+                    # Extract kaggle metadata from first search decision that has it
+                    if decision.kaggle_query_string and kaggle_query_string_final is None:
+                        kaggle_query_string_final = decision.kaggle_query_string
+                        kaggle_stage_a_candidates_final = decision.kaggle_stage_a_candidates
+                        kaggle_max_score_final = decision.kaggle_max_score
+                        kaggle_threshold_final = decision.kaggle_threshold
                 elif isinstance(decision, dict):
                     # Backward compatibility: handle old dict format
                     raw_results.extend(results)
@@ -687,6 +711,10 @@ class MovieDataAggregator:
             "fallback_used": fallback_used_any,
             "fallback_provider": fallback_provider_final,
             "override_used": override_used_any,
-            "override_reason": override_reason_final
+            "override_reason": override_reason_final,
+            "kaggle_query_string": kaggle_query_string_final,
+            "kaggle_stage_a_candidates": kaggle_stage_a_candidates_final,
+            "kaggle_max_score": kaggle_max_score_final,
+            "kaggle_threshold": kaggle_threshold_final
         }
 

@@ -236,11 +236,11 @@ class RequestTracker:
         self.logger = logger
         self.start_time = time.time()
     
-    def log_metric(self, name: str, value: float, metadata: Dict = None):
+    def log_metric(self, name: str, value: float, metadata: Dict = None, metric_type: str = "gauge"):
         """Log a metric."""
         self.db.save_metric(
             self.request_id,
-            metric_type="gauge",
+            metric_type=metric_type,
             metric_name=name,
             metric_value=value,
             metric_data=metadata

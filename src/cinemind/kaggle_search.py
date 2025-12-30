@@ -296,22 +296,25 @@ class KaggleDatasetSearcher:
             return
         
         # Build indexes
+        # Use positional indices (iloc) instead of label indices (iterrows)
+        # because we use df.iloc[row_idx] later in the search method
         self._normalized_title_index = {}
         self._token_index = {}
         
-        for idx, row in df.iterrows():
+        for pos_idx in range(len(df)):
+            row = df.iloc[pos_idx]
             title = row.get(title_col)
             if pd.notna(title) and title:
                 title_str = str(title)
                 normalized = normalize_title(title_str)
                 if normalized:
-                    self._normalized_title_index[idx] = normalized
+                    self._normalized_title_index[pos_idx] = normalized
                     # Build token index for fast token overlap matching
                     tokens = tokenize(title_str)
                     for token in tokens:
                         if token not in self._token_index:
                             self._token_index[token] = set()
-                        self._token_index[token].add(idx)
+                        self._token_index[token].add(pos_idx)
         
         self._title_index_loaded = True
         logger.info(f"Built title index: {len(self._normalized_title_index)} titles, {len(self._token_index)} unique tokens")

@@ -132,9 +132,165 @@ class PromptNormalizer:
     
     def compute_hash(self, normalized_prompt: str, classifier_type: str, 
                     tool_config_version: str) -> str:
-        """Compute hash for exact cache key."""
+        """Compute hash for exact cache key (old format, for backwards compatibility)."""
         key_string = f"{normalized_prompt}|{classifier_type}|{tool_config_version}"
         return hashlib.sha256(key_string.encode()).hexdigest()
+    
+    def _compute_intent_signature_hash(self, intent_signature: Dict[str, Any]) -> str:
+        """
+        Compute hash for exact cache key using intent signature.
+        
+        Args:
+            intent_signature: Dict with keys: request_type, intent, entities_typed, constraints, 
+                            freshness_bucket, tool_config_version, prompt_version
+        
+        Returns:
+            Hex digest of hash
+        """
+        # Serialize dict deterministically (sorted keys, consistent JSON)
+        signature_json = json.dumps(intent_signature, sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(signature_json.encode()).hexdigest()
+    
+    def _build_intent_signature(self, request_plan=None, request_type: str = None, 
+                                intent: str = None, entities_typed: Dict = None,
+                                entities: List[str] = None, 
+                                constraints: Dict = None,
+                                need_freshness: bool = False,
+                                freshness_ttl_hours: float = None,
+                                tool_config_version: str = None,
+                                prompt_version: str = None) -> Dict[str, Any]:
+        """
+        Build deterministic intent signature for cache keying.
+        
+        Args:
+            request_plan: Optional RequestPlan object (preferred if available)
+            request_type: Request type (e.g., "info", "recs")
+            intent: Intent (e.g., "director_info", "cast_info")
+            entities_typed: Typed entities dict {"movies": [...], "people": [...]}
+            entities: Flat list of entities (backwards compatibility)
+            constraints: Constraints dict with order_by, format, min_count
+            need_freshness: Whether freshness is needed
+            freshness_ttl_hours: TTL in hours
+            tool_config_version: Tool config version
+            prompt_version: Prompt version
+        
+        Returns:
+            Dict with intent signature components
+        """
+        # Extract from request_plan if provided
+        if request_plan:
+            if hasattr(request_plan, 'to_dict'):
+                plan_dict = request_plan.to_dict()
+            elif isinstance(request_plan, dict):
+                plan_dict = request_plan
+            else:
+                plan_dict = {}
+            
+            request_type = plan_dict.get('request_type') or request_type
+            intent = plan_dict.get('intent') or intent
+            entities_typed = plan_dict.get('entities_typed') or entities_typed
+            entities = plan_dict.get('entities') or entities
+            need_freshness = plan_dict.get('need_freshness', need_freshness)
+            freshness_ttl_hours = plan_dict.get('freshness_ttl_hours') or freshness_ttl_hours
+            response_format = plan_dict.get('response_format')  # Use as proxy for constraints.format
+        
+        # Normalize entities_typed
+        if entities_typed is None:
+            entities_typed = {"movies": [], "people": []}
+        if not isinstance(entities_typed, dict):
+            entities_typed = {"movies": [], "people": []}
+        if "movies" not in entities_typed:
+            entities_typed["movies"] = []
+        if "people" not in entities_typed:
+            entities_typed["people"] = []
+        
+        # If only flat entities list is provided, try to populate entities_typed
+        if not entities_typed.get("movies") and not entities_typed.get("people") and entities:
+            # Simple heuristic: assume all are movies if we can't determine
+            entities_typed["movies"] = entities.copy()
+            entities_typed["people"] = []
+        
+        # Normalize entity strings (lowercase, strip whitespace, sort for determinism)
+        normalized_movies = sorted([self._normalize_entity_name(e) for e in entities_typed.get("movies", [])])
+        normalized_people = sorted([self._normalize_entity_name(e) for e in entities_typed.get("people", [])])
+        
+        # Extract constraints
+        order_by = None
+        format_constraint = None
+        min_count = None
+        if constraints:
+            order_by = constraints.get("order_by")
+            format_constraint = constraints.get("format")
+            min_count = constraints.get("min_count")
+        elif request_plan:
+            # Use response_format from request_plan as proxy for format constraint
+            if hasattr(request_plan, 'to_dict'):
+                plan_dict = request_plan.to_dict()
+                response_format_val = plan_dict.get('response_format')
+            elif isinstance(request_plan, dict):
+                response_format_val = request_plan.get('response_format')
+            else:
+                response_format_val = None
+            
+            if response_format_val:
+                if isinstance(response_format_val, str):
+                    format_constraint = response_format_val
+                elif hasattr(response_format_val, 'value'):
+                    format_constraint = response_format_val.value
+                else:
+                    format_constraint = str(response_format_val)
+        
+        # Compute freshness bucket
+        freshness_bucket = self._compute_freshness_bucket(need_freshness, freshness_ttl_hours)
+        
+        # Build signature dict
+        signature = {
+            "request_type": request_type or "info",
+            "intent": intent or "general_info",
+            "entities_typed": {
+                "movies": normalized_movies,
+                "people": normalized_people
+            },
+            "constraints": {
+                "order_by": order_by,
+                "format": format_constraint,
+                "min_count": min_count
+            },
+            "freshness_bucket": freshness_bucket,
+            "tool_config_version": tool_config_version or "",
+            "prompt_version": prompt_version or ""
+        }
+        
+        return signature
+    
+    def _normalize_entity_name(self, entity: str) -> str:
+        """Normalize entity name for cache key (lowercase, strip whitespace)."""
+        if not entity:
+            return ""
+        return entity.lower().strip()
+    
+    def _compute_freshness_bucket(self, need_freshness: bool, freshness_ttl_hours: float = None) -> str:
+        """
+        Compute freshness bucket for cache key.
+        
+        Buckets:
+        - "none": need_freshness=False
+        - "short": need_freshness=True and ttl <= 12 hours
+        - "medium": need_freshness=True and 12 < ttl <= 48 hours
+        - "long": need_freshness=True and ttl > 48 hours
+        """
+        if not need_freshness:
+            return "none"
+        
+        if freshness_ttl_hours is None:
+            return "short"  # Default to short if not specified
+        
+        if freshness_ttl_hours <= 12:
+            return "short"
+        elif freshness_ttl_hours <= 48:
+            return "medium"
+        else:
+            return "long"
 
 
 class SemanticCache:
@@ -333,9 +489,28 @@ class SemanticCache:
     def get(self, prompt: str, classifier_type: str, tool_config_version: str,
            predicted_type: str, entities: List[str] = None,
            need_freshness: bool = False, current_agent_version: str = "",
-           current_prompt_version: str = "") -> Optional[CacheEntry]:
+           current_prompt_version: str = "", request_plan=None,
+           intent: str = None, entities_typed: Dict = None,
+           constraints: Dict = None, freshness_ttl_hours: float = None,
+           debug_cache_keys: bool = False) -> Optional[CacheEntry]:
         """
         Get cached response if available and fresh.
+        
+        Args:
+            prompt: User query
+            classifier_type: Classifier type/version
+            tool_config_version: Tool config version
+            predicted_type: Predicted request type
+            entities: Flat list of entities (backwards compatibility)
+            need_freshness: Whether freshness is needed
+            current_agent_version: Current agent version
+            current_prompt_version: Current prompt version
+            request_plan: Optional RequestPlan object (for intent signature)
+            intent: Optional intent string (for intent signature)
+            entities_typed: Optional typed entities dict (for intent signature)
+            constraints: Optional constraints dict (for intent signature)
+            freshness_ttl_hours: Optional freshness TTL hours (for intent signature)
+            debug_cache_keys: Enable debug logging for cache keys
         
         Returns:
             CacheEntry if found and fresh, None otherwise
@@ -343,10 +518,41 @@ class SemanticCache:
         # Normalize prompt
         normalized = self.normalizer.normalize(prompt)
         
-        # Tier 1: Exact cache lookup
-        prompt_hash = self.normalizer.compute_hash(normalized, classifier_type, tool_config_version)
+        # Tier 1: Exact cache lookup with intent signature (new format)
+        # Build intent signature
+        intent_sig = self.normalizer._build_intent_signature(
+            request_plan=request_plan,
+            request_type=predicted_type,
+            intent=intent,
+            entities_typed=entities_typed,
+            entities=entities,
+            constraints=constraints,
+            need_freshness=need_freshness,
+            freshness_ttl_hours=freshness_ttl_hours,
+            tool_config_version=tool_config_version,
+            prompt_version=current_prompt_version
+        )
         
-        exact_match = self._get_exact_match(prompt_hash)
+        # Compute new-style hash (intent signature based)
+        new_prompt_hash = self.normalizer._compute_intent_signature_hash(intent_sig)
+        
+        # Compute old-style hash (for backwards compatibility)
+        old_prompt_hash = self.normalizer.compute_hash(normalized, classifier_type, tool_config_version)
+        
+        if debug_cache_keys:
+            logger.debug(f"Cache lookup - intent_signature: {json.dumps(intent_sig, indent=2)}")
+            logger.debug(f"Cache lookup - new_key: {new_prompt_hash[:16]}..., old_key: {old_prompt_hash[:16]}...")
+        
+        # Try new key first
+        exact_match = self._get_exact_match(new_prompt_hash)
+        used_old_key = False
+        
+        # If new key miss, try old key (backwards compatibility)
+        if not exact_match and new_prompt_hash != old_prompt_hash:
+            exact_match = self._get_exact_match(old_prompt_hash)
+            used_old_key = True
+            if exact_match and debug_cache_keys:
+                logger.debug(f"Cache hit on old key, will migrate to new key")
         if exact_match:
             # Check version compatibility
             if not self._check_version_compatibility(exact_match, current_agent_version, current_prompt_version, tool_config_version):
@@ -355,12 +561,21 @@ class SemanticCache:
             
             # Check freshness
             if self._is_fresh(exact_match, predicted_type, need_freshness):
-                logger.info(f"Exact cache hit for prompt hash: {prompt_hash[:8]}...")
+                key_used = "old" if used_old_key else "new"
+                logger.info(f"Exact cache hit for prompt hash ({key_used} key): {new_prompt_hash[:8]}...")
                 exact_match.cache_tier = "exact"
                 exact_match.similarity_score = 1.0  # Exact match = 100% similarity
+                
+                # Lazy migration: if we hit on old key, save entry under new key
+                if used_old_key:
+                    try:
+                        self._migrate_cache_entry(exact_match, new_prompt_hash, old_prompt_hash)
+                    except Exception as e:
+                        logger.warning(f"Failed to migrate cache entry to new key: {e}")
+                
                 return exact_match
             else:
-                logger.info(f"Cache entry expired for hash: {prompt_hash[:8]}...")
+                logger.info(f"Cache entry expired for hash: {new_prompt_hash[:8]}...")
                 return None
         
         # Tier 2: Semantic cache lookup
@@ -537,6 +752,63 @@ class SemanticCache:
         except:
             return 0.0
     
+    def _migrate_cache_entry(self, entry: CacheEntry, new_hash: str, old_hash: str):
+        """
+        Migrate cache entry from old key to new key (lazy migration).
+        
+        Args:
+            entry: CacheEntry to migrate
+            new_hash: New hash key (intent signature based)
+            old_hash: Old hash key (prompt-based)
+        """
+        cursor = self.db.conn.cursor()
+        
+        # Delete old entry and insert with new hash
+        # We need to reconstruct the entry data for insert
+        embedding_json = json.dumps(entry.prompt_embedding) if entry.prompt_embedding else None
+        entities_json = json.dumps(entry.entities) if entry.entities else None
+        sources_json = json.dumps(entry.sources) if entry.sources else None
+        structured_facts_json = json.dumps(entry.structured_facts) if entry.structured_facts else None
+        cost_metrics_json = json.dumps(entry.cost_metrics) if entry.cost_metrics else None
+        
+        if self.db.use_postgres:
+            # Delete old entry
+            cursor.execute("DELETE FROM cache_entries WHERE prompt_hash = %s", (old_hash,))
+            # Insert with new hash
+            cursor.execute("""
+                INSERT INTO cache_entries (
+                    prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
+                    predicted_type, entities, response_text, sources, structured_facts,
+                    created_at, expires_at, agent_version, prompt_version,
+                    tool_config_version, cost_metrics, last_verified_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                new_hash, entry.prompt_original, entry.prompt_normalized, embedding_json,
+                entry.predicted_type, entities_json, entry.response_text, sources_json, structured_facts_json,
+                entry.created_at, entry.expires_at, entry.agent_version, entry.prompt_version,
+                entry.tool_config_version, cost_metrics_json, entry.last_verified_at
+            ))
+        else:
+            # Delete old entry
+            cursor.execute("DELETE FROM cache_entries WHERE prompt_hash = ?", (old_hash,))
+            # Insert with new hash
+            cursor.execute("""
+                INSERT INTO cache_entries (
+                    prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
+                    predicted_type, entities, response_text, sources, structured_facts,
+                    created_at, expires_at, agent_version, prompt_version,
+                    tool_config_version, cost_metrics, last_verified_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                new_hash, entry.prompt_original, entry.prompt_normalized, embedding_json,
+                entry.predicted_type, entities_json, entry.response_text, sources_json, structured_facts_json,
+                entry.created_at, entry.expires_at, entry.agent_version, entry.prompt_version,
+                entry.tool_config_version, cost_metrics_json, entry.last_verified_at
+            ))
+        
+        self.db.conn.commit()
+        logger.debug(f"Migrated cache entry from old key {old_hash[:8]}... to new key {new_hash[:8]}...")
+    
     def _get_exact_match(self, prompt_hash: str) -> Optional[CacheEntry]:
         """Get exact cache match by hash."""
         cursor = self.db.conn.cursor()
@@ -690,7 +962,9 @@ class SemanticCache:
            predicted_type: str, entities: List[str], need_freshness: bool,
            classifier_type: str, tool_config_version: str, agent_version: str,
            prompt_version: str, cost_metrics: Dict = None, structured_facts: Dict = None,
-           freshness_reason: Optional[str] = None, freshness_ttl_hours: Optional[float] = None):
+           freshness_reason: Optional[str] = None, freshness_ttl_hours: Optional[float] = None,
+           request_plan=None, intent: str = None, entities_typed: Dict = None,
+           constraints: Dict = None, debug_cache_keys: bool = False):
         """
         Store entry in cache with structured facts.
         
@@ -707,10 +981,37 @@ class SemanticCache:
             prompt_version: Prompt version
             cost_metrics: Cost savings metrics
             structured_facts: Pre-extracted structured facts (optional)
+            freshness_reason: Reason for freshness requirement
+            freshness_ttl_hours: Freshness TTL in hours
+            request_plan: Optional RequestPlan object (for intent signature)
+            intent: Optional intent string (for intent signature)
+            entities_typed: Optional typed entities dict (for intent signature)
+            constraints: Optional constraints dict (for intent signature)
+            debug_cache_keys: Enable debug logging for cache keys
         """
         # Normalize prompt
         normalized = self.normalizer.normalize(prompt)
-        prompt_hash = self.normalizer.compute_hash(normalized, classifier_type, tool_config_version)
+        
+        # Build intent signature and compute new-style hash
+        intent_sig = self.normalizer._build_intent_signature(
+            request_plan=request_plan,
+            request_type=predicted_type,
+            intent=intent,
+            entities_typed=entities_typed,
+            entities=entities,
+            constraints=constraints,
+            need_freshness=need_freshness,
+            freshness_ttl_hours=freshness_ttl_hours,
+            tool_config_version=tool_config_version,
+            prompt_version=prompt_version
+        )
+        
+        # Use intent signature hash as the cache key
+        prompt_hash = self.normalizer._compute_intent_signature_hash(intent_sig)
+        
+        if debug_cache_keys:
+            logger.debug(f"Cache put - intent_signature: {json.dumps(intent_sig, indent=2)}")
+            logger.debug(f"Cache put - key: {prompt_hash[:16]}...")
         
         # Compute embedding
         embedding = self.embedding_provider(normalized)

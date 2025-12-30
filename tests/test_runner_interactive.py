@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from test_cases import TEST_CASES, TEST_SUITES, TestCase
 from evaluator import TestEvaluator
 from cinemind.agent import CineMind
-from cinemind.prompts.versions import PROMPT_VERSIONS, get_prompt_version, list_versions
+from cinemind.prompting.versions import PROMPT_VERSIONS, get_prompt_version, list_versions
 from cinemind import config
 from test_runner import run_test_suite_real_apis
 import time

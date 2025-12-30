@@ -73,7 +73,12 @@ class EvidenceFormatter:
     def _deduplicate(self, search_results: List[Dict]) -> List[Dict]:
         """
         Deduplicate search results by url/title/year.
-        Keeps first occurrence of each unique item.
+        Keeps first occurrence of each unique item, preferring items with content.
+        
+        Deduplication rules:
+        - Items with the same normalized URL are considered duplicates (regardless of title/year)
+        - Items with the same title and year are considered duplicates (regardless of URL)
+        - When duplicates are found, prefer items with content over items without content
         
         Args:
             search_results: List of search result dicts
@@ -81,39 +86,69 @@ class EvidenceFormatter:
         Returns:
             Deduplicated list
         """
-        seen: Set[str] = set()
+        seen_urls: Dict[str, Dict] = {}  # normalized_url -> result (with content preferred)
+        seen_title_year: Dict[str, Dict] = {}  # title|year -> result (with content preferred)
         deduplicated = []
         
         for result in search_results:
-            # Create unique key from url, title, and year
+            # Extract fields
             url = result.get("url", "").strip()
             title = result.get("title", "").strip()
             year = result.get("year") or result.get("release_year")
+            content = result.get("content", "").strip()
+            has_content = bool(content)
             
             # Normalize URL (remove query params, fragments, trailing slashes)
             if url:
                 parsed = urlparse(url)
-                normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/')
+                normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/').lower()
             else:
                 normalized_url = ""
             
-            # Create deduplication key
-            key_parts = []
+            # Check if duplicate by URL
+            is_duplicate = False
             if normalized_url:
-                key_parts.append(normalized_url.lower())
-            if title:
-                key_parts.append(title.lower().strip())
-            if year:
-                key_parts.append(str(year))
+                if normalized_url in seen_urls:
+                    # Prefer item with content
+                    existing = seen_urls[normalized_url]
+                    existing_has_content = bool(existing.get("content", "").strip())
+                    if has_content and not existing_has_content:
+                        # Replace existing with this one (has content)
+                        seen_urls[normalized_url] = result
+                        # Remove old one from deduplicated list if it's there
+                        if existing in deduplicated:
+                            deduplicated.remove(existing)
+                        deduplicated.append(result)
+                    # Otherwise, skip this one (existing is better or equal)
+                    is_duplicate = True
+                else:
+                    seen_urls[normalized_url] = result
             
-            if not key_parts:
-                # Skip items with no identifying information
+            # Check if duplicate by title+year (if not already duplicate by URL)
+            if not is_duplicate and title and year:
+                title_year_key = f"{title.lower().strip()}|{year}"
+                if title_year_key in seen_title_year:
+                    # Prefer item with content
+                    existing = seen_title_year[title_year_key]
+                    existing_has_content = bool(existing.get("content", "").strip())
+                    if has_content and not existing_has_content:
+                        # Replace existing with this one (has content)
+                        seen_title_year[title_year_key] = result
+                        # Remove old one from deduplicated list if it's there
+                        if existing in deduplicated:
+                            deduplicated.remove(existing)
+                        deduplicated.append(result)
+                    # Otherwise, skip this one
+                    is_duplicate = True
+                else:
+                    seen_title_year[title_year_key] = result
+            
+            # Skip items with no identifying information
+            if not normalized_url and not (title and year):
                 continue
             
-            dedup_key = "|".join(key_parts)
-            
-            if dedup_key not in seen:
-                seen.add(dedup_key)
+            # Add if not duplicate
+            if not is_duplicate:
                 deduplicated.append(result)
         
         logger.debug(f"Deduplicated {len(search_results)} -> {len(deduplicated)} evidence items")
