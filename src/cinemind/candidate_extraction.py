@@ -4,10 +4,94 @@ Extracts candidate items from search results before verification.
 """
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+# Common award/category phrases that should not be treated as movie titles
+AWARD_PHRASES = {
+    "best picture", "academy award", "oscar", "golden globe",
+    "best actor", "best actress", "best director", "best screenplay",
+    "best supporting actor", "best supporting actress", "best cinematography",
+    "best original score", "best visual effects", "best editing",
+    "best costume design", "best production design", "best sound",
+    "best foreign language film", "best animated feature", "best documentary",
+    "emmy award", "grammy award", "tony award", "sag award",
+    "palme d'or", "golden bear", "venice film festival", "cannes film festival",
+    "best film", "best movie", "film of the year", "movie of the year"
+}
+
+
+def normalize_title(title: str) -> str:
+    """
+    Normalize movie title for consistent matching.
+    
+    - Unifies apostrophes/quotes (', ', ', ", ")
+    - Strips extra whitespace
+    - Normalizes punctuation variants (em dash, en dash to hyphen)
+    - Preserves meaningful punctuation (colon, hyphen)
+    
+    Args:
+        title: Raw title string
+        
+    Returns:
+        Normalized title string
+    """
+    if not title or not isinstance(title, str):
+        return ""
+    
+    # Strip leading/trailing whitespace
+    normalized = title.strip()
+    
+    # Unify apostrophes and quotes
+    # Replace various apostrophe/quote characters with standard apostrophe
+    normalized = re.sub(r'[''′‛`]', "'", normalized)
+    # Replace various quote characters with standard quotes
+    normalized = re.sub(r'["""„]', '"', normalized)
+    
+    # Normalize dashes (em dash, en dash, figure dash to hyphen)
+    normalized = re.sub(r'[—–−]', '-', normalized)
+    
+    # Normalize middle dots and other separators
+    normalized = re.sub(r'[·•]', '·', normalized)  # Keep middle dot as-is for titles like WALL·E
+    
+    # Collapse multiple spaces to single space
+    normalized = re.sub(r'\s+', ' ', normalized)
+    
+    # Final strip
+    normalized = normalized.strip()
+    
+    return normalized
+
+
+def is_award_phrase(text: str) -> bool:
+    """
+    Check if a text string is likely an award/category phrase, not a movie title.
+    
+    Args:
+        text: Text to check
+        
+    Returns:
+        True if text appears to be an award phrase
+    """
+    text_lower = text.lower().strip()
+    
+    # Check exact matches
+    if text_lower in AWARD_PHRASES:
+        return True
+    
+    # Check if text starts with award phrase
+    for phrase in AWARD_PHRASES:
+        if text_lower.startswith(phrase + " ") or text_lower.startswith(phrase + ":"):
+            return True
+    
+    # Check if text is very short and matches common award patterns
+    if len(text_lower.split()) <= 3:
+        if any(word in text_lower for word in ["best", "award", "oscar", "golden", "emmy"]):
+            return True
+    
+    return False
 
 
 @dataclass
@@ -24,6 +108,89 @@ class CandidateExtractor:
     """
     Extracts candidate items from search results for verification.
     """
+    
+    def _extract_title_year_patterns(self, text: str) -> List[Tuple[str, str, int, int]]:
+        """
+        Extract movie title and year pairs from text using multiple patterns.
+        
+        Patterns supported:
+        - "Title" (Year)
+        - Title (Year)
+        - Title — Year (em dash)
+        - Title, Year (comma)
+        - Titles with numerals and punctuation (Se7en, WALL·E, Spider-Man: Homecoming)
+        
+        Args:
+            text: Text to search for titles
+            
+        Returns:
+            List of tuples: (title, year, start_pos, end_pos)
+        """
+        matches = []
+        
+        # Pattern 1: Quoted title with parentheses year: "Title" (Year)
+        pattern1 = r'"([^"]+)"\s*\((\d{4})\)'
+        for match in re.finditer(pattern1, text):
+            title = match.group(1)
+            year = match.group(2)
+            matches.append((title, year, match.start(), match.end()))
+        
+        # Pattern 2: Title with parentheses year: Title (Year)
+        # Handles titles with numerals, punctuation, colons, hyphens, middle dots
+        # Examples: Se7en, WALL·E, Spider-Man: Homecoming, The Matrix (1999)
+        # Excludes quoted titles (handled by pattern1) - uses negative lookbehind/lookahead
+        pattern2 = r'(?<!")([A-Z][A-Za-z0-9:·\-\'\s]+?)\s*\((\d{4})\)'
+        for match in re.finditer(pattern2, text):
+            title = match.group(1).strip()
+            year = match.group(2)
+            # Skip if it's just a year in parentheses (e.g., "(1999)")
+            if len(title) < 2:
+                continue
+            # Skip if title contains quotes (already handled by pattern1)
+            if '"' in title:
+                continue
+            # Skip if it looks like an award phrase
+            if is_award_phrase(title):
+                continue
+            matches.append((title, year, match.start(), match.end()))
+        
+        # Pattern 3: Title with em dash/en dash: Title — Year or Title – Year
+        # Handles both quoted and unquoted titles
+        pattern3_quoted = r'"([^"]+)"\s*[—–]\s*(\d{4})\b'
+        for match in re.finditer(pattern3_quoted, text):
+            title = match.group(1).strip()
+            year = match.group(2)
+            if len(title) < 2 or is_award_phrase(title):
+                continue
+            matches.append((title, year, match.start(), match.end()))
+        
+        pattern3_unquoted = r'(?<!")([A-Z][A-Za-z0-9:·\-\'\s]+?)\s*[—–]\s*(\d{4})\b'
+        for match in re.finditer(pattern3_unquoted, text):
+            title = match.group(1).strip()
+            year = match.group(2)
+            if len(title) < 2 or is_award_phrase(title):
+                continue
+            # Skip if title contains quotes (already handled by pattern3_quoted)
+            if '"' in title:
+                continue
+            matches.append((title, year, match.start(), match.end()))
+        
+        # Pattern 4: Title with comma: Title, Year
+        pattern4 = r'([A-Z][A-Za-z0-9:·\-\'\"\s]+?),\s*(\d{4})\b'
+        for match in re.finditer(pattern4, text):
+            title = match.group(1).strip()
+            year = match.group(2)
+            if len(title) < 2 or is_award_phrase(title):
+                continue
+            # Additional check: make sure comma isn't part of a list (e.g., "Actor, Director, 1999")
+            # If title is very short and contains common words, skip
+            title_words = title.split()
+            if len(title_words) <= 2 and any(word.lower() in ["actor", "director", "writer", "producer", "star", "stars"] 
+                                            for word in title_words):
+                continue
+            matches.append((title, year, match.start(), match.end()))
+        
+        return matches
     
     def extract_movie_candidates(self, search_results: List[Dict], 
                                  entities: List[str] = None) -> List[Candidate]:
@@ -46,59 +213,53 @@ class CandidateExtractor:
             url = result.get("url", "")
             tier = result.get("tier", "UNKNOWN")
             
-            # Extract movie titles with years
-            # Pattern: "Movie Title (Year)" or "Movie Title" (Year)
-            title_year_pattern = r'"([^"]+)"\s*\((\d{4})\)|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*\((\d{4})\)'
-            matches = re.finditer(title_year_pattern, content)
+            # Extract movie titles with years using expanded patterns
+            title_year_matches = self._extract_title_year_patterns(content)
             
-            for match in matches:
-                # Extract title and year
-                if match.group(1):  # Quoted title
-                    movie_title = match.group(1)
-                    year = match.group(2)
-                else:  # Unquoted title
-                    movie_title = match.group(3)
-                    year = match.group(4)
-                
+            for movie_title, year, start_pos, end_pos in title_year_matches:
                 # Normalize title
-                movie_title = movie_title.strip()
-                if not movie_title:
+                normalized_title = normalize_title(movie_title)
+                if not normalized_title:
                     continue
                 
-                # Create unique key
-                key = f"{movie_title.lower()}_{year}"
+                # Filter out award phrases
+                if is_award_phrase(normalized_title):
+                    continue
+                
+                # Create unique key using normalized title
+                key = f"{normalized_title.lower()}_{year}"
                 if key in seen_titles:
                     continue
                 seen_titles.add(key)
                 
                 # Filter by entities if provided
                 if entities:
-                    title_lower = movie_title.lower()
+                    title_lower = normalized_title.lower()
                     if not any(entity.lower() in title_lower or title_lower in entity.lower() 
                               for entity in entities if len(entity) > 2):
                         continue
                 
                 candidates.append(Candidate(
-                    value=f"{movie_title} ({year})",
+                    value=f"{normalized_title} ({year})",
                     source_url=url,
                     source_tier=tier,
                     confidence=0.7,  # Medium confidence for extraction
-                    context=content[match.start():match.end()+50]  # Context around match
+                    context=content[max(0, start_pos-50):min(len(content), end_pos+50)]  # Context around match
                 ))
             
             # Also extract from result title if it looks like a movie
-            if title and not any(title.lower() in c.value.lower() for c in candidates):
-                # Check if title contains year pattern
-                title_match = re.search(r'(.+?)\s*\((\d{4})\)', title)
-                if title_match:
-                    movie_title = title_match.group(1).strip()
-                    year = title_match.group(2)
+            if title:
+                title_matches = self._extract_title_year_patterns(title)
+                for movie_title, year, start_pos, end_pos in title_matches:
+                    normalized_title = normalize_title(movie_title)
+                    if not normalized_title or is_award_phrase(normalized_title):
+                        continue
                     
-                    key = f"{movie_title.lower()}_{year}"
+                    key = f"{normalized_title.lower()}_{year}"
                     if key not in seen_titles:
                         seen_titles.add(key)
                         candidates.append(Candidate(
-                            value=f"{movie_title} ({year})",
+                            value=f"{normalized_title} ({year})",
                             source_url=url,
                             source_tier=tier,
                             confidence=0.8,  # Higher confidence for title field
@@ -143,33 +304,30 @@ class CandidateExtractor:
             if not (person1_found and person2_found):
                 continue
             
-            # Extract movie titles from this result
-            title_year_pattern = r'"([^"]+)"\s*\((\d{4})\)|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*\((\d{4})\)'
-            matches = re.finditer(title_year_pattern, content)
+            # Extract movie titles from this result using improved patterns
+            title_year_matches = self._extract_title_year_patterns(content)
             
-            for match in matches:
-                if match.group(1):
-                    movie_title = match.group(1)
-                    year = match.group(2)
-                else:
-                    movie_title = match.group(3)
-                    year = match.group(4)
-                
-                movie_title = movie_title.strip()
-                if not movie_title:
+            for movie_title, year, start_pos, end_pos in title_year_matches:
+                # Normalize title
+                normalized_title = normalize_title(movie_title)
+                if not normalized_title:
                     continue
                 
-                key = f"{movie_title.lower()}_{year}"
+                # Filter out award phrases
+                if is_award_phrase(normalized_title):
+                    continue
+                
+                key = f"{normalized_title.lower()}_{year}"
                 if key in seen_titles:
                     continue
                 seen_titles.add(key)
                 
                 candidates.append(Candidate(
-                    value=f"{movie_title} ({year})",
+                    value=f"{normalized_title} ({year})",
                     source_url=url,
                     source_tier=tier,
                     confidence=0.6,  # Lower confidence - needs verification
-                    context=content[match.start():match.end()+100]
+                    context=content[max(0, start_pos-50):min(len(content), end_pos+100)]
                 ))
         
         # Sort by confidence and tier

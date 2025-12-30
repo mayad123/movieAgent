@@ -211,7 +211,8 @@ class SourcePolicy:
             Tuple of (filtered_sources: List[SourceMetadata], metadata: Dict) where metadata contains:
             - tiers_present_in_candidates: Dict[str, int] - Count of each tier in input results
             - tiers_used_in_evidence: Dict[str, int] - Count of each tier in final results
-            - filtering_reasons: List[str] - Reasons why results were filtered out
+            - filtering_reasons: List[str] - Reasons why results were filtered out (e.g., "tier_not_allowed", "tier_c_rejected")
+            - missing_required_tier: bool - True if require_tier_a=True but no Tier A sources found
         """
         # Handle backward compatibility: if plan_or_constraints is a string, treat it as request_type
         if isinstance(plan_or_constraints, str):
@@ -287,19 +288,34 @@ class SourcePolicy:
         for source in sources:
             tiers_present[source.tier.value] = tiers_present.get(source.tier.value, 0) + 1
         
-        # Step 1: Filter by allowed_source_tiers
-        filtered_sources = [s for s in sources if s.tier.value in constraints.allowed_source_tiers]
-        filtering_reasons = []
-        if len(filtered_sources) < len(sources):
-            removed_count = len(sources) - len(filtered_sources)
-            removed_tiers = set(s.tier.value for s in sources if s.tier.value not in constraints.allowed_source_tiers)
-            filtering_reasons.append(f"Removed {removed_count} sources with tiers {removed_tiers} (not in allowed_source_tiers: {constraints.allowed_source_tiers})")
+        # Initialize missing_required_tier flag
+        missing_required_tier = False
         
-        # Step 2: Filter by reject_tier_c
+        # Step 1: Filter by allowed_source_tiers
+        filtering_reasons = []
+        removed_by_tier = {}  # Track removals by tier for detailed diagnostics
+        filtered_sources = []
+        for s in sources:
+            if s.tier.value in constraints.allowed_source_tiers:
+                filtered_sources.append(s)
+            else:
+                tier_value = s.tier.value
+                if tier_value not in removed_by_tier:
+                    removed_by_tier[tier_value] = []
+                removed_by_tier[tier_value].append("tier_not_allowed")
+        
+        # Add detailed filtering reasons for tier_not_allowed
+        if removed_by_tier:
+            for tier_value, reasons in removed_by_tier.items():
+                count = len(reasons)
+                filtering_reasons.append(f"Removed {count} sources with tier {tier_value} (tier_not_allowed: not in allowed_source_tiers {constraints.allowed_source_tiers})")
+        
+        # Step 2: Filter by reject_tier_c (apply after allowed_source_tiers to ensure Tier C is removed even if in allowed set)
         if constraints.reject_tier_c:
-            tier_c_count = sum(1 for s in filtered_sources if s.tier == SourceTier.TIER_C)
+            tier_c_before = [s for s in filtered_sources if s.tier == SourceTier.TIER_C]
+            tier_c_count = len(tier_c_before)
             if tier_c_count > 0:
-                filtering_reasons.append(f"Removed {tier_c_count} Tier C sources (reject_tier_c=True)")
+                filtering_reasons.append(f"Removed {tier_c_count} sources with tier C (tier_c_rejected: reject_tier_c=True)")
             filtered_sources = [s for s in filtered_sources if s.tier != SourceTier.TIER_C]
         
         # Step 3: Group by tier for require_tier_a logic
@@ -310,19 +326,21 @@ class SourcePolicy:
         # Step 4: Apply require_tier_a logic
         if constraints.require_tier_a:
             if not tier_a_sources:
-                # If Tier A is required but none exist, return empty list
+                # If Tier A is required but none exist, return empty list and set missing_required_tier
+                missing_required_tier = True
                 logger.warning(f"require_tier_a=True but no Tier A sources found - returning empty set")
                 filtering_reasons.append("No Tier A sources found (require_tier_a=True)")
                 tiers_used = {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0}
                 return ([], {
                     "tiers_present_in_candidates": tiers_present,
                     "tiers_used_in_evidence": tiers_used,
-                    "filtering_reasons": filtering_reasons
+                    "filtering_reasons": filtering_reasons,
+                    "missing_required_tier": True
                 })
             # Only use Tier A sources if required
             filtered_sources = tier_a_sources
         
-        # Step 5: Apply freshness-based ranking if needed
+        # Step 6: Apply freshness-based ranking if needed
         if constraints.need_freshness:
             # Weight recency higher - rank by recency (newer first), then score
             filtered_sources = self._rank_by_freshness(filtered_sources)
@@ -344,7 +362,8 @@ class SourcePolicy:
         return (filtered_sources, {
             "tiers_present_in_candidates": tiers_present,
             "tiers_used_in_evidence": tiers_used,
-            "filtering_reasons": filtering_reasons
+            "filtering_reasons": filtering_reasons,
+            "missing_required_tier": missing_required_tier
         })
     
     def _rank_by_freshness(self, sources: List[SourceMetadata]) -> List[SourceMetadata]:
