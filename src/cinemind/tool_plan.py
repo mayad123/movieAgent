@@ -31,11 +31,13 @@ class ToolPlan:
     freshness_reason: Optional[str] = None
     skip_reason: Optional[str] = None
     
-    # Tavily usage tracking (populated after execution)
+    # Search usage tracking (populated after execution)
     tool_plan_skip_tavily: bool = False  # What the tool plan said (before overrides)
     tavily_used: bool = False  # Whether Tavily was actually used
+    fallback_used: bool = False  # Whether fallback search was used
+    fallback_provider: Optional[str] = None  # Name of fallback provider (e.g., "duckduckgo")
     override_used: bool = False  # Whether tool plan decision was overridden
-    override_reason: Optional[str] = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_required_but_missing"
+    override_reason: Optional[str] = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
     
     def to_dict(self) -> Dict:
         """Convert to dictionary."""
@@ -49,6 +51,8 @@ class ToolPlan:
             "skip_reason": self.skip_reason,
             "tool_plan_skip_tavily": self.tool_plan_skip_tavily,
             "tavily_used": self.tavily_used,
+            "fallback_used": self.fallback_used,
+            "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
             "override_reason": self.override_reason
         }

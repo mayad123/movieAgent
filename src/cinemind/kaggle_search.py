@@ -98,8 +98,9 @@ class KaggleDatasetSearcher:
         self._title_index_loaded = False
     
     def _load_dataset(self) -> Optional[pd.DataFrame]:
-        """Load the Kaggle dataset. Caches the result."""
+        """Load the Kaggle dataset. Caches the result at instance level."""
         if self._dataset_loaded and self._dataset is not None:
+            logger.info("Dataset cache hit: reusing loaded dataset")
             return self._dataset
         
         try:
@@ -262,9 +263,11 @@ class KaggleDatasetSearcher:
     def _build_title_index(self) -> None:
         """
         Build normalized title index for fast candidate retrieval.
-        Called once when dataset is loaded.
+        Called once when dataset is loaded. Caches the result at instance level.
         """
         if self._title_index_loaded:
+            logger.debug("Title index cache hit: reusing built index")
+            return
             return
         
         df = self._dataset
@@ -547,9 +550,6 @@ class KaggleDatasetSearcher:
             
             # Use combined_score for final ranking, but report correlation as the score
             # (to preserve backward compatibility with existing code)
-            if correlation > max_correlation:
-                max_correlation = correlation
-            
             if correlation > max_correlation:
                 max_correlation = correlation
             

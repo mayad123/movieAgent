@@ -402,6 +402,9 @@ class CineMind:
                     # 2. Check Kaggle dataset (local lookup, free and fast)
                     # 3. Tavily API (only if skip_tavily=False OR valid override_reason provided)
                     #    NOTE: Low Kaggle correlation does NOT override skip_tavily flag
+                    # Get typed entities from structured_intent
+                    entities_typed = structured_intent.entities if structured_intent else None
+                    
                     if tracker:
                         with tracker.time_operation("search"):
                             movie_info = await self.aggregator.get_movie_info(
@@ -412,7 +415,8 @@ class CineMind:
                                 request_type=request_type,
                                 skip_tavily=should_skip_tavily,
                                 override_reason=override_reason,
-                                request_plan=request_plan
+                                request_plan=request_plan,
+                                entities_typed=entities_typed
                             )
                     else:
                         logger.info(f"[{request_id}] Performing search (Kaggle first, Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
@@ -424,7 +428,8 @@ class CineMind:
                             request_type=request_type,
                             skip_tavily=should_skip_tavily,
                             override_reason=override_reason,
-                            request_plan=request_plan
+                            request_plan=request_plan,
+                            entities_typed=entities_typed
                         )
                     
                     search_results = movie_info.get("results", [])
@@ -433,12 +438,92 @@ class CineMind:
                     
                     # Check for additional override reasons after initial search
                     final_override_reason = override_reason
+                    # Track candidates for structured-only response if browsing is blocked
+                    candidates_retrieved = 0
+                    candidates_used = 0
+                    
                     if should_skip_tavily and not movie_info.get("tavily_used", False):
-                        # Check for structured_lookup_empty (no results at all)
-                        if not search_results:
+                        # For fact-based queries, extract and verify candidates to check if we have usable evidence
+                        if request_type in ["info", "fact-check"] and structured_intent:
+                            # Convert search results to SourceMetadata for candidate extraction
+                            from .source_policy import SourceMetadata
+                            source_metadata_list = []
+                            for r in search_results:
+                                tier = self.source_policy.classify_source(
+                                    r.get("url", ""), 
+                                    r.get("title", ""), 
+                                    r.get("content", "")
+                                )
+                                source_metadata_list.append(SourceMetadata(
+                                    url=r.get("url", ""),
+                                    domain=r.get("domain", ""),
+                                    tier=tier,
+                                    title=r.get("title", ""),
+                                    content=r.get("content", ""),
+                                    score=r.get("score", 0.0)
+                                ))
+                            
+                            # Extract candidates to check if we have any usable evidence
+                            people = structured_intent.entities.get("people", [])
+                            movies = structured_intent.entities.get("movies", [])
+                            
+                            if structured_intent.intent == "filmography_overlap" and len(people) >= 2:
+                                candidates = self.candidate_extractor.extract_collaboration_candidates(
+                                    search_results, people[0], people[1]
+                                )
+                                candidates_retrieved = len(candidates)
+                                # Count verified candidates
+                                for candidate in candidates:
+                                    title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                    if title_year_match:
+                                        movie_title = title_year_match.group(1)
+                                        year = int(title_year_match.group(2))
+                                        person1_verified, _, _ = self.verifier.verify_movie_credit(
+                                            movie_title, people[0], year, source_metadata_list
+                                        )
+                                        person2_verified, _, _ = self.verifier.verify_movie_credit(
+                                            movie_title, people[1], year, source_metadata_list
+                                        )
+                                        if person1_verified and person2_verified:
+                                            candidates_used += 1
+                            elif structured_intent.intent in ["director_info", "cast_info"]:
+                                all_entities = structured_intent.get_all_entities()
+                                candidates = self.candidate_extractor.extract_movie_candidates(
+                                    search_results, all_entities
+                                )
+                                candidates_retrieved = len(candidates)
+                                # Count verified candidates
+                                for candidate in candidates:
+                                    title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                    if title_year_match and people:
+                                        movie_title = title_year_match.group(1)
+                                        year = int(title_year_match.group(2))
+                                        person = people[0]
+                                        verified, _, _ = self.verifier.verify_movie_credit(
+                                            movie_title, person, year, source_metadata_list
+                                        )
+                                        if verified:
+                                            candidates_used += 1
+                            elif structured_intent.intent == "release_date" and movies:
+                                movie_title = movies[0]
+                                candidates = self.candidate_extractor.extract_release_year_candidates(
+                                    search_results, movie_title
+                                )
+                                candidates_retrieved = len(candidates)
+                                # Count verified candidates (if year was verified)
+                                year, _, _ = self.verifier.verify_release_year(
+                                    movie_title, source_metadata_list
+                                )
+                                if year:
+                                    candidates_used = 1
+                        
+                        # Check for structured_lookup_empty (no results OR no candidates after filtering)
+                        if not search_results or (candidates_retrieved > 0 and candidates_used == 0):
                             final_override_reason = TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value
-                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (no results)")
+                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (no usable evidence: {candidates_retrieved} candidates retrieved, {candidates_used} used)")
                             # Retry with override
+                            # Get typed entities from structured_intent
+                            entities_typed_for_search = structured_intent.entities if structured_intent else None
                             movie_info = await self.aggregator.get_movie_info(
                                 user_query,
                                 include_recent_news=False,
@@ -447,15 +532,18 @@ class CineMind:
                                 request_type=request_type,
                                 skip_tavily=True,
                                 override_reason=final_override_reason,
-                                request_plan=request_plan
+                                request_plan=request_plan,
+                                entities_typed=entities_typed_for_search
                             )
                             search_results = movie_info.get("results", [])
                             source_summary = movie_info.get("source_summary", {})
-                        # Check for tier_a_required_but_missing (info/fact-check requires Tier A)
-                        elif request_type in ["info", "fact-check"] and not source_summary.get("has_tier_a", False):
-                            final_override_reason = TavilyOverrideReason.TIER_A_REQUIRED_BUT_MISSING.value
-                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (Tier A required but missing)")
+                        # Check for tier_a_missing (require_tier_a=True but no Tier A sources found)
+                        elif source_summary.get("missing_required_tier", False):
+                            final_override_reason = TavilyOverrideReason.TIER_A_MISSING.value
+                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (require_tier_a=True but no Tier A sources found)")
                             # Retry with override
+                            # Get typed entities from structured_intent
+                            entities_typed_for_search = structured_intent.entities if structured_intent else None
                             movie_info = await self.aggregator.get_movie_info(
                                 user_query,
                                 include_recent_news=False,
@@ -464,38 +552,47 @@ class CineMind:
                                 request_type=request_type,
                                 skip_tavily=True,
                                 override_reason=final_override_reason,
-                                request_plan=request_plan
+                                request_plan=request_plan,
+                                entities_typed=entities_typed_for_search
                             )
                             search_results = movie_info.get("results", [])
                             source_summary = movie_info.get("source_summary", {})
                     
-                    # Update tool plan with actual Tavily usage info
+                    # Update tool plan with actual search usage info (exactly once per request)
                     if tool_plan:
                         tool_plan.tavily_used = movie_info.get("tavily_used", False)
+                        tool_plan.fallback_used = movie_info.get("fallback_used", False)
+                        tool_plan.fallback_provider = movie_info.get("fallback_provider")
                         tool_plan.override_used = movie_info.get("override_used", False)
                         tool_plan.override_reason = movie_info.get("override_reason") or final_override_reason
                         
-                        # Log Tavily usage with override info
+                        # Log search usage metadata exactly once per request
+                        search_metadata_parts = []
                         if tool_plan.tavily_used:
-                            if tool_plan.override_used:
-                                logger.info(
-                                    f"[{request_id}] Tavily used (OVERRIDE): "
-                                    f"tool_plan_skip_tavily={tool_plan.tool_plan_skip_tavily}, "
-                                    f"override_reason={tool_plan.override_reason}"
-                                )
-                            else:
-                                logger.info(f"[{request_id}] Tavily used (per tool plan)")
+                            search_metadata_parts.append("tavily_used=true")
+                        if tool_plan.fallback_used:
+                            search_metadata_parts.append(f"fallback_used=true, fallback_provider={tool_plan.fallback_provider}")
+                        if tool_plan.override_used:
+                            search_metadata_parts.append(f"override_used=true, override_reason={tool_plan.override_reason}")
+                        
+                        if search_metadata_parts:
+                            logger.info(
+                                f"[{request_id}] Search metadata: "
+                                + ", ".join(search_metadata_parts)
+                            )
                         else:
                             logger.info(
-                                f"[{request_id}] Tavily skipped: "
-                                f"tool_plan_skip_tavily={tool_plan.tool_plan_skip_tavily}, "
-                                f"override_used={tool_plan.override_used}"
+                                f"[{request_id}] Search metadata: "
+                                f"tavily_used=false, fallback_used=false, override_used=false"
                             )
                     
-                    # Log metrics for observability
+                    # Log metrics for observability (exactly once per request)
                     if tracker and tool_plan:
                         tracker.log_metric("tool_plan_skip_tavily", 1.0 if tool_plan.tool_plan_skip_tavily else 0.0)
                         tracker.log_metric("tavily_used", 1.0 if tool_plan.tavily_used else 0.0)
+                        tracker.log_metric("fallback_used", 1.0 if tool_plan.fallback_used else 0.0)
+                        if tool_plan.fallback_provider:
+                            tracker.log_metric(f"fallback_provider_{tool_plan.fallback_provider}", 1.0)
                         tracker.log_metric("override_used", 1.0 if tool_plan.override_used else 0.0)
                         if tool_plan.override_reason:
                             tracker.log_metric(f"override_reason_{tool_plan.override_reason}", 1.0)
@@ -956,8 +1053,22 @@ class CineMind:
                     "searches": formatted_searches,  # Formatted search results
                     "model_version": OPENAI_MODEL,  # Model version (e.g., "gpt-3.5-turbo")
                     "prompt_version": PROMPT_VERSION,  # Prompt version (e.g., "v1")
-                    "agent_config_version": f"cine_prompt_{PROMPT_VERSION}"  # Agent config version
+                    "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",  # Agent config version
+                    # Search metadata (auditable, logged exactly once per request)
+                    "tavily_used": tool_plan.tavily_used if tool_plan else False,
+                    "fallback_used": tool_plan.fallback_used if tool_plan else False,
+                    "fallback_provider": tool_plan.fallback_provider if tool_plan else None,
+                    "override_used": tool_plan.override_used if tool_plan else False,
+                    "override_reason": tool_plan.override_reason if tool_plan else None
                 }
+                
+                # Add structured-only response payload if browsing was blocked
+                if should_skip_tavily and tool_plan and not tool_plan.tavily_used and not tool_plan.override_used:
+                    result["structured_only"] = {
+                        "candidates_retrieved": candidates_retrieved if 'candidates_retrieved' in locals() else len(search_results),
+                        "candidates_used": candidates_used if 'candidates_used' in locals() else len([r for r in search_results if r.get("tier") == "A"]),
+                        "no_browse_reason": "skip_tavily_enforced"
+                    }
                 
                 if track_ctx:
                     track_ctx.__exit__(None, None, None)

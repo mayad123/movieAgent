@@ -23,13 +23,15 @@ class TavilyOverrideReason(Enum):
     """Valid reasons for overriding skip_tavily flag."""
     DISAMBIGUATION_NEEDED = "disambiguation_needed"
     STRUCTURED_LOOKUP_EMPTY = "structured_lookup_empty"
-    TIER_A_REQUIRED_BUT_MISSING = "tier_a_required_but_missing"
+    TIER_A_MISSING = "tier_a_missing"
 
 
 @dataclass
 class SearchDecision:
     """Structured metadata about search decisions."""
     tavily_used: bool = False
+    fallback_used: bool = False
+    fallback_provider: Optional[str] = None
     override_used: bool = False
     override_reason: Optional[str] = None
     
@@ -37,6 +39,8 @@ class SearchDecision:
         """Convert to dictionary."""
         return {
             "tavily_used": self.tavily_used,
+            "fallback_used": self.fallback_used,
+            "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
             "override_reason": self.override_reason
         }
@@ -132,8 +136,59 @@ class SearchEngine:
         
         return queries
     
+    def _derive_kaggle_query_string(self, query: str, entities_typed: Optional[Dict[str, List[str]]] = None, 
+                                     intent: Optional[str] = None) -> str:
+        """
+        Derive Kaggle query string using best extracted movie title for simple fact intents.
+        
+        Priority:
+        1. If entities_typed.movies is non-empty → use first movie title (optionally include year if present)
+        2. Else fallback to cleaned query (strip leading interrogatives and verbs)
+        
+        Args:
+            query: Original user query
+            entities_typed: Typed entities dict with "movies" and "people" keys
+            intent: Intent type (e.g., "director_info", "cast_info", "release_date", "general_info")
+            
+        Returns:
+            Query string optimized for Kaggle search
+        """
+        # Simple fact intents that should use movie title
+        simple_fact_intents = {"director_info", "cast_info", "release_date", "general_info"}
+        
+        # If we have a simple fact intent and entities_typed with movies, use the first movie
+        if intent in simple_fact_intents and entities_typed:
+            movies = entities_typed.get("movies", [])
+            if movies and len(movies) > 0:
+                # Use the first movie title
+                return movies[0]
+        
+        # Fallback: clean the query by stripping leading interrogatives and verbs
+        query_lower = query.lower().strip()
+        
+        # Remove leading interrogatives
+        interrogatives = ["who", "what", "when", "where", "why", "how"]
+        for interrogative in interrogatives:
+            if query_lower.startswith(interrogative + " "):
+                query_lower = query_lower[len(interrogative):].strip()
+                break
+        
+        # Remove leading verbs
+        verbs = ["is", "was", "were", "are", "do", "did", "does", "can", "could", "would", "should",
+                 "directed", "director", "played", "actor", "cast", "starring", "stars"]
+        for verb in verbs:
+            if query_lower.startswith(verb + " "):
+                query_lower = query_lower[len(verb):].strip()
+                break
+        
+        # Return cleaned query, or original if nothing matched
+        if query_lower != query.lower().strip():
+            return query_lower
+        return query
+    
     async def search(self, query: str, max_results: int = 5, skip_tavily: bool = False,
-                    override_reason: Optional[str] = None) -> Tuple[List[Dict], SearchDecision]:
+                    override_reason: Optional[str] = None, kaggle_query_string: Optional[str] = None,
+                    entities_typed: Optional[Dict[str, List[str]]] = None, intent: Optional[str] = None) -> Tuple[List[Dict], SearchDecision]:
         """
         Perform real-time search for movie information.
         
@@ -147,7 +202,7 @@ class SearchEngine:
         Tavily can only be used when skip_tavily=True if an explicit override_reason is provided:
         - disambiguation_needed
         - structured_lookup_empty (no usable Kaggle/structured results)
-        - tier_a_required_but_missing (fact-check/info requires Tier A but no Tier A evidence found)
+        - tier_a_missing (fact-check/info requires Tier A but no Tier A evidence found)
         
         Args:
             query: Search query
@@ -158,15 +213,22 @@ class SearchEngine:
         Returns:
             (results: List[Dict], decision: SearchDecision) where decision contains:
             - tavily_used: bool - Whether Tavily was actually used
+            - fallback_used: bool - Whether fallback search was used
+            - fallback_provider: Optional[str] - Name of fallback provider (e.g., "duckduckgo")
             - override_used: bool - Whether tool plan decision was overridden
             - override_reason: Optional[str] - Reason for override (if any)
         """
         results = []
         decision = SearchDecision()
         
-        # Step 1: Try Kaggle dataset first if enabled
+        # Step 1: Derive Kaggle query string if not provided
+        if kaggle_query_string is None:
+            kaggle_query_string = self._derive_kaggle_query_string(query, entities_typed, intent)
+        
+        # Step 2: Try Kaggle dataset first if enabled
         kaggle_has_results = False
         max_correlation = 0.0
+        kaggle_stage_a_candidates = 0
         if self.enable_kaggle and self.kaggle_searcher:
             try:
                 # Run Kaggle search in thread pool to avoid blocking event loop
@@ -175,8 +237,19 @@ class SearchEngine:
                 is_highly_correlated, kaggle_results, max_correlation = await loop.run_in_executor(
                     None,
                     self.kaggle_searcher.is_highly_correlated,
-                    query,
+                    kaggle_query_string,
                     max_results
+                )
+                
+                # Get stage_a_candidates count (from search method, but we need to get it separately)
+                # For now, use length of results as approximation
+                kaggle_stage_a_candidates = len(kaggle_results) if kaggle_results else 0
+                
+                # Log structured metadata
+                logger.info(
+                    f"Kaggle search: kaggle_query_string='{kaggle_query_string}', "
+                    f"kaggle_stage_a_candidates={kaggle_stage_a_candidates}, "
+                    f"kaggle_max_score={max_correlation:.3f}"
                 )
                 
                 if is_highly_correlated and kaggle_results:
@@ -215,22 +288,34 @@ class SearchEngine:
             logger.info(f"Skipping Tavily API (skip_tavily=True, no valid override_reason provided)")
         
         # Step 3: Try Tavily if allowed
+        tavily_succeeded = False
         if should_use_tavily and self.tavily_api_key:
             try:
                 tavily_results = await self._search_tavily(query, max_results)
-                results.extend(tavily_results)
-                decision.tavily_used = True
+                if tavily_results:
+                    results.extend(tavily_results)
+                    decision.tavily_used = True
+                    tavily_succeeded = True
             except Exception as e:
                 logger.warning(f"Tavily search failed: {e}")
         
-        # Step 4: Fallback to direct web search if needed (use same logic as Tavily)
+        # Step 4: Fallback to direct web search if needed
+        # IMPORTANT: Fallback must be gated by the same browse decision (skip_tavily + override reasons)
+        # If browsing is not allowed (skip_tavily=True and no override), fallback must NOT run
         if not results and should_use_tavily:
+            # Only use fallback if browsing is allowed (same gate as Tavily)
             try:
                 web_results = await self._search_web_fallback(query, max_results)
-                results.extend(web_results)
-                decision.tavily_used = True  # Web fallback counts as Tavily usage
+                if web_results:
+                    results.extend(web_results)
+                    decision.fallback_used = True
+                    decision.fallback_provider = "duckduckgo"
+                    logger.info(f"Fallback search used (provider: duckduckgo)")
             except Exception as e:
                 logger.warning(f"Web search fallback failed: {e}")
+        elif not results and not should_use_tavily:
+            # Browsing is not allowed - do NOT use fallback
+            logger.info(f"Fallback search skipped (browsing not allowed: skip_tavily=True, override_reason={override_reason})")
         
         return (results[:max_results], decision)
     
@@ -468,7 +553,7 @@ class MovieDataAggregator:
                            intent: Optional[str] = None, entities: Optional[List[str]] = None,
                            request_type: str = "info", skip_tavily: bool = False,
                            override_reason: Optional[str] = None,
-                           request_plan = None) -> Dict:
+                           request_plan = None, entities_typed: Optional[Dict[str, List[str]]] = None) -> Dict:
         """
         Get comprehensive movie information from multiple sources with source policy.
         
@@ -490,10 +575,19 @@ class MovieDataAggregator:
         else:
             queries = [query]
         
+        # Derive Kaggle query string for simple fact intents
+        kaggle_query_string = None
+        if intent and entities_typed:
+            kaggle_query_string = self.search_engine._derive_kaggle_query_string(query, entities_typed, intent)
+        
         # Run searches in parallel
         tasks = []
         for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
-            tasks.append(self.search_engine.search(q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason))
+            tasks.append(self.search_engine.search(
+                q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason,
+                kaggle_query_string=kaggle_query_string if q == queries[0] else None,  # Only for first query
+                entities_typed=entities_typed, intent=intent
+            ))
         
         if include_recent_news and not skip_tavily:
             news_query = f"{query} movie news 2024 2025"
@@ -501,9 +595,11 @@ class MovieDataAggregator:
         
         results_tuples = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Combine results and aggregate Tavily usage metadata
+        # Combine results and aggregate search metadata
         raw_results = []
         tavily_used_any = False
+        fallback_used_any = False
+        fallback_providers = set()
         override_used_any = False
         override_reasons = set()
         
@@ -518,6 +614,10 @@ class MovieDataAggregator:
                     raw_results.extend(results)
                     if decision.tavily_used:
                         tavily_used_any = True
+                    if decision.fallback_used:
+                        fallback_used_any = True
+                    if decision.fallback_provider:
+                        fallback_providers.add(decision.fallback_provider)
                     if decision.override_used:
                         override_used_any = True
                     if decision.override_reason:
@@ -527,6 +627,10 @@ class MovieDataAggregator:
                     raw_results.extend(results)
                     if decision.get("tavily_used"):
                         tavily_used_any = True
+                    if decision.get("fallback_used"):
+                        fallback_used_any = True
+                    if decision.get("fallback_provider"):
+                        fallback_providers.add(decision["fallback_provider"])
                     if decision.get("override_used"):
                         override_used_any = True
                     if decision.get("override_reason"):
@@ -570,6 +674,8 @@ class MovieDataAggregator:
         
         # Determine final override reason (use first one if multiple)
         override_reason_final = list(override_reasons)[0] if override_reasons else None
+        # Determine final fallback provider (use first one if multiple)
+        fallback_provider_final = list(fallback_providers)[0] if fallback_providers else None
         
         return {
             "query": query,
@@ -578,6 +684,8 @@ class MovieDataAggregator:
             "source_count": len(results),
             "source_summary": source_summary,
             "tavily_used": tavily_used_any,
+            "fallback_used": fallback_used_any,
+            "fallback_provider": fallback_provider_final,
             "override_used": override_used_any,
             "override_reason": override_reason_final
         }
