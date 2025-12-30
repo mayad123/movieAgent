@@ -1,0 +1,588 @@
+{
+  "timestamp": "2025-12-18T18:19:03.557679",
+  "summary": {
+    "total_tests": 5,
+    "passed": 4,
+    "failed": 1,
+    "pass_rate": 0.8,
+    "avg_execution_time_ms": 11462.456798553467
+  },
+  "results": [
+    {
+      "test_name": "simple_fact_shining_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 311 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The 1980 horror film \"The Shining\" was directed by Stanley Kubrick. This information is confirmed by IMDb, a Tier A source. Stanley Kubrick, a highly acclaimed director, also co-wrote the screenplay for the film alongside novelist Diane Johnson. The movie is based on Stephen King's 1977 novel of the same name.",
+      "actual_type": "info",
+      "request_id": "6f5e21c6-eaa1-4fbb-982f-db235e8f6249",
+      "execution_time_ms": 15116.645336151123,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: The Shining (film) - Wikipedia\nURL: https://en.wikipedia.org/wiki/The_Shining_(film)\nContent: The Shining is a 1980 psychological horror film produced and directed by Stanley Kubrick and co-written with novelist Diane Johnson. It is based on Stephen King's 1977 novel \"The Shining (novel)\") and stars Jack Nicholson, Shelley Duvall, Danny Lloyd and Scatman Crothers. The film presents the descent into insanity of a recovering alcoholic and aspiring novelist (Nicholson) who takes a job as winter caretaker for a mountain resort hotel with his wife (Duvall) and clairvoyant son (Lloyd). [...] |\n\n[2] Source: Tavily (Tier A)\nTitle: The Shining (1980)\nURL: https://www.imdb.com/title/tt0081505/\nContent: Reviewers say 'The Shining' is lauded for its atmospheric tension, innovative camera work, and Jack Nicholson's performance. Kubrick's direction and psychological horror elements are often highlighted. Criticisms include deviations from the novel, underdeveloped characters, and perceived lack of coherence. Shelley Duvall's performance divides opinions. Pacing and length are contentious, with some finding it slow and others appreciating the build-up. Despite mixed views, it remains influential [.\n\n[3] Source: Tavily (Tier A)\nTitle: Stanley Kubrick(1928-1999)\nURL: https://www.imdb.com/name/nm0000040/\nContent: Having turned down directing a sequel to The Exorcist (1973), Kubrick made his own horror film: The Shining (1980). Again, rumors circulated of demands made upon actors and crew. Stephen King (whose novel the film was based upon) reportedly didn't like Kubrick's adaptation (indeed, he would later write his own screenplay which was filmed as The Shining (1997).) [...] + Director\n\n  + 1999\n Full Metal Jacket\n\n  8.2\n\n  + Director\n\n  + 1987\n The Shining\n\n  8.4\n\n  + Director\n\n  + 1980\n Barry Lyndon\n\n\n\n[4] Source: Tavily (Tier A)\nTitle: The Shining (1980) - FAQ\nURL: https://www.imdb.com/title/tt0081505/faq/\nContent: (\"Stanley Kubrick, 1928-1999: Resident Phantoms\", Sight and Sound (September, 1999); available here) [...] As is explained here, there are three different versions of The Shining; the original 146-minute version which included the coda, the subsequent 144-minute version without the coda, and the 113-minute \"European version\". All three versions were approved by Kubrick himself, making it difficult to conclusively call any of them the definitive version. Today, the 144-minute version is the one m\n\n[5] Source: Tavily (Tier A)\nTitle: The Shining (1980) - IMDb\nURL: https://www.imdb.com/title/tt0081505/\nContent: Reviewers say 'The Shining' is lauded for its atmospheric tension, innovative camera work, and Jack Nicholson's performance. Kubrick's direction and psychological horror elements are often highlighted. Criticisms include deviations from the novel, underdeveloped characters, and perceived lack of coherence. Shelley Duvall's performance divides opinions. Pacing and length are contentious, with some finding it slow and others appreciating the build-up. Despite mixed views, it remains influential [.\n\n\nVERIFIED FACTS (from Tier A sources):\n- The Shining (1980)\n- The Shining (1997)\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Who directed the 1980 horror film The Shining?",
+      "searches": [
+        {
+          "query": "Who directed the 1980 horror film The Shining?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Shining_(film)",
+              "title": "The Shining (film) - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 2,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0081505/",
+              "title": "The Shining (1980)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 3,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm0000040/",
+              "title": "Stanley Kubrick(1928-1999)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 4,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0081505/faq/",
+              "title": "The Shining (1980) - FAQ",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 5,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0081505/",
+              "title": "The Shining (1980) - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 6,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0081505/fullcredits/",
+              "title": "The Shining (1980) - Full cast & crew",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 7,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Shining_(film)",
+              "title": "The Shining (film)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 8,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Shining_(franchise)",
+              "title": "The Shining (franchise)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 9,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Shining_(miniseries)",
+              "title": "The Shining (miniseries)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            },
+            {
+              "rank": 10,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Stanley_Kubrick",
+              "title": "Stanley Kubrick",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:20.498282"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_joker_1989",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 371 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "In the 1989 Batman movie directed by Tim Burton, the iconic character of the Joker was portrayed by Jack Nicholson. Nicholson's portrayal of the Joker is considered one of the most memorable performances of the character in film history. The film also starred Michael Keaton as Batman and Kim Basinger as Vicki Vale.\n\nSource:\n- IMDb: https://www.imdb.com/title/tt0096895/",
+      "actual_type": "info",
+      "request_id": "43efb2f8-57dc-4ae7-978f-1abb40494190",
+      "execution_time_ms": 14185.228824615479,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: The Batman (film)\nURL: https://en.wikipedia.org/wiki/The_Batman_(film)\nContent: The Batman is a 2022 American superhero film based on the DC Comics character Batman. Directed by Matt Reeves from a screenplay he wrote with Peter Craig, it is a reboot \"Reboot (fiction)\") of the Batman film franchise. Robert Pattinson stars as Bruce Wayne / Batman alongside Zo\u00eb Kravitz, Paul Dano, Jeffrey Wright, John Turturro, Peter Sarsgaard, Andy Serkis, and Colin Farrell. The film sees Batman, in his second year fighting crime in Gotham City, uncover corruption with ties to his own family \n\n[2] Source: Tavily (Tier A)\nTitle: List of Batman films cast members\nURL: https://en.wikipedia.org/wiki/List_of_Batman_films_cast_members\nContent: | Characters | Batman \"Batman (serial)\") | Batman and Robin \"Batman and Robin (serial)\") |\n --- \n| 1943 | 1949 |\n| Bruce Wayne Batman | Lewis Wilson | Robert Lowery \"Robert Lowery (actor)\") |\n| Richard \"Dick\" Grayson Robin | Douglas Croft | Johnny Duncan \"Johnny Duncan (actor)\") |\n| Alfred Pennyworth | William Austin \"William Austin (actor)\") | Eric Wilton |\n| Dr. Daka | J. Carrol Naish |  |\n| Linda Page | Shirley Patterson |  |\n| James Gordon \"Jim Gordon (character)\") |  | Lyle Talbot | [...] A\n\n[3] Source: Tavily (Tier A)\nTitle: The Batman (2022)\nURL: https://www.imdb.com/title/tt1877830/\nContent: I didn't like the Batman voice but midway through it grew on me. Acting wise Mr Pattinson is impressive (but my favorite roles of his are as Neil, Cedric Diggory and Rev. Teagardin) - as Batman, remember this is Bats in year 2 and Mr Pattinson nails it as well. A fine actor (not better than Mr Keaton but that is childhood nostalgia maybe however just as batty as Mr Bale..Mr Affleck was awesome as well but scripting for him was below par). [...] 3 Hours run time is totally worth it.  \n  \nThis one\n\n[4] Source: Tavily (Tier A)\nTitle: Batman (1989)\nURL: https://www.imdb.com/title/tt0096895/\nContent: Batman is a 1989 American superhero film directed by Tim Burton and produced by Jon Peters, based on the DC Comics character of the same name. It is the first installment of Warner Bros.' initial Batman film series. The film stars Jack Nicholson, Michael Keaton in the title role, Kim Basinger, Robert Wuhl, Pat Hingle, Billy Dee Williams, Michael Gough, and Jack Palance. [...] + Tim Burton\n Writers\n\n  + Bob Kane\n  + Sam Hamm\n  + Warren Skaaren\n Stars\n\n  + Michael Keaton\n  + Jack Nicholson\n  + Kim\n\n[5] Source: Tavily (Tier A)\nTitle: The Batman (2022) - Full cast & crew\nURL: https://www.imdb.com/title/tt1877830/fullcredits/\nContent: /The Batman\n Zo\u00eb Kravitz\n\n  Zo\u00eb Kravitz\n\n  Selina Kyle\n Jeffrey Wright\n\n  Jeffrey Wright\n\n  Lt. James Gordon\n Colin Farrell\n\n  Colin Farrell\n\n  /The Penguin\n Paul Dano\n\n  Paul Dano\n\n  The Riddler\n John Turturro\n\n  John Turturro\n\n  Carmine Falcone\n Andy Serkis\n\n  Andy Serkis\n Peter Sarsgaard\n\n  Peter Sarsgaard\n\n  District Attorney Gil Colson\n Barry Keoghan\n\n  Barry Keoghan\n\n  Unseen Arkham Prisoner\n Jayme Lawson\n\n  Jayme Lawson\n\n  Bella Re\u00e1l\n Gil Perez-Abraham\n\n  Gil Perez-Abraham [...] Back\n\n Ca\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Who played the Joker in the 1989 Batman movie directed by Tim Burton?",
+      "searches": [
+        {
+          "query": "Who played the Joker in the 1989 Batman movie directed by Tim Burton?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Batman_(film)",
+              "title": "The Batman (film)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 2,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/List_of_Batman_films_cast_members",
+              "title": "List of Batman films cast members",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 3,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt1877830/",
+              "title": "The Batman (2022)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 4,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0096895/",
+              "title": "Batman (1989)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 5,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt1877830/fullcredits/",
+              "title": "The Batman (2022) - Full cast & crew",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 6,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0096895/",
+              "title": "Batman (1989)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 7,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt1877830/fullcredits/",
+              "title": "The Batman (2022) - Full cast & crew",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 8,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt2975590/fullcredits/",
+              "title": "Full cast & crew - Batman v Superman - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 9,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt1877830/",
+              "title": "The Batman (2022)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 10,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0059968/",
+              "title": "Batman (TV Series 1966\u20131968)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            },
+            {
+              "rank": 11,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt1877830/",
+              "title": "The Batman (2022)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:33.966210"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_goodfellas_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 390 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The 1990 gangster film \"Goodfellas\" was directed by Martin Scorsese. This information is confirmed by Tier A sources such as IMDb and Wikipedia. Scorsese is known for his exceptional direction in bringing the story of Mafia associate Henry Hill to life in the film. The movie is often regarded as a cinematic masterpiece for its raw depiction of mob life and Scorsese's directorial prowess.",
+      "actual_type": "info",
+      "request_id": "c6c29e24-1b88-4fba-9fa5-e98511b520e1",
+      "execution_time_ms": 13257.378578186035,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: Goodfellas - Wikipedia\nURL: https://en.wikipedia.org/wiki/Goodfellas\nContent: Goodfellas (stylized as GoodFellas) is a 1990 American biographical gangster film directed by Martin Scorsese, written by Nicholas Pileggi and Scorsese, and produced by Irwin Winkler. It is a film adaptation of Pileggi's 1985 nonfiction book Wiseguy \"Wiseguy (book)\"). Starring Robert De Niro, Ray Liotta, Joe Pesci, Lorraine Bracco and Paul Sorvino, the film narrates the rise and fall of Mafia associate Henry Hill and his friends and family from 1955 to 1980. [...] Goodfellas inspired director Da\n\n[2] Source: Tavily (Tier A)\nTitle: Goodfellas\nURL: https://en.wikipedia.org/wiki/Goodfellas\nContent: Goodfellas inspired director David Chase to make the HBO television series The Sopranos. He told Peter Bogdanovich, \"Goodfellas is a very important movie to me and Goodfellas really plowed that ... I found that movie very funny and brutal and it felt very real. And yet that was the first mob movie that Scorsese ever dealt with a mob crew. ... as opposed to say The Godfather ... which there's something operatic about it, classical, even the clothing and the cars. You know I mean I always think [.\n\n[3] Source: Tavily (Tier A)\nTitle: Martin Scorsese\nURL: https://en.wikipedia.org/wiki/Martin_Scorsese\nContent: After a decade of films considered by critics to be mixed results, some considered Scorsese's gangster epic Goodfellas (1990) his return to directorial form, and his most confident and fully realized film since Raging Bull. De Niro and Joe Pesci offered a virtuoso display of Scorsese's bravura cinematic technique in the film and re-established, enhanced, and consolidated his reputation. After the film was released, Roger Ebert, a friend and supporter of Scorsese, named Goodfellas \"the best mob [\n\n[4] Source: Tavily (Tier A)\nTitle: Goodfellas (soundtrack)\nURL: https://en.wikipedia.org/wiki/Goodfellas_(soundtrack)\nContent: Goodfellas Music from the Motion Picture is the soundtrack for the 1990 film Goodfellas, directed by Martin Scorsese, notable for its use of popular music from the various periods it portrayed. In a similar manner to American Graffiti and Scorsese's earlier Mean Streets, the songs served roughly the same purpose as a composed musical score. While an official soundtrack was released at the same time as the film, it only featured a small fraction of the songs used.\n\n[5] Source: Tavily (Tier A)\nTitle: Goodfellas (1990) - IMDb\nURL: https://www.imdb.com/title/tt0099685/\nContent: Reviewers say 'Goodfellas' is a cinematic masterpiece, lauded for its raw depiction of mob life and Martin Scorsese's exceptional direction. Ray Liotta, Robert De Niro, and Joe Pesci deliver remarkable performances, with Pesci's character noted for its intensity and humor. The film's technical elements, such as cinematography, editing, and soundtrack, significantly enhance the story. Although some critics point out issues with character depth and pacing, 'Goodfellas' is widely considered one of \n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Which director is responsible for the 1990 gangster film Goodfellas?",
+      "searches": [
+        {
+          "query": "Which director is responsible for the 1990 gangster film Goodfellas?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Goodfellas",
+              "title": "Goodfellas - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 2,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Goodfellas",
+              "title": "Goodfellas",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 3,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Martin_Scorsese",
+              "title": "Martin Scorsese",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 4,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Goodfellas_(soundtrack)",
+              "title": "Goodfellas (soundtrack)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 5,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0099685/",
+              "title": "Goodfellas (1990) - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 6,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Martin_Scorsese",
+              "title": "Martin Scorsese - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 7,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm0000217/",
+              "title": "Martin Scorsese",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 8,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm0000217/bio/",
+              "title": "Martin Scorsese - Biography",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 9,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0099685/",
+              "title": "Goodfellas (1990)",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 10,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls063689249/",
+              "title": "Martin Scorsese's Filmography",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            },
+            {
+              "rank": 11,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm0000217/",
+              "title": "Martin Scorsese - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:47.080918"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_neo_actor",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 510 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The character Neo in the 1999 film \"The Matrix\" was portrayed by actor Keanu Reeves. This is a confirmed fact from IMDb, a Tier A source. Keanu Reeves delivered a memorable performance as Neo, a computer hacker who discovers the true nature of reality and becomes the central figure in a rebellion against sentient machines.\n\nKeanu Reeves' portrayal of Neo has become iconic in the world of cinema, and his performance contributed significantly to the success and enduring popularity of \"The Matrix\" franchise.",
+      "actual_type": "info",
+      "request_id": "e09bb6ba-e857-4ccf-ba51-f9e5254cbde7",
+      "execution_time_ms": 7738.679647445679,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== SEARCH RESULTS (Kaggle Dataset + Tavily) ===\n\n[1] Source: Kaggle IMDB Dataset (Tier A)\nTitle: The Matrix\nSource: IMDB Dataset (via Kaggle)\nContent: IMDb Rating: 8.7 | Year: 1999 | Certificates: R | Genre: Action | Director: Lana Wachowski\n\n[2] Source: Kaggle IMDB Dataset (Tier A)\nTitle: The Matrix\nSource: IMDB Dataset (via Kaggle)\nContent: IMDb Rating: 8.7 | Year: 1999 | Certificates: R | Genre: Action | Director: Lana Wachowski\n\n[3] Source: Kaggle IMDB Dataset (Tier A)\nTitle: Castle in the Sky\nSource: IMDB Dataset (via Kaggle)\nContent: IMDb Rating: 8.0 | Year: 1986 | Certificates: PG | Genre: Animation | Director: Hayao Miyazaki\n\n[4] Source: Kaggle IMDB Dataset (Tier A)\nTitle: Encanto\nSource: IMDB Dataset (via Kaggle)\nContent: IMDb Rating: 7.2 | Year: 2021 | Certificates: PG | Genre: Animation | Director: Jared Bush\n\n[5] Source: Kaggle IMDB Dataset (Tier A)\nTitle: Howl's Moving Castle\nSource: IMDB Dataset (via Kaggle)\nContent: IMDb Rating: 8.2 | Year: 2004 | Certificates: PG | Genre: Animation | Director: Hayao Miyazaki\n\n\nVERIFIED FACTS (from Tier A sources):\n- The Matrix (1999)\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Which actor played the character Neo in the 1999 film The Matrix?",
+      "searches": [
+        {
+          "query": "Which actor played the character Neo in the 1999 film The Matrix?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Matrix",
+              "title": "The Matrix - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 2,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls031701342/",
+              "title": "The Matrix cast",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 3,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt0133093/fullcredits/",
+              "title": "The Matrix (1999) - Full cast & crew - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 4,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "The Matrix",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 5,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "The Matrix",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 6,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Castle in the Sky",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 7,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Encanto",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 8,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Howl's Moving Castle",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 9,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Castle in the Sky",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 10,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Encanto",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            },
+            {
+              "rank": 11,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Howl's Moving Castle",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:18:55.471900"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_best_picture_2000",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          false,
+          "Missing: american beauty"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 201 >= 50"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'info', got 'comparison'"
+        ]
+      ],
+      "actual_response": "The movie that won the Academy Award for Best Picture in 2000 was \"Gladiator.\" It won five awards at the 73rd Academy Awards. This information is confirmed by Tier A sources such as IMDb and Wikipedia.",
+      "actual_type": "comparison",
+      "request_id": "545fa4bf-7d41-4d4c-bc8a-9a8525950551",
+      "execution_time_ms": 7014.351606369019,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: 73rd Academy Awards - Wikipedia\nURL: https://en.wikipedia.org/wiki/73rd_Academy_Awards\nContent: Gladiator \"Gladiator (2000 film)\") won five awards, including Best Picture. Other winners included Crouching Tiger, Hidden Dragon and Traffic \"Traffic (2000 film)\") with four awards and Almost Famous, Big Mama \"Big Mama (film)\"), Erin Brockovich \"Erin Brockovich (film)\"), Father and Daughter \"Father and Daughter (film)\"), How the Grinch Stole Christmas \"How the Grinch Stole Christmas (2000 film)\"), Into the Arms of Strangers: Stories of the Kindertransport, Pollock \"Pollock (film)\"), Quiero Ser \n\n[2] Source: Tavily (Tier A)\nTitle: 72nd Academy Awards Best Picture 2000 - IMDb\nURL: https://www.imdb.com/list/ls021529292/\nContent: # 72nd Academy Awards Best Picture 2000\n\nKevin Spacey, Thora Birch, and Mena Suvari in American Beauty (1999)\n\n### 1. American Beauty\n\nCharlize Theron and Tobey Maguire in The Cider House Rules (1999)\n\n### 2. The Cider House Rules\n\nMovie Poster\n\n### 3. The Green Mile\n\nRussell Crowe and Al Pacino in The Insider (1999)\n\n### 4. The Insider\n\nHaley Joel Osment in The Sixth Sense (1999)\n\n### 5. The Sixth Sense\n\n### More to explore\n\n### Recently viewed\n\nGet the IMDb App\n\n\u00a9 1990-2025 by IMDb.com, Inc.\n\n[3] Source: Tavily Answer (Tier UNKNOWN)\nTitle: Tavily Answer\nContent: The movie that won the Academy Award for Best Picture in 2000 is Gladiator. It won five awards at the 73rd Academy Awards.\n\n[4] Source: Tavily (Tier UNKNOWN)\nTitle: Academy Awards\u00ae Winners (2000 - 2009) - Filmsite.org\nURL: https://www.filmsite.org/oscars00.html\nContent: | 2000 Filmsite's Greatest Films of 2000   |  |  | Best Picture | | GLADIATOR (2000) | Chocolat (2000, UK/US) | Crouching Tiger, Hidden Dragon (2000, US/HK/China/Taiwan) (aka Wo Hu Cang Long) | Erin Brockovich (2000) | Traffic (2000, Germ./US) |   Actor:  RUSSELL CROWE in \"Gladiator,\" Javier Bardem in \"Before Night Falls,\" Tom Hanks in \"Cast Away,\" Ed Harris in \"Pollock,\" Geoffrey Rush in \"Quills\"   Actress:   JULIA ROBERTS in \"Erin Brockovich,\" Joan Allen in \"The Contender,\" Juliette Binoche [.\n\n[5] Source: Tavily (Tier UNKNOWN)\nTitle: Best picture winners list: Every single movie to win top Oscar\nURL: https://6abc.com/post/oscar-best-picture-winners-list-heres-every-movie-win/15874643/\nContent: Few sequels are nominated for best picture, and only two have won: \"The Godfather Part II\" (1974) and \"Lord of the Rings: Return of the King\" (2003). [...] 24/7 LivePhiladelphiaPennsylvaniaNew JerseyDelaware\n\n# Best picture winners list: Every single movie to win top Oscar\n\n\"Titanic\" and \"All About Eve\" top the list as the most-nominated movies to win best picture, with 14 nods each.\n\nThursday, February 27, 2025\n\nLOS ANGELES -- In the Oscars' nearly 100-year history, the Academy has nominated 61\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Which movie won the Academy Award for Best Picture in 2000?",
+      "searches": [
+        {
+          "query": "Which movie won the Academy Award for Best Picture in 2000?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/73rd_Academy_Awards",
+              "title": "73rd Academy Awards - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:19:02.790374"
+            },
+            {
+              "rank": 2,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls021529292/",
+              "title": "72nd Academy Awards Best Picture 2000 - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:19:02.790374"
+            },
+            {
+              "rank": 3,
+              "source": "Tavily Answer",
+              "url": "",
+              "title": "Tavily Answer",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:19:02.790374"
+            },
+            {
+              "rank": 4,
+              "source": "Tavily",
+              "url": "https://www.filmsite.org/oscars00.html",
+              "title": "Academy Awards\u00ae Winners (2000 - 2009) - Filmsite.org",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:19:02.790374"
+            },
+            {
+              "rank": 5,
+              "source": "Tavily",
+              "url": "https://6abc.com/post/oscar-best-picture-winners-list-heres-every-movie-win/15874643/",
+              "title": "Best picture winners list: Every single movie to win top Oscar",
+              "published_at": null,
+              "last_updated_at": "2025-12-18T18:19:02.790374"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    }
+  ],
+  "prompt_version": "v4",
+  "prompt_text": "You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.\n\nDATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.\n\nSPOILERS: Default = no spoilers (themes/setup only). If user requests spoilers, start with \"\u26a0\ufe0f SPOILER WARNING: [Film Title]\" and explain significance.\n\nRECOMMENDATIONS: Reference user preferences \u2192 explain connections (themes/genres/directors/actors) \u2192 provide variety (genres/eras/countries, known + hidden gems) \u2192 be specific about similarities and uniqueness.\n\nSTYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. Adapt complexity to query.\n\nUNCERTAINTY: Distinguish \"not available\" vs \"don't know\", \"sources conflict\" vs \"unsure\". Offer to search further.\n\nRESPONSES: Lead with current info \u2192 cite throughout \u2192 distinguish facts/rumors/speculation \u2192 organize clearly \u2192 add context \u2192 offer follow-up."
+}

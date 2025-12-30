@@ -3,10 +3,40 @@ Evidence formatter for CineMind.
 Standardizes evidence formatting: deduplication, snippet length limits, user-friendly source labels.
 """
 import logging
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple
 from urllib.parse import urlparse
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FormattedEvidenceItem:
+    """Metadata for a single formatted evidence item."""
+    url: str
+    title: str
+    source_label: str
+    year: Optional[int]
+    snippet_len: int
+    index: int  # 1-based index in the formatted output
+
+
+@dataclass
+class EvidenceFormatResult:
+    """Structured result from evidence formatting."""
+    text: str  # The formatted evidence string (for backward compatibility)
+    items: List[FormattedEvidenceItem] = field(default_factory=list)
+    counts: Dict[str, int] = field(default_factory=lambda: {"before": 0, "after": 0})
+    max_snippet_len: int = 0
+    dedupe_removed: int = 0
+    
+    def __str__(self) -> str:
+        """Return the formatted text for backward compatibility."""
+        return self.text
+    
+    def __len__(self) -> int:
+        """Return length of formatted text."""
+        return len(self.text)
 
 
 class EvidenceFormatter:
@@ -26,7 +56,7 @@ class EvidenceFormatter:
         self.max_snippet_length = max_snippet_length
         self.max_items = max_items
     
-    def format(self, evidence_bundle) -> str:
+    def format(self, evidence_bundle) -> EvidenceFormatResult:
         """
         Format evidence bundle for user message.
         
@@ -34,28 +64,50 @@ class EvidenceFormatter:
             evidence_bundle: EvidenceBundle with search_results and verified_facts
         
         Returns:
-            Formatted evidence string for inclusion in user message
+            EvidenceFormatResult with formatted text and metadata
         """
         if not evidence_bundle.search_results:
-            return ""
+            return EvidenceFormatResult(
+                text="",
+                items=[],
+                counts={"before": 0, "after": 0},
+                max_snippet_len=0,
+                dedupe_removed=0
+            )
+        
+        # Track counts before deduplication
+        before_count = len(evidence_bundle.search_results)
         
         # Deduplicate and format search results
         deduplicated_results = self._deduplicate(evidence_bundle.search_results)
+        after_count = len(deduplicated_results)
+        dedupe_removed = before_count - after_count
         
         # Format each item with length limits and user-friendly labels
-        formatted_items = []
-        for i, result in enumerate(deduplicated_results[:self.max_items], 1):
-            formatted_item = self._format_item(result, i)
-            if formatted_item:
-                formatted_items.append(formatted_item)
+        formatted_item_strings = []
+        formatted_item_metadata = []
+        max_snippet_len = 0
         
-        if not formatted_items:
-            return ""
+        for i, result in enumerate(deduplicated_results[:self.max_items], 1):
+            formatted_item_text, item_metadata = self._format_item_with_metadata(result, i)
+            if formatted_item_text and item_metadata:
+                formatted_item_strings.append(formatted_item_text)
+                formatted_item_metadata.append(item_metadata)
+                max_snippet_len = max(max_snippet_len, item_metadata.snippet_len)
+        
+        if not formatted_item_strings:
+            return EvidenceFormatResult(
+                text="",
+                items=[],
+                counts={"before": before_count, "after": 0},
+                max_snippet_len=0,
+                dedupe_removed=dedupe_removed
+            )
         
         # Build evidence section
         evidence_text = "\n\nEVIDENCE:\n"
         evidence_text += "=" * 60 + "\n"
-        evidence_text += "\n".join(formatted_items)
+        evidence_text += "\n".join(formatted_item_strings)
         
         # Add verified facts if available
         if evidence_bundle.verified_facts:
@@ -68,7 +120,13 @@ class EvidenceFormatter:
                 for item in verified_items[:5]:  # Limit to top 5
                     evidence_text += f"- {item}\n"
         
-        return evidence_text
+        return EvidenceFormatResult(
+            text=evidence_text,
+            items=formatted_item_metadata,
+            counts={"before": before_count, "after": len(formatted_item_metadata)},
+            max_snippet_len=max_snippet_len,
+            dedupe_removed=dedupe_removed
+        )
     
     def _deduplicate(self, search_results: List[Dict]) -> List[Dict]:
         """
@@ -164,18 +222,50 @@ class EvidenceFormatter:
         
         Returns:
             Formatted string for this item, or empty string if invalid
+        
+        Note: This is a backward compatibility wrapper around _format_item_with_metadata
+        """
+        formatted_text, _ = self._format_item_with_metadata(result, index)
+        return formatted_text
+    
+    def _format_item_with_metadata(self, result: Dict, index: int) -> Tuple[str, Optional[FormattedEvidenceItem]]:
+        """
+        Format a single evidence item with length limits and user-friendly labels.
+        
+        Args:
+            result: Search result dict
+            index: Item index (1-based)
+        
+        Returns:
+            Tuple of (formatted_string, FormattedEvidenceItem metadata)
+            Returns ("", None) if item is invalid (no content)
         """
         title = result.get("title", "Unknown").strip()
         url = result.get("url", "").strip()
         content = result.get("content", "").strip()
         source = result.get("source", "unknown")
+        year = result.get("year") or result.get("release_year")
         
-        # Skip items with no content
+        # Skip items with no content - return None for metadata
         if not content:
-            return ""
+            return "", None
         
         # Limit snippet length
         content_snippet = self._truncate_snippet(content, self.max_snippet_length)
+        snippet_len = len(content_snippet)
+        
+        # Add user-friendly source label
+        source_label = self._format_source_label(source, url)
+        
+        # Create metadata
+        metadata = FormattedEvidenceItem(
+            url=url,
+            title=title,
+            source_label=source_label,
+            year=year,
+            snippet_len=snippet_len,
+            index=index
+        )
         
         # Format item
         item_lines = []
@@ -186,7 +276,6 @@ class EvidenceFormatter:
             item_lines.append(f"URL: {url}")
         
         # Add user-friendly source label
-        source_label = self._format_source_label(source, url)
         if source_label:
             item_lines.append(f"Source: {source_label}")
         
@@ -194,7 +283,8 @@ class EvidenceFormatter:
         item_lines.append(f"Content:\n{content_snippet}")
         item_lines.append("-" * 60)
         
-        return "\n".join(item_lines)
+        formatted_text = "\n".join(item_lines)
+        return formatted_text, metadata
     
     def _truncate_snippet(self, content: str, max_length: int) -> str:
         """

@@ -1,0 +1,53 @@
+name: deduplication_test
+user_query: Who directed The Godfather?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - The Godfather
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0068646/
+  title: The Godfather
+  content: The Godfather (1972) was directed by Francis Ford Coppola.
+  year: 1972
+  tier: A
+- source: tavily
+  url: https://www.imdb.com/title/tt0068646/
+  title: The Godfather
+  content: The Godfather (1972) was directed by Francis Ford Coppola. It stars Marlon
+    Brando and Al Pacino.
+  year: 1972
+  tier: B
+- source: tavily
+  url: https://en.wikipedia.org/wiki/The_Godfather
+  title: The Godfather - Wikipedia
+  content: The Godfather is a 1972 American crime film directed by Francis Ford Coppola.
+  year: 1972
+  tier: B
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - director
+    - The Godfather
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: The Godfather was directed by Francis Ford Coppola.

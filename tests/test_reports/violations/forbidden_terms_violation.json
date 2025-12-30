@@ -1,0 +1,31 @@
+{
+  "scenario_name": "forbidden_terms_violation",
+  "template_id": "director_info",
+  "user_query": "Who directed The Matrix?",
+  "violations": [
+    {
+      "type": "forbidden_terms",
+      "message": "Forbidden term detected: 'Tier'"
+    },
+    {
+      "type": "forbidden_terms",
+      "message": "Forbidden term detected: 'Tier A'"
+    },
+    {
+      "type": "forbidden_terms",
+      "message": "Forbidden term detected: 'dataset'"
+    },
+    {
+      "type": "forbidden_terms",
+      "message": "Forbidden term detected: 'Kaggle'"
+    }
+  ],
+  "violation_types": [
+    "forbidden_terms"
+  ],
+  "violation_count": 4,
+  "offending_text": "The Matrix was directed by the Wachowskis according to Tier A Kaggle dataset.",
+  "fixed_text": "The Matrix was directed by the Wachowskis according to structured data data source.",
+  "repair_instruction": null,
+  "timestamp": "2025-12-30T11:24:34"
+}

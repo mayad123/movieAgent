@@ -1,0 +1,26 @@
+{
+  "timestamp": "2025-12-30T11:24:34",
+  "total_scenarios_with_violations": 2,
+  "scenarios": [
+    {
+      "scenario_name": "forbidden_terms_violation",
+      "template_id": "director_info",
+      "user_query": "Who directed The Matrix?",
+      "violation_types": [
+        "forbidden_terms"
+      ],
+      "violation_count": 4,
+      "artifact_path": "violations\\forbidden_terms_violation.json"
+    },
+    {
+      "scenario_name": "verbosity_violation",
+      "template_id": "director_info",
+      "user_query": "Who directed The Matrix?",
+      "violation_types": [
+        "verbosity"
+      ],
+      "violation_count": 2,
+      "artifact_path": "violations\\verbosity_violation.json"
+    }
+  ]
+}

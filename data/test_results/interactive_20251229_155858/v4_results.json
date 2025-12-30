@@ -1,0 +1,336 @@
+{
+  "timestamp": "2025-12-29T15:58:58.427003",
+  "summary": {
+    "total_tests": 3,
+    "passed": 3,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_execution_time_ms": 9098.777294158936
+  },
+  "results": [
+    {
+      "test_name": "simple_fact_inception_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 187 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The 2010 mind-bending sci-fi film \"Inception\" was directed by Christopher Nolan. This information is confirmed and sourced from Tier A source - IMDb: https://www.imdb.com/title/tt1375666/",
+      "actual_type": "info",
+      "request_id": "19aa66d2-d228-4316-b47b-e63ac314e475",
+      "execution_time_ms": 13538.769721984863,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: Film director\nURL: https://en.wikipedia.org/wiki/Film_director\nContent:\nA film director or filmmaker is a person who controls a film's artistic and dramatic aspects and visualizes the screenplay (or script) while guiding the film crew and actors in the fulfillment of that vision. The director has a key role in choosing the cast members \"Casting (performing arts)\"), production design and all the creative aspects of filmmaking in cooperation with the producer. [...] Under European Union law, the film director is considered the \"author\" or one of the authors of a film,\n\n[2] Source: Tavily (Tier A)\nTitle: The Who - Wikipedia\nURL: https://en.wikipedia.org/wiki/The_Who\nContent:\nBy 1974, work had begun in earnest on a Tommy film \"Tommy (1975 film)\"). Stigwood suggested Ken Russell as director, whose previous work Townshend had admired. The film featured a star-studded cast, including the band members. David Essex auditioned for the title role, but the band persuaded Daltrey to take it. The cast included Ann-Margret, Oliver Reed, Eric Clapton, Tina Turner, Elton John and Jack Nicholson. Townshend and Entwistle worked on the soundtrack for most of the year, handling the [\n\n[3] Source: Tavily (Tier A)\nTitle: Tommy (1975 film)\nURL: https://en.wikipedia.org/wiki/Tommy_(1975_film)\nContent:\nThe film holds a 72% approval rating on review aggregator website Rotten Tomatoes, based on 88 reviews, with an average grade of 6.90/10. The critical consensus reads: \"Tommy is as erratic and propulsive as a game of pinball, incorporating the Who's songs into an irreverent odyssey with the visual imagination that only director Ken Russell can conjure.\" [...] Russell recalled that Townshend initially baulked at Russell's wish to have the Who performing behind Elton in the \"Pinball Wizard\" sequen\n\n[4] Source: Tavily (Tier A)\nTitle: List of The Who band members - Wikipedia\nURL: https://en.wikipedia.org/wiki/List_of_The_Who_band_members\nContent:\n| The Who (2019\u20132022) |  Roger Daltrey \u2013 lead vocals, rhythm guitar, harmonica  Pete Townshend \u2013 lead guitar, backing and lead vocals   with    Zak Starkey \u2013 drums  Simon Townshend \u2013 rhythm guitar, backing vocals  Loren Gold \u2013 keyboards, backing vocals  Jon Button \u2013 bass, backing vocals  Billy Nicholls \u2013 backing vocals, musical director  Katie Jacoby \u2013 lead violin  Audrey Q. Snyder \u2013 lead cello  Emily Marshall \u2013 keyboards, associate conductor  Keith Levenson \u2013 conductor |  Who \"Who (album)\") [..\n\n[5] Source: Tavily (Tier A)\nTitle: Robert Zemeckis\nURL: https://en.wikipedia.org/wiki/Robert_Zemeckis\nContent:\n| C\u00e9sar Award | 1988 | Best Foreign Film | Who Framed Roger Rabbit | Nominated |\n| Chicago Film Critics Association | 1985 | Best Director | Won |\n| 1994 | Forrest Gump | Nominated |\n| 2000 | Cast Away | Nominated |\n| Daytime Emmy Award | 1997 | Outstanding Game Show | Secrets of the Cryptkeeper's Haunted House | Nominated |\n| Directors Guild of America | 1989 | Outstanding Directing - Feature Film | Who Framed Roger Rabbit | Nominated |\n| 1994 | Forrest Gump | Won | [...] Bertolucci (1987)  Bar\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Who directed the 2010 mind-bending sci-fi film Inception?",
+      "searches": [
+        {
+          "query": "Who directed the 2010 mind-bending sci-fi film Inception?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Film_director",
+              "title": "Film director",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 2,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Who",
+              "title": "The Who - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 3,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Tommy_(1975_film)",
+              "title": "Tommy (1975 film)",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 4,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/List_of_The_Who_band_members",
+              "title": "List of The Who band members - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 5,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Oliver_Stone",
+              "title": "Oliver Stone",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 6,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Robert_Zemeckis",
+              "title": "Robert Zemeckis",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 7,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm1277963/",
+              "title": "The Who - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 8,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls022909506/",
+              "title": "Modern Directors Who Work in Multiple Genres",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 9,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm1277963/",
+              "title": "The Who - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 10,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt30851998/",
+              "title": "Who? (2024) - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 11,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls051539272/",
+              "title": "50 Greatest Horror Directors",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            },
+            {
+              "rank": 12,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls071439230/",
+              "title": "Best 50 Directors of the World",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:43.286648"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_dark_knight_joker",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 534 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "Heath Ledger won a posthumous Oscar for his portrayal of the Joker in the 2008 film \"The Dark Knight.\" Ledger's performance as the Joker was widely acclaimed and earned him the Academy Award for Best Supporting Actor. Ledger tragically passed away before the film's release, and his portrayal of the iconic character remains one of the most memorable in cinematic history. You can find more information about Heath Ledger and his accolades on his Wikipedia page: [Heath Ledger - Wikipedia](https://en.wikipedia.org/wiki/Heath_Ledger).",
+      "actual_type": "info",
+      "request_id": "69741120-876c-4ecb-afad-b8cd94b2111c",
+      "execution_time_ms": 9600.645780563354,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: Heath Ledger\nURL: https://en.wikipedia.org/wiki/Heath_Ledger\nContent:\nIn his penultimate film role, Ledger played the Joker \"Joker (The Dark Knight)\") in Christopher Nolan's 2008 film The Dark Knight, which was released nearly six months after his death. While working on the film in London, Ledger told Sarah Lyall in their New York Times interview that he viewed The Dark Knight's Joker as a \"psychopathic, mass murdering, schizophrenic clown with zero empathy\". For his performance in The Dark Knight, Ledger posthumously won the Academy Award for Best Supporting [..\n\n[2] Source: Tavily (Tier A)\nTitle: List of awards and nominations received by Heath Ledger - Wikipedia\nURL: https://en.wikipedia.org/wiki/List_of_awards_and_nominations_received_by_Heath_Ledger\nContent:\nFollowing his death on 22 January 2008, Ledger received numerous posthumous awards and honours. He shared the 2007 Independent Spirit Robert Altman Award with the rest of the ensemble cast for the 2007 biographical film I'm Not There. In his penultimate film performance, Ledger was nominated and awarded for his portrayal of the Joker \"Joker (The Dark Knight)\") in The Dark Knight (2008). His wins include an Academy Award, BAFTA, Golden Globe Award, and Screen Actors Guild Award for Best [...] | Y\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Which actor won a posthumous Oscar for his portrayal of the Joker in the 2008 film The Dark Knight?",
+      "searches": [
+        {
+          "query": "Which actor won a posthumous Oscar for his portrayal of the Joker in the 2008 film The Dark Knight?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Heath_Ledger",
+              "title": "Heath Ledger",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:52.164923"
+            },
+            {
+              "rank": 2,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/List_of_awards_and_nominations_received_by_Heath_Ledger",
+              "title": "List of awards and nominations received by Heath Ledger - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:52.164923"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_no_country_directors",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 511 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The 2007 Best Picture winner \"No Country for Old Men\" was directed by Joel and Ethan Coen. The Coen brothers are renowned filmmakers known for their distinctive style and have received critical acclaim for their works across various genres. \"No Country for Old Men\" is a neo-Western crime thriller adapted from Cormac McCarthy's novel of the same name and is considered one of the defining films in their impressive filmography.\n\nSources:\n- Wikipedia: https://en.wikipedia.org/wiki/No_Country_for_Old_Men_(film)",
+      "actual_type": "info",
+      "request_id": "fc53f474-a41c-4c8f-ade4-65f2ded1c189",
+      "execution_time_ms": 4156.916379928589,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n\n[1] Source: Tavily (Tier A)\nTitle: Film director\nURL: https://en.wikipedia.org/wiki/Film_director\nContent:\nA film director or filmmaker is a person who controls a film's artistic and dramatic aspects and visualizes the screenplay (or script) while guiding the film crew and actors in the fulfillment of that vision. The director has a key role in choosing the cast members \"Casting (performing arts)\"), production design and all the creative aspects of filmmaking in cooperation with the producer. [...] Under European Union law, the film director is considered the \"author\" or one of the authors of a film,\n\n[2] Source: Tavily (Tier A)\nTitle: The Who - Wikipedia\nURL: https://en.wikipedia.org/wiki/The_Who\nContent:\nBy 1974, work had begun in earnest on a Tommy film \"Tommy (1975 film)\"). Stigwood suggested Ken Russell as director, whose previous work Townshend had admired. The film featured a star-studded cast, including the band members. David Essex auditioned for the title role, but the band persuaded Daltrey to take it. The cast included Ann-Margret, Oliver Reed, Eric Clapton, Tina Turner, Elton John and Jack Nicholson. Townshend and Entwistle worked on the soundtrack for most of the year, handling the [\n\n[3] Source: Tavily (Tier A)\nTitle: Tommy (1975 film)\nURL: https://en.wikipedia.org/wiki/Tommy_(1975_film)\nContent:\nThe film holds a 72% approval rating on review aggregator website Rotten Tomatoes, based on 88 reviews, with an average grade of 6.90/10. The critical consensus reads: \"Tommy is as erratic and propulsive as a game of pinball, incorporating the Who's songs into an irreverent odyssey with the visual imagination that only director Ken Russell can conjure.\" [...] Russell recalled that Townshend initially baulked at Russell's wish to have the Who performing behind Elton in the \"Pinball Wizard\" sequen\n\n[4] Source: Tavily (Tier A)\nTitle: List of The Who band members - Wikipedia\nURL: https://en.wikipedia.org/wiki/List_of_The_Who_band_members\nContent:\n| The Who (2019\u20132022) |  Roger Daltrey \u2013 lead vocals, rhythm guitar, harmonica  Pete Townshend \u2013 lead guitar, backing and lead vocals   with    Zak Starkey \u2013 drums  Simon Townshend \u2013 rhythm guitar, backing vocals  Loren Gold \u2013 keyboards, backing vocals  Jon Button \u2013 bass, backing vocals  Billy Nicholls \u2013 backing vocals, musical director  Katie Jacoby \u2013 lead violin  Audrey Q. Snyder \u2013 lead cello  Emily Marshall \u2013 keyboards, associate conductor  Keith Levenson \u2013 conductor |  Who \"Who (album)\") [..\n\n[5] Source: Tavily (Tier A)\nTitle: Oliver Stone\nURL: https://en.wikipedia.org/wiki/Oliver_Stone\nContent:\n(1989), receiving Academy Awards for Best Director for both films, the former of which also won Best Picture. He also directed Salvador \"Salvador (film)\") (1986), Wall Street \"Wall Street (1987 film)\") (1987) and its sequel Wall Street: Money Never Sleeps (2010), The Doors \"The Doors (film)\") (1991), JFK \"JFK (film)\") (1991), Heaven & Earth \"Heaven & Earth (1993 film)\") (1993), Natural Born Killers (1994), Nixon \"Nixon (film)\") (1995), Any Given Sunday (1999), W. \"W. (film)\") (2008) and Snowden\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Who directed the 2007 Best Picture winner No Country for Old Men?",
+      "searches": [
+        {
+          "query": "Who directed the 2007 Best Picture winner No Country for Old Men?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Film_director",
+              "title": "Film director",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 2,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/The_Who",
+              "title": "The Who - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 3,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Tommy_(1975_film)",
+              "title": "Tommy (1975 film)",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 4,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/List_of_The_Who_band_members",
+              "title": "List of The Who band members - Wikipedia",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 5,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Oliver_Stone",
+              "title": "Oliver Stone",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 6,
+              "source": "Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Robert_Zemeckis",
+              "title": "Robert Zemeckis",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 7,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm1277963/",
+              "title": "The Who - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 8,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls022909506/",
+              "title": "Modern Directors Who Work in Multiple Genres",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 9,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/name/nm1277963/",
+              "title": "The Who - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 10,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/title/tt30851998/",
+              "title": "Who? (2024) - IMDb",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 11,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls051539272/",
+              "title": "50 Greatest Horror Directors",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            },
+            {
+              "rank": 12,
+              "source": "IMDb",
+              "url": "https://www.imdb.com/list/ls071439230/",
+              "title": "Best 50 Directors of the World",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T15:58:56.389777"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    }
+  ],
+  "prompt_version": "v4",
+  "prompt_text": "You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.\n\nDATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.\n\nSPOILERS: Default = no spoilers (themes/setup only). If user requests spoilers, start with \"\u26a0\ufe0f SPOILER WARNING: [Film Title]\" and explain significance.\n\nRECOMMENDATIONS: Reference user preferences \u2192 explain connections (themes/genres/directors/actors) \u2192 provide variety (genres/eras/countries, known + hidden gems) \u2192 be specific about similarities and uniqueness.\n\nSTYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. Adapt complexity to query.\n\nUNCERTAINTY: Distinguish \"not available\" vs \"don't know\", \"sources conflict\" vs \"unsure\". Offer to search further.\n\nRESPONSES: Lead with current info \u2192 cite throughout \u2192 distinguish facts/rumors/speculation \u2192 organize clearly \u2192 add context \u2192 offer follow-up."
+}

@@ -1,0 +1,42 @@
+name: availability_inception
+user_query: Can I watch Inception online right now?
+request_plan:
+  intent: availability
+  request_type: info
+  entities_typed:
+    movies:
+    - Inception
+    people: []
+  need_freshness: true
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.justwatch.com/us/movie/inception
+  title: Inception - Current Availability
+  content: As of December 2024, Inception is available on Netflix and for purchase
+    on Amazon Prime Video.
+  tier: B
+expected:
+  template_id: availability
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - Inception
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: As of December 2024, Inception is available on Netflix and
+    for purchase on Amazon Prime Video.

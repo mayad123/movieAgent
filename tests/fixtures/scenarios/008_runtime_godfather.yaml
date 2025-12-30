@@ -1,0 +1,40 @@
+name: runtime_godfather
+user_query: How long is The Godfather?
+request_plan:
+  intent: runtime
+  request_type: info
+  entities_typed:
+    movies:
+    - The Godfather
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0068646/
+  title: The Godfather
+  content: The Godfather (1972) has a runtime of 175 minutes (2 hours 55 minutes).
+  year: 1972
+  tier: A
+expected:
+  template_id: runtime
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - runtime
+    - The Godfather
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: The Godfather has a runtime of 175 minutes (2 hours 55 minutes).

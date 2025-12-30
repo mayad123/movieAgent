@@ -1,0 +1,41 @@
+name: general_info_fight_club
+user_query: Tell me about Fight Club.
+request_plan:
+  intent: general_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Fight Club
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0137523/
+  title: Fight Club
+  content: Fight Club (1999) is a psychological thriller directed by David Fincher,
+    starring Brad Pitt and Edward Norton.
+  year: 1999
+  tier: A
+expected:
+  template_id: general_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - Fight Club
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: Fight Club (1999) is a psychological thriller directed by David
+    Fincher, starring Brad Pitt and Edward Norton.

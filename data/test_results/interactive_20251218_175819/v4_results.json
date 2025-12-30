@@ -1,0 +1,206 @@
+{
+  "timestamp": "2025-12-18T17:58:19.401923",
+  "summary": {
+    "total_tests": 6,
+    "passed": 2,
+    "failed": 4,
+    "pass_rate": 0.3333333333333333,
+    "avg_execution_time_ms": 4803.155938784282
+  },
+  "results": [
+    {
+      "test_name": "fact_check_dark_knight_posthumous",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: yes, won, posthumous, best supporting actor, 2009"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'fact-check', got 'info'"
+        ]
+      ],
+      "actual_response": "Yes, Heath Ledger won an Oscar for Best Supporting Actor for his iconic portrayal of the Joker in \"The Dark Knight.\" The award was posthumously awarded to him at the 81st Academy Awards in 2009. Ledger's performance as the Joker was widely praised by critics and audiences alike, and his win was a significant recognition of his talent and dedication to the role.",
+      "actual_type": "info",
+      "request_id": "5a8ea5f3-83a0-4c22-a056-00716260e447",
+      "execution_time_ms": 5227.059364318848,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Did Heath Ledger win an Oscar for his role as the Joker in The Dark Knight?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "fact_check_lotr_sweep",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          false,
+          "None found. Required one of: clean sweep, won all, tied the record, eleven"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'fact-check', got 'info'"
+        ]
+      ],
+      "actual_response": "\"The Lord of the Rings: The Return of the King\" won 11 Oscars at the 76th Academy Awards in 2004. The awards it received include Best Picture, Best Director for Peter Jackson, Best Adapted Screenplay, Best Original Score, Best Original Song, Best Visual Effects, Best Art Direction, Best Costume Design, Best Makeup, Best Sound Mixing, and Best Film Editing.\n\nSources:\n- Academy Awards Official Website: https://www.oscars.org/oscars/ceremonies/2004",
+      "actual_type": "info",
+      "request_id": "abc4aa12-46a8-4be6-8570-3ae86bb26a5f",
+      "execution_time_ms": 4449.087858200073,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: How many Oscars did The Lord of the Rings: The Return of the King win at the 2004 Academy Awards?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "fact_check_titanic_release",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: yes, december"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'fact-check', got 'release-date'"
+        ]
+      ],
+      "actual_response": "Yes, the movie \"Titanic\" was originally released in 1997. It was directed by James Cameron and starred Leonardo DiCaprio and Kate Winslet in the lead roles. The film went on to become a massive critical and commercial success, winning 11 Academy Awards including Best Picture and Best Director. The release date for Titanic was December 19, 1997, in the United States.\n\nSources:\n- IMDb - Titanic (1997): https://www.imdb.com/title/tt0120338/\n- Wikipedia - Titanic (1997 film): https://en.wikipedia.org/wiki/Titanic_(1997_film)",
+      "actual_type": "release-date",
+      "request_id": "0311b885-e02e-4836-b272-5af1c354470f",
+      "execution_time_ms": 4875.812530517578,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Was the movie Titanic originally released in 1997?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "fact_check_avatar_release",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: december, december 18, james cameron"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'release-date'"
+        ]
+      ],
+      "actual_response": "The first Avatar movie, directed by James Cameron, premiered in theaters on December 18, 2009. It was a highly anticipated film that went on to become one of the highest-grossing movies of all time. The movie's groundbreaking visual effects and 3D technology set a new standard for immersive filmmaking. Would you like to know more about the impact and reception of Avatar?",
+      "actual_type": "release-date",
+      "request_id": "6a43ad09-e23f-473f-98fc-e2a34680a4c2",
+      "execution_time_ms": 3467.0472145080566,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: When did the first Avatar movie premiere in theaters?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "fact_check_star_wars_first",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: new hope, original title, episode iv"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'fact-check', got 'release-date'"
+        ]
+      ],
+      "actual_response": "The original title of the first Star Wars movie released in 1977 was \"Star Wars.\" It was later renamed \"Star Wars: Episode IV - A New Hope\" to fit within the larger Star Wars saga after the subsequent release of sequels. This change occurred in 1981 when the movie was re-released in theaters. The director and creator of the Star Wars franchise is George Lucas. \n\nSources: \n- IMDb: https://www.imdb.com/title/tt0076759/\n- ScreenRant: https://screenrant.com/star-wars-movie-titles-changes-explained/",
+      "actual_type": "release-date",
+      "request_id": "493816fb-1581-4e3d-80be-b27dab1ba483",
+      "execution_time_ms": 6372.725963592529,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: What was the original title of the first Star Wars movie released in 1977?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "fact_check_pulp_fiction_winner",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Found: no, did not win, best original screenplay"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'fact-check'"
+        ]
+      ],
+      "actual_response": "\"Pulp Fiction\" was released in 1994 and was nominated for seven Academy Awards in 1995, including Best Picture. However, it did not win the Best Picture Oscar. The award for Best Picture in 1995 went to \"Forrest Gump,\" directed by Robert Zemeckis. \"Pulp Fiction\" did win the Oscar for Best Original Screenplay for Quentin Tarantino and Roger Avary.",
+      "actual_type": "fact-check",
+      "request_id": "d996363b-d91d-44a2-b99f-e60f5045c0e2",
+      "execution_time_ms": 4427.2027015686035,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Did Pulp Fiction win the Best Picture Oscar in 1995?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    }
+  ],
+  "prompt_version": "v4",
+  "prompt_text": "You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.\n\nDATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.\n\nSPOILERS: Default = no spoilers (themes/setup only). If user requests spoilers, start with \"\u26a0\ufe0f SPOILER WARNING: [Film Title]\" and explain significance.\n\nRECOMMENDATIONS: Reference user preferences \u2192 explain connections (themes/genres/directors/actors) \u2192 provide variety (genres/eras/countries, known + hidden gems) \u2192 be specific about similarities and uniqueness.\n\nSTYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. Adapt complexity to query.\n\nUNCERTAINTY: Distinguish \"not available\" vs \"don't know\", \"sources conflict\" vs \"unsure\". Offer to search further.\n\nRESPONSES: Lead with current info \u2192 cite throughout \u2192 distinguish facts/rumors/speculation \u2192 organize clearly \u2192 add context \u2192 offer follow-up."
+}

@@ -1,0 +1,49 @@
+name: ambiguous_year_king_kong
+user_query: When was King Kong released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - King Kong
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0024216/
+  title: King Kong
+  content: King Kong (1933) is the original film directed by Merian C. Cooper and
+    Ernest B. Schoedsack.
+  year: 1933
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0360717/
+  title: King Kong
+  content: King Kong (2005) is a remake directed by Peter Jackson.
+  year: 2005
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - King Kong
+    - release
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: There are multiple versions of King Kong. The original was
+    released in 1933, and a remake was released in 2005.

@@ -1,0 +1,72 @@
+{
+  "timestamp": "2025-12-30T11:24:34",
+  "summary": {
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "pass_rate": 100.0,
+    "avg_time_ms": 0.29
+  },
+  "by_template_id": {
+    "director_info": {
+      "passed": 8,
+      "failed": 0,
+      "total": 8
+    },
+    "cast_info": {
+      "passed": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "release_date": {
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    "runtime": {
+      "passed": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "general_info": {
+      "passed": 1,
+      "failed": 0,
+      "total": 1
+    },
+    "recommendation": {
+      "passed": 5,
+      "failed": 0,
+      "total": 5
+    },
+    "where_to_watch": {
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    "availability": {
+      "passed": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "comparison": {
+      "passed": 1,
+      "failed": 0,
+      "total": 1
+    }
+  },
+  "top_violations": [
+    {
+      "violation_type": "forbidden_terms",
+      "count": 4
+    },
+    {
+      "violation_type": "verbosity",
+      "count": 2
+    }
+  ],
+  "evidence_stats": {
+    "avg_evidence_items": 1.19,
+    "avg_dedupe_reduction": 1.23,
+    "max_snippet_length": 123
+  }
+}

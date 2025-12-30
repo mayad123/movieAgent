@@ -1,0 +1,92 @@
+{
+  "timestamp": "2025-12-29T16:52:57.953368",
+  "summary": {
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_execution_time_ms": 4043.1814193725586
+  },
+  "results": [
+    {
+      "test_name": "simple_fact_Inside_Out_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 269 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The movie \"Inside Out\" was directed by Pete Docter. This information is confirmed by the Kaggle IMDB Dataset (Tier A), which is based on authoritative structured data from IMDb. Pete Docter is a renowned director known for his work on various successful animated films.",
+      "actual_type": "info",
+      "request_id": "ae21122d-486a-489f-80db-5e7a2cc8c8d0",
+      "execution_time_ms": 4043.1814193725586,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: \n\n=== KAGGLE IMDB DATASET RESULTS ===\n(These results are from the Kaggle IMDB dataset - authoritative structured data)\n\n[1] Source: Kaggle IMDB Dataset (Tier A)\nTitle: Inside Out\nSource: IMDB Dataset (via Kaggle)\nContent:\nDirector: Pete Docter\nYear: 2015\nGenre: Animation\nStar Cast: Pete Docter, Ronnie Del Carmen, Meg Le, Fauve\nRating: 8.1\nMetaScore: 94.0\nDuration: 95.0\nCertificates: PG\n\n[2] Source: Kaggle IMDB Dataset (Tier A)\nTitle: Inside Out 2\nSource: IMDB Dataset (via Kaggle)\nContent:\nDirector: Kelsey Mann\nYear: 2024\nGenre: Animation\nStar Cast: Amy Poehler, Phyllis Smith, Lewis Black\nRating: 7.1\nMetaScore: 66.9\nDuration: 100.0\nCertificates: PG\n\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\nDistinguish between confirmed facts (Tier A) and rumors/speculation.\n\n\nUser Question: Who directed Inside Out?",
+      "searches": [
+        {
+          "query": "Who directed Inside Out?",
+          "results": [
+            {
+              "rank": 1,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Inside Out",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T16:52:56.878079"
+            },
+            {
+              "rank": 2,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Inside Out",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T16:52:56.878079"
+            },
+            {
+              "rank": 3,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Inside Out",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T16:52:56.878079"
+            },
+            {
+              "rank": 4,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Inside Out",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T16:52:56.878079"
+            },
+            {
+              "rank": 5,
+              "source": "Kaggle_imdb",
+              "url": "",
+              "title": "Inside Out 2",
+              "published_at": null,
+              "last_updated_at": "2025-12-29T16:52:56.878079"
+            }
+          ]
+        }
+      ],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    }
+  ],
+  "prompt_version": "v4",
+  "prompt_text": "You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.\n\nDATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.\n\nSPOILERS: Default = no spoilers (themes/setup only). If user requests spoilers, start with \"\u26a0\ufe0f SPOILER WARNING: [Film Title]\" and explain significance.\n\nRECOMMENDATIONS: Reference user preferences \u2192 explain connections (themes/genres/directors/actors) \u2192 provide variety (genres/eras/countries, known + hidden gems) \u2192 be specific about similarities and uniqueness.\n\nSTYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. Adapt complexity to query.\n\nUNCERTAINTY: Distinguish \"not available\" vs \"don't know\", \"sources conflict\" vs \"unsure\". Offer to search further.\n\nRESPONSES: Lead with current info \u2192 cite throughout \u2192 distinguish facts/rumors/speculation \u2192 organize clearly \u2192 add context \u2192 offer follow-up."
+}

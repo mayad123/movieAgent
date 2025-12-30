@@ -1,0 +1,47 @@
+name: recommendation_thriller
+user_query: I liked Inception. What else should I watch?
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies:
+    - Inception
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000002/
+  title: Movies Like Inception
+  content: If you enjoyed Inception, try Interstellar, The Prestige, Shutter Island,
+    and Memento.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - Inception
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: If you enjoyed Inception, try Interstellar, The Prestige, Shutter
+    Island, and Memento. These films all share Christopher Nolan's signature style
+    of complex narratives, mind-bending plots, and psychological depth. Each explores
+    themes of memory, reality, and human perception. The intricate storytelling and
+    visual spectacle make them perfect for fans of Inception's innovative approach.
+    If you appreciated Inception's blend of intellectual challenge and cinematic excellence,
+    these films will likely captivate you.

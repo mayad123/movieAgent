@@ -5,7 +5,7 @@ from .prompt_builder import PromptBuilder, EvidenceBundle, PromptArtifacts
 from .versions import get_prompt_version, PROMPT_VERSIONS, list_versions, compare_versions
 from .templates import ResponseTemplate, get_template, RESPONSE_TEMPLATES, list_all_templates
 from .output_validator import OutputValidator, ValidationResult
-from .evidence_formatter import EvidenceFormatter
+from .evidence_formatter import EvidenceFormatter, EvidenceFormatResult, FormattedEvidenceItem
 
 __all__ = [
     "PromptBuilder",
@@ -21,6 +21,8 @@ __all__ = [
     "list_all_templates",
     "OutputValidator",
     "ValidationResult",
-    "EvidenceFormatter"
+    "EvidenceFormatter",
+    "EvidenceFormatResult",
+    "FormattedEvidenceItem"
 ]
 

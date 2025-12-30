@@ -342,9 +342,9 @@ HARD RULES:
         message_parts = [user_query]
         
         # Use EvidenceFormatter for standardized formatting
-        evidence_text = self.evidence_formatter.format(evidence)
-        if evidence_text:
-            message_parts.append(evidence_text)
+        evidence_result = self.evidence_formatter.format(evidence)
+        if evidence_result.text:
+            message_parts.append(evidence_result.text)
         
         return "\n\n".join(message_parts)
     

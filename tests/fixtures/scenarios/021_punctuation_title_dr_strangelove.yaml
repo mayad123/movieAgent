@@ -1,0 +1,40 @@
+name: punctuation_title_dr_strangelove
+user_query: Who directed Dr. Strangelove?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Dr. Strangelove
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0057012/
+  title: 'Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb'
+  content: Dr. Strangelove (1964) was directed by Stanley Kubrick.
+  year: 1964
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - director
+    - Dr. Strangelove
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: Dr. Strangelove was directed by Stanley Kubrick.

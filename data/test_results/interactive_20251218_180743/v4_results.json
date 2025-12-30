@@ -1,0 +1,260 @@
+{
+  "timestamp": "2025-12-18T18:07:43.924172",
+  "summary": {
+    "total_tests": 8,
+    "passed": 6,
+    "failed": 2,
+    "pass_rate": 0.75,
+    "avg_execution_time_ms": 3527.978301048279
+  },
+  "results": [
+    {
+      "test_name": "simple_fact_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 478 >= 50"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "\"Prisoners\" was directed by Denis Villeneuve. The film was released in 2013 and is a psychological thriller starring Hugh Jackman and Jake Gyllenhaal. Villeneuve is known for his work on other acclaimed films such as \"Sicario,\" \"Arrival,\" and \"Blade Runner 2049.\" \"Prisoners\" received critical acclaim for its direction, performances, and cinematography. \n\nSources:\n- IMDb: https://www.imdb.com/title/tt1392214/\n- Rotten Tomatoes: https://www.rottentomatoes.com/m/prisoners_2013",
+      "actual_type": "info",
+      "request_id": "23cebf89-6f29-4c2e-8836-9f7792b653c1",
+      "execution_time_ms": 5849.444627761841,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Who directed Prisoners?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_release_date",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 416 >= 50"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'info', got 'release-date'"
+        ]
+      ],
+      "actual_response": "\"The Matrix\" was released on March 31, 1999. It is a science fiction action film directed by the Wachowskis and starring Keanu Reeves, Laurence Fishburne, Carrie-Anne Moss, Hugo Weaving, and Joe Pantoliano. The movie was a groundbreaking success in terms of its visual effects, action sequences, and philosophical themes. It went on to become a cultural phenomenon and spawned a franchise with sequels and spin-offs.",
+      "actual_type": "release-date",
+      "request_id": "6fef46fb-bb48-46a3-838f-3e0af990a452",
+      "execution_time_ms": 2879.1074752807617,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: When was The Matrix released?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_fight_club_director",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 420 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The 1999 movie \"Fight Club\" was directed by David Fincher. The film, based on the novel of the same name by Chuck Palahniuk, stars Brad Pitt, Edward Norton, and Helena Bonham Carter. David Fincher is known for his work on other well-known films such as \"Se7en,\" \"The Social Network,\" and \"Gone Girl.\" \"Fight Club\" has since gained a cult following for its unique storytelling, visual style, and thought-provoking themes.",
+      "actual_type": "info",
+      "request_id": "a01b89e9-b4de-4e69-8bf4-82db5af5d00c",
+      "execution_time_ms": 3691.046714782715,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Who directed the 1999 movie Fight Club?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_silence_lambs_lead",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 300 >= 40"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The lead role of Clarice Starling in the film \"The Silence of the Lambs\" was portrayed by actress Jodie Foster. This iconic role earned her critical acclaim and won her the Academy Award for Best Actress. \n\nWould you like to know more about Jodie Foster's performance or any other aspect of the film?",
+      "actual_type": "info",
+      "request_id": "76512805-48b1-440a-bea8-15ad237b6e29",
+      "execution_time_ms": 3359.62176322937,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Who played the lead role of Clarice Starling in The Silence of the Lambs?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_lotr_location",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 1274 >= 30"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The majority of \"The Lord of the Rings\" trilogy was filmed in New Zealand. Director Peter Jackson chose various stunning locations in New Zealand to bring Middle-earth to life on screen. Some of the iconic filming locations include:\n\n1. **Hobbiton**: The village of Hobbiton was built on a farm in Matamata, New Zealand. It has since become a popular tourist attraction.\n\n2. **Mount Doom**: The scenes of Mount Doom were filmed on the slopes of Mount Ngauruhoe, an active volcano in the Tongariro National Park.\n\n3. **Rivendell**: The beautiful Elven city of Rivendell was filmed in Kaitoke Regional Park, near Wellington.\n\n4. **Edoras**: The city of the Rohirrim, Edoras, was constructed on Mount Sunday in the Canterbury region.\n\n5. **Mordor**: The dark land of Mordor was primarily shot in the Rangipo Desert, with additional scenes filmed in the Tongariro National Park.\n\nThese locations, among others, contributed to the epic and immersive feel of Middle-earth in the films. The natural beauty of New Zealand played a significant role in creating the fantastical world of J.R.R. Tolkien's novels on screen.\n\nSources:\n- IMDb - The Lord of the Rings: The Fellowship of the Ring filming locations\n- New Zealand Tourism website - Filming locations for The Lord of the Rings",
+      "actual_type": "info",
+      "request_id": "35ef4a18-ed66-45ae-b8c4-98720a28bcab",
+      "execution_time_ms": 4042.904853820801,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Where was the majority of The Lord of the Rings trilogy filmed?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_schindlers_list_win",
+      "passed": false,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "request_type_match",
+          false,
+          "Expected 'info', got 'comparison'"
+        ]
+      ],
+      "actual_response": "The Academy Award for Best Picture in 1994 went to \"Schindler's List.\" Directed by Steven Spielberg, this powerful film tells the true story of Oskar Schindler, a German businessman who saved the lives of over a thousand Polish-Jewish refugees during the Holocaust. \"Schindler's List\" received critical acclaim for its direction, performances, and emotional impact, ultimately winning seven Oscars at the 66th Academy Awards in 1994. \n\nSources:\n- Academy Awards website: https://www.oscars.org/oscars/ceremonies/1994",
+      "actual_type": "comparison",
+      "request_id": "6515efec-86ce-41a8-abaf-0806208ca666",
+      "execution_time_ms": 3476.1369228363037,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Which movie won the Academy Award for Best Picture in 1994?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_pulp_fiction_writer",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "The screenplay for \"Pulp Fiction\" was written by Quentin Tarantino and Roger Avary. Quentin Tarantino also directed the film, which was released in 1994. The screenplay is known for its non-linear narrative structure and sharp dialogue, which are signature elements of Tarantino's style. \n\nIf you're interested in learning more about the writing process or the impact of the screenplay on the film industry, feel free to ask for additional details.",
+      "actual_type": "info",
+      "request_id": "cc60daaa-2677-4380-906a-4b05c5b8148b",
+      "execution_time_ms": 2300.9893894195557,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: Who wrote the screenplay for Pulp Fiction?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    },
+    {
+      "test_name": "simple_fact_taxi_driver_character",
+      "passed": true,
+      "criteria_results": [
+        [
+          "criterion_1",
+          true,
+          "All required substrings found"
+        ],
+        [
+          "criterion_2",
+          true,
+          "Length 523 >= 30"
+        ],
+        [
+          "request_type_match",
+          true,
+          "Type correctly classified as 'info'"
+        ]
+      ],
+      "actual_response": "In the 1976 film \"Taxi Driver,\" Robert De Niro plays the character Travis Bickle. Directed by Martin Scorsese, the film follows Travis Bickle, a mentally unstable Vietnam War veteran who works as a taxi driver in New York City. Travis becomes increasingly disillusioned with the city's corruption and decides to take matters into his own hands. The character of Travis Bickle has become iconic in cinema history for its complex portrayal of alienation and urban decay.\n\nSource:\n- IMDb: https://www.imdb.com/title/tt0075314/",
+      "actual_type": "info",
+      "request_id": "f40842d6-1879-4d10-8352-b39cfad3fe96",
+      "execution_time_ms": 2624.574661254883,
+      "errors": [],
+      "metadata": {},
+      "prompt_used": "System: You are CineMind, an expert movie analysis and discovery agent.\n\nYour sole domain is movies, including:\n- Films (all countries and eras)\n- Directors, writers, producers\n- Actors and filmographies\n- Genres, themes, cinematography, visual styles\n- Box office, awards, reception\n- Plot summaries (no spoilers unless user explicitly requests)\n- Trivia, behind-the-scenes, production history\n- Comparative analysis\n- Recommendations\n\nYou may NOT answer questions outside film unless it directly supports film understanding.\n\nDATA EXPECTATIONS:\n- Always attempt to use current data when possible\n- Perform live searches (Wikipedia, IMDb, Rotten Tomatoes, Variety, Deadline, YouTube interviews, etc.)\n- Prefer recent updates (cast confirmations, release schedules, festival debuts, awards news)\n- Clearly distinguish between confirmed information, industry rumors, and speculation\n- If internal knowledge conflicts with current data, prioritize external real-time sources\n\nWhen providing information:\n1. Start with the most current/relevant data from real-time searches\n2. Cite your sources\n3. Distinguish facts from rumors\n4. Provide comprehensive but organized responses\n5. Offer additional context when relevant\n\nUser: What is the name of Robert De Niro's character in the 1976 film Taxi Driver?",
+      "searches": [],
+      "model_version": "gpt-3.5-turbo",
+      "prompt_version": "v1",
+      "agent_config_version": "cine_prompt_v1"
+    }
+  ],
+  "prompt_version": "v4",
+  "prompt_text": "You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.\n\nDATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.\n\nSPOILERS: Default = no spoilers (themes/setup only). If user requests spoilers, start with \"\u26a0\ufe0f SPOILER WARNING: [Film Title]\" and explain significance.\n\nRECOMMENDATIONS: Reference user preferences \u2192 explain connections (themes/genres/directors/actors) \u2192 provide variety (genres/eras/countries, known + hidden gems) \u2192 be specific about similarities and uniqueness.\n\nSTYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. Adapt complexity to query.\n\nUNCERTAINTY: Distinguish \"not available\" vs \"don't know\", \"sources conflict\" vs \"unsure\". Offer to search further.\n\nRESPONSES: Lead with current info \u2192 cite throughout \u2192 distinguish facts/rumors/speculation \u2192 organize clearly \u2192 add context \u2192 offer follow-up."
+}

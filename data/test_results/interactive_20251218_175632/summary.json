@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-12-18T17:56:32.304941",
+  "test_count": 6,
+  "versions": {
+    "v4": {
+      "pass_rate": 0.5,
+      "passed": 3,
+      "failed": 3,
+      "avg_time_ms": 5310.8818133672075,
+      "total_tests": 6
+    }
+  },
+  "comparison": {
+    "best_version": "v4",
+    "best_pass_rate": 0.5
+  }
+}

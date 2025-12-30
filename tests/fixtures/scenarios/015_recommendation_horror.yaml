@@ -1,0 +1,45 @@
+name: recommendation_horror
+user_query: What are good horror movies like Get Out?
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies:
+    - Get Out
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000004/
+  title: Psychological Horror Movies
+  content: Similar films include Us, The Invisible Man, Hereditary, and It Follows.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - Get Out
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: Horror movies similar to Get Out include Us, The Invisible
+    Man, Hereditary, and It Follows. These films all share a focus on psychological
+    horror, social commentary, and atmospheric tension. Each explores deeper themes
+    beyond simple scares. The intelligent approach to horror makes them perfect for
+    fans of Get Out's thought-provoking narrative. If you appreciated Get Out's blend
+    of social commentary and genuine scares, these films will likely engage you.

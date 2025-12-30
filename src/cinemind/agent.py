@@ -34,6 +34,7 @@ from .candidate_extraction import CandidateExtractor
 from .tool_plan import ToolPlanner, ToolPlan
 from .prompting import PromptBuilder, EvidenceBundle, get_template
 from .prompting.output_validator import OutputValidator
+from .llm_client import LLMClient, OpenAILLMClient
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -49,23 +50,31 @@ class CineMind:
     """
     
     def __init__(self, openai_api_key: Optional[str] = None, tavily_api_key: Optional[str] = None,
-                 enable_observability: bool = True):
+                 enable_observability: bool = True, llm_client: Optional[LLMClient] = None):
         """
         Initialize CineMind agent.
         
         Args:
-            openai_api_key: OpenAI API key for LLM
+            openai_api_key: OpenAI API key for LLM (ignored if llm_client is provided)
             tavily_api_key: Tavily API key for real-time search
             enable_observability: Enable request tracking and metrics
+            llm_client: Optional LLM client instance (for dependency injection in tests)
+                       If not provided, creates OpenAI client from api_key
         """
-        if not AsyncOpenAI:
-            raise ImportError("OpenAI library not installed. Install with: pip install openai")
-        
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
-        
-        self.client = AsyncOpenAI(api_key=self.openai_api_key)
+        # Initialize LLM client (support dependency injection for testing)
+        if llm_client:
+            self.client = llm_client
+        else:
+            if not AsyncOpenAI:
+                raise ImportError("OpenAI library not installed. Install with: pip install openai")
+            
+            self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+            if not self.openai_api_key:
+                raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+            
+            # Wrap OpenAI client in adapter
+            openai_client = AsyncOpenAI(api_key=self.openai_api_key)
+            self.client = OpenAILLMClient(openai_client)
         self.search_engine = SearchEngine(tavily_api_key=tavily_api_key)
         
         # Initialize source policy and related components
@@ -372,10 +381,10 @@ class CineMind:
             search_results = []
             source_summary = {}
             verified_facts = []
+            should_skip_tavily = False  # Initialize outside if block to avoid UnboundLocalError
             
             if use_live_data:
                 # Check if we should skip Tavily based on tool plan
-                should_skip_tavily = False
                 skip_reason = ""
                 need_freshness = request_plan.need_freshness if request_plan else False
                 if tool_plan:
@@ -842,26 +851,26 @@ class CineMind:
                         "verbosity_budget": prompt_artifacts.verbosity_budget
                     })
             
-            # Generate response using OpenAI
+            # Generate response using LLM client
             llm_start = time.time()
             try:
                 if tracker:
                     with tracker.time_operation("openai_llm"):
-                        response = await self.client.chat.completions.create(
+                        llm_response = await self.client.chat_completions_create(
                             model=OPENAI_MODEL,
                             messages=messages,
                             temperature=0.7,
                             max_tokens=2000
                         )
                 else:
-                    response = await self.client.chat.completions.create(
+                    llm_response = await self.client.chat_completions_create(
                         model=OPENAI_MODEL,
                         messages=messages,
                         temperature=0.7,
                         max_tokens=2000
                     )
                 
-                agent_response = response.choices[0].message.content
+                agent_response = llm_response.content
                 llm_time_ms = (time.time() - llm_start) * 1000
                 
                 # Validate response against template contract
@@ -879,6 +888,14 @@ class CineMind:
                     )
                     if tracker:
                         tracker.log_metric("validation_violations", len(validation_result.violations))
+                
+                # Extract token usage from initial response (needed for all paths)
+                usage = llm_response.usage or {}
+                token_usage = {
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0)
+                }
                 
                 # Use corrected text if auto-fix was applied, otherwise re-prompt if needed
                 if validation_result.corrected_text:
@@ -901,39 +918,32 @@ class CineMind:
                     # Re-prompt
                     if tracker:
                         with tracker.time_operation("openai_llm_correction"):
-                            correction_response = await self.client.chat.completions.create(
+                            correction_llm_response = await self.client.chat_completions_create(
                                 model=OPENAI_MODEL,
                                 messages=correction_messages,
                                 temperature=0.3,  # Lower temperature for corrections
                                 max_tokens=2000
                             )
                     else:
-                        correction_response = await self.client.chat.completions.create(
+                        correction_llm_response = await self.client.chat_completions_create(
                             model=OPENAI_MODEL,
                             messages=correction_messages,
                             temperature=0.3,
                             max_tokens=2000
                         )
                     
-                    agent_response = correction_response.choices[0].message.content
+                    agent_response = correction_llm_response.content
                     
                     # Update token usage to include correction request
-                    correction_usage = correction_response.usage.__dict__ if correction_response.usage else {}
-                    initial_usage = response.usage.__dict__ if response.usage else {}
+                    correction_usage = correction_llm_response.usage or {}
+                    initial_usage = llm_response.usage or {}
                     token_usage = {
                         "prompt_tokens": initial_usage.get("prompt_tokens", 0) + correction_usage.get("prompt_tokens", 0),
                         "completion_tokens": initial_usage.get("completion_tokens", 0) + correction_usage.get("completion_tokens", 0),
                         "total_tokens": initial_usage.get("total_tokens", 0) + correction_usage.get("total_tokens", 0)
                     }
                     logger.info(f"[{request_id}] Re-prompt completed, using corrected response")
-                else:
-                    # Extract token usage from initial response
-                    usage = response.usage.__dict__ if response.usage else {}
-                    token_usage = {
-                        "prompt_tokens": usage.get("prompt_tokens", 0),
-                        "completion_tokens": usage.get("completion_tokens", 0),
-                        "total_tokens": usage.get("total_tokens", 0)
-                    }
+                # token_usage already defined above
                 
                 cost_usd = calculate_openai_cost(token_usage, OPENAI_MODEL)
                 

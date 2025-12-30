@@ -1,0 +1,62 @@
+name: multi_movie_comparison
+user_query: Compare The Matrix and Inception.
+request_plan:
+  intent: comparison
+  request_type: comparison
+  entities_typed:
+    movies:
+    - The Matrix
+    - Inception
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: comparison
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0133093/
+  title: The Matrix
+  content: The Matrix (1999) is a science fiction action film directed by the Wachowskis.
+  year: 1999
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt1375666/
+  title: Inception
+  content: Inception (2010) is a science fiction heist film directed by Christopher
+    Nolan.
+  year: 2010
+  tier: A
+expected:
+  template_id: comparison
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - The Matrix
+    - Inception
+    - compare
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+  sample_model_output: The Matrix (1999) and Inception (2010) are both groundbreaking
+    science fiction films that explore themes of reality and perception. The Matrix
+    was directed by the Wachowskis and features a dystopian world where humans are
+    trapped in a simulated reality. Inception was directed by Christopher Nolan and
+    delves into the world of dreams and subconscious manipulation. Both films feature
+    innovative visual effects and complex narratives. They raise philosophical questions
+    about the nature of existence and challenge viewers to question what is real.
+    The Matrix uses a more action-oriented approach with martial arts and gunplay,
+    while Inception focuses more on heist elements and dream architecture. Both films
+    have had significant cultural impact and influenced subsequent science fiction
+    cinema. Each film represents a high point in their respective directors' careers
+    and showcases their unique storytelling styles.
