@@ -32,6 +32,8 @@ from .verification import FactVerifier, VerifiedFact
 from .request_plan import RequestPlanner, RequestPlan
 from .candidate_extraction import CandidateExtractor
 from .tool_plan import ToolPlanner, ToolPlan
+from .prompting import PromptBuilder, EvidenceBundle, get_template
+from .prompting.output_validator import OutputValidator
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -76,9 +78,15 @@ class CineMind:
         # Initialize aggregator with source policy
         self.aggregator = MovieDataAggregator(self.search_engine, self.source_policy)
         
-        self.system_prompt = SYSTEM_PROMPT
+        self.system_prompt = SYSTEM_PROMPT  # Kept for backward compatibility, but PromptBuilder is used for generation
         self.agent_name = AGENT_NAME
         self.version = AGENT_VERSION
+        
+        # Initialize prompt builder
+        self.prompt_builder = PromptBuilder()
+        
+        # Initialize output validator
+        self.output_validator = OutputValidator(enable_auto_fix=True)
         
         # Initialize observability
         self.enable_observability = enable_observability
@@ -362,7 +370,6 @@ class CineMind:
             
             # Perform real-time search if requested AND tool plan allows it
             search_results = []
-            search_context = ""
             source_summary = {}
             verified_facts = []
             
@@ -586,6 +593,30 @@ class CineMind:
                                 f"tavily_used=false, fallback_used=false, override_used=false"
                             )
                     
+                    # Assemble routing decision record (single canonical decision object)
+                    routing_decision = self._assemble_routing_decision(
+                        request_id=request_id,
+                        request_plan=request_plan,
+                        structured_intent=structured_intent,
+                        tool_plan=tool_plan,
+                        cache_hit=cache_hit,
+                        movie_info=movie_info,
+                        source_summary=source_summary,
+                        search_results=search_results
+                    )
+                    
+                    # Persist routing decision to DB
+                    if tracker:
+                        tracker.log_metric(
+                            "routing_decision",
+                            1.0,
+                            routing_decision,
+                            metric_type="decision"
+                        )
+                    
+                    # Log compact routing decision summary
+                    self._log_routing_decision_summary(request_id, routing_decision)
+                    
                     # Log metrics for observability (exactly once per request)
                     if tracker and tool_plan:
                         tracker.log_metric("tool_plan_skip_tavily", 1.0 if tool_plan.tool_plan_skip_tavily else 0.0)
@@ -737,14 +768,7 @@ class CineMind:
                                     ))
                                     logger.info(f"[{request_id}] Verified release year: {year} for {movie_title}")
                         
-                        # Store verified facts for use in response generation
-                        if verified_facts:
-                            # Add verified facts to search context for LLM
-                            verified_context = "\n\n=== VERIFIED FACTS (Tier A Sources) ===\n"
-                            for fact in verified_facts:
-                                if fact.verified:
-                                    verified_context += f"- {fact.value} (verified via {fact.source_url})\n"
-                            search_context += verified_context
+                        # Verified facts will be included in EvidenceBundle by PromptBuilder
                     
                     # Step 1: Deduplicate search results
                     deduplicated_results, dedup_stats = self._deduplicate_search_results(search_results)
@@ -779,94 +803,44 @@ class CineMind:
                         for excl in exclusion_reasons[:5]:  # Log first 5 exclusions
                             logger.debug(f"[{request_id}] Excluded: {excl['title']} - {excl['reason']}")
                     
-                    # Format search results for context (prioritize Tier A sources) - only include relevant, deduplicated results
-                    if relevant_results:
-                        # Identify source types (using relevant_results, not raw search_results)
-                        kaggle_results = [r for r in relevant_results if r.get("source") == "kaggle_imdb"]
-                        tavily_results = [r for r in relevant_results if "tavily" in r.get("source", "").lower()]
-                        
-                        # Determine header based on sources
-                        if kaggle_results and not tavily_results:
-                            search_context = "\n\n=== KAGGLE IMDB DATASET RESULTS ===\n"
-                            search_context += "(These results are from the Kaggle IMDB dataset - authoritative structured data)\n"
-                        elif kaggle_results and tavily_results:
-                            search_context = "\n\n=== SEARCH RESULTS (Kaggle Dataset + Tavily) ===\n"
-                        else:
-                            search_context = "\n\n=== REAL-TIME SEARCH RESULTS (Ranked by Source Quality) ===\n"
-                        
-                        # Sort by tier (A first), then by source (Kaggle first if same tier)
-                        tier_order = {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}
-                        def sort_key(result):
-                            tier_val = tier_order.get(result.get("tier", "UNKNOWN"), 3)
-                            source_val = 0 if result.get("source") == "kaggle_imdb" else 1
-                            return (tier_val, source_val, -result.get("score", 0.0))
-                        
-                        sorted_results = sorted(relevant_results, key=sort_key)
-                        
-                        tier_a_count = sum(1 for r in sorted_results if r.get("tier") == "A")
-                        tier_c_count = sum(1 for r in sorted_results if r.get("tier") == "C")
-                        
-                        # Limit to top 5 results for search_context
-                        for i, result in enumerate(sorted_results[:5], 1):
-                            source = result.get("source", "unknown")
-                            tier = result.get("tier", "UNKNOWN")
-                            title = result.get("title", "No title")
-                            # For Kaggle results, content is already well-formatted, allow more length
-                            # For other sources, truncate to 500 chars
-                            raw_content = result.get("content", "")
-                            if source == "kaggle_imdb":
-                                content = raw_content  # Already formatted and truncated in kaggle_search.py
-                            else:
-                                content = raw_content[:500]  # Truncate long content
-                            url = result.get("url", "")
-                            correlation = result.get("correlation")  # Kaggle correlation score
-                            
-                            # Format source name nicely
-                            if source == "kaggle_imdb":
-                                source_display = "Kaggle IMDB Dataset"
-                                if correlation:
-                                    source_display += f" (correlation: {correlation:.2f})"
-                            else:
-                                source_display = source.replace("_", " ").title()
-                            
-                            search_context += f"\n[{i}] Source: {source_display} (Tier {tier})\n"
-                            search_context += f"Title: {title}\n"
-                            if url:
-                                search_context += f"URL: {url}\n"
-                            elif source == "kaggle_imdb":
-                                search_context += f"Source: IMDB Dataset (via Kaggle)\n"
-                            search_context += f"Content:\n{content}\n"
-                        
-                        # Add verification results if available
-                        if verified_facts:
-                            verified_titles = [f.value for f in verified_facts if f.verified]
-                            if verified_titles:
-                                search_context += f"\n\nVERIFIED FACTS (from Tier A sources):\n"
-                                for title in verified_titles:
-                                    search_context += f"- {title}\n"
-                        
-                        search_context += "\nIMPORTANT: Use Tier A sources (IMDb, Wikipedia) for facts.\n"
-                        if tier_c_count > 0:
-                            search_context += f"WARNING: {tier_c_count} Tier C sources found - use only for context, not facts.\n"
-                        search_context += "Distinguish between confirmed facts (Tier A) and rumors/speculation.\n"
-                
                 except Exception as e:
                     if tracker:
                         tracker.log_error(f"Search failed: {e}")
                     logger.error(f"[{request_id}] Search failed: {e}")
-                    search_context = "\n\nNote: Real-time search encountered an error. Providing answer based on training data.\n"
+                    relevant_results = []
+                    verified_facts = []
             
-            # Construct the prompt with search context
-            user_message = user_query
-            if search_context:
-                user_message = search_context + "\n\nUser Question: " + user_query
+            # Build messages using PromptBuilder
+            # Initialize relevant_results if not already defined (for cache hit case)
+            if 'relevant_results' not in locals():
+                relevant_results = []
+            evidence_bundle = EvidenceBundle(
+                search_results=relevant_results if use_live_data and relevant_results else [],
+                verified_facts=verified_facts if use_live_data and verified_facts else None
+            )
             
-            # Construct full prompt (system + user message) for storage
-            full_prompt = f"System: {self.system_prompt}\n\nUser: {user_message}"
+            messages, prompt_artifacts = self.prompt_builder.build_messages(
+                request_plan=request_plan,
+                evidence=evidence_bundle,
+                user_query=user_query,
+                structured_intent=structured_intent
+            )
+            
+            # Construct full prompt for storage (legacy format for observability)
+            system_content = messages[0]["content"] if messages else self.system_prompt
+            user_content = messages[1]["content"] if len(messages) > 1 else user_query
+            full_prompt = f"System: {system_content}\n\nUser: {user_content}"
             
             # Update request with full prompt in database
             if self.observability:
                 self.observability.update_request_prompt(request_id, full_prompt)
+                # Log prompt artifacts
+                if tracker:
+                    tracker.log_metric("prompt_artifacts", 1.0, {
+                        "prompt_version": prompt_artifacts.prompt_version,
+                        "instruction_template_id": prompt_artifacts.instruction_template_id,
+                        "verbosity_budget": prompt_artifacts.verbosity_budget
+                    })
             
             # Generate response using OpenAI
             llm_start = time.time()
@@ -875,20 +849,14 @@ class CineMind:
                     with tracker.time_operation("openai_llm"):
                         response = await self.client.chat.completions.create(
                             model=OPENAI_MODEL,
-                            messages=[
-                                {"role": "system", "content": self.system_prompt},
-                                {"role": "user", "content": user_message}
-                            ],
+                            messages=messages,
                             temperature=0.7,
                             max_tokens=2000
                         )
                 else:
                     response = await self.client.chat.completions.create(
                         model=OPENAI_MODEL,
-                        messages=[
-                            {"role": "system", "content": self.system_prompt},
-                            {"role": "user", "content": user_message}
-                        ],
+                        messages=messages,
                         temperature=0.7,
                         max_tokens=2000
                     )
@@ -896,13 +864,77 @@ class CineMind:
                 agent_response = response.choices[0].message.content
                 llm_time_ms = (time.time() - llm_start) * 1000
                 
-                # Extract token usage and calculate cost
-                usage = response.usage.__dict__ if response.usage else {}
-                token_usage = {
-                    "prompt_tokens": usage.get("prompt_tokens", 0),
-                    "completion_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0)
-                }
+                # Validate response against template contract
+                response_template = get_template(request_plan.request_type, request_plan.intent)
+                validation_result = self.output_validator.validate(
+                    response_text=agent_response,
+                    template=response_template,
+                    need_freshness=request_plan.need_freshness
+                )
+                
+                # Log validation violations
+                if validation_result.has_violations():
+                    logger.warning(
+                        f"[{request_id}] Response validation violations: {validation_result.violations}"
+                    )
+                    if tracker:
+                        tracker.log_metric("validation_violations", len(validation_result.violations))
+                
+                # Use corrected text if auto-fix was applied, otherwise re-prompt if needed
+                if validation_result.corrected_text:
+                    agent_response = validation_result.corrected_text
+                    logger.info(f"[{request_id}] Applied auto-fix for forbidden terms")
+                elif validation_result.requires_reprompt:
+                    # Re-prompt with strict correction instruction
+                    logger.info(f"[{request_id}] Re-prompting due to validation violations")
+                    correction_instruction = self.output_validator.build_correction_instruction(
+                        validation_result.violations,
+                        response_template
+                    )
+                    
+                    # Add correction instruction to messages
+                    correction_messages = messages + [
+                        {"role": "assistant", "content": agent_response},
+                        {"role": "user", "content": correction_instruction}
+                    ]
+                    
+                    # Re-prompt
+                    if tracker:
+                        with tracker.time_operation("openai_llm_correction"):
+                            correction_response = await self.client.chat.completions.create(
+                                model=OPENAI_MODEL,
+                                messages=correction_messages,
+                                temperature=0.3,  # Lower temperature for corrections
+                                max_tokens=2000
+                            )
+                    else:
+                        correction_response = await self.client.chat.completions.create(
+                            model=OPENAI_MODEL,
+                            messages=correction_messages,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    
+                    agent_response = correction_response.choices[0].message.content
+                    
+                    # Update token usage to include correction request
+                    correction_usage = correction_response.usage.__dict__ if correction_response.usage else {}
+                    initial_usage = response.usage.__dict__ if response.usage else {}
+                    token_usage = {
+                        "prompt_tokens": initial_usage.get("prompt_tokens", 0) + correction_usage.get("prompt_tokens", 0),
+                        "completion_tokens": initial_usage.get("completion_tokens", 0) + correction_usage.get("completion_tokens", 0),
+                        "total_tokens": initial_usage.get("total_tokens", 0) + correction_usage.get("total_tokens", 0)
+                    }
+                    logger.info(f"[{request_id}] Re-prompt completed, using corrected response")
+                else:
+                    # Extract token usage from initial response
+                    usage = response.usage.__dict__ if response.usage else {}
+                    token_usage = {
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0)
+                    }
+                
                 cost_usd = calculate_openai_cost(token_usage, OPENAI_MODEL)
                 
                 # Log metrics
@@ -1003,6 +1035,13 @@ class CineMind:
                                         freshness_reason = getattr(structured_intent, 'freshness_reason', None)
                                         freshness_ttl_hours = getattr(structured_intent, 'freshness_ttl_hours', None)
                                     
+                                    # Extract intent signature components for cache keying
+                                    intent = request_plan.intent if request_plan else None
+                                    entities_typed = request_plan.entities_typed if request_plan else None
+                                    constraints = None
+                                    if structured_intent and hasattr(structured_intent, 'constraints'):
+                                        constraints = structured_intent.constraints
+                                    
                                     self.cache.put(
                                         prompt=user_query,
                                         response_text=agent_response,
@@ -1019,7 +1058,11 @@ class CineMind:
                                             "original_cost": cost_usd
                                         },
                                         freshness_reason=freshness_reason,
-                                        freshness_ttl_hours=freshness_ttl_hours
+                                        freshness_ttl_hours=freshness_ttl_hours,
+                                        request_plan=request_plan,
+                                        intent=intent,
+                                        entities_typed=entities_typed,
+                                        constraints=constraints
                                     )
                                 except Exception as e:
                                     logger.warning(f"Failed to cache response: {e}")
@@ -1338,6 +1381,176 @@ class CineMind:
                 })
         
         return relevant, exclusion_reasons
+    
+    def _assemble_routing_decision(
+        self,
+        request_id: str,
+        request_plan,
+        structured_intent,
+        tool_plan,
+        cache_hit,
+        movie_info: Dict,
+        source_summary: Dict,
+        search_results: List[Dict]
+    ) -> Dict:
+        """
+        Assemble routing decision record (single canonical decision object).
+        
+        Returns:
+            Dict with routing decision payload
+        """
+        # Extract request type and intent
+        request_type = None
+        intent = None
+        if request_plan:
+            if hasattr(request_plan, 'to_dict'):
+                plan_dict = request_plan.to_dict()
+            elif isinstance(request_plan, dict):
+                plan_dict = request_plan
+            else:
+                plan_dict = {}
+            request_type = plan_dict.get('request_type')
+            intent = plan_dict.get('intent')
+        
+        # Extract typed entities
+        entities_typed = {"movies": [], "people": []}
+        if structured_intent and hasattr(structured_intent, 'entities'):
+            entities_typed = structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
+        elif request_plan:
+            entities_typed = plan_dict.get('entities_typed', {"movies": [], "people": []})
+        
+        # Extract mentioned_year
+        mentioned_year = None
+        if structured_intent and hasattr(structured_intent, 'mentioned_year'):
+            mentioned_year = structured_intent.mentioned_year
+        
+        # Extract kaggle_query_string (derive if not in movie_info)
+        kaggle_query_string = movie_info.get("kaggle_query_string")
+        if not kaggle_query_string and structured_intent and entities_typed:
+            kaggle_query_string = self.search_engine._derive_kaggle_query_string(
+                "",  # query not needed if we have entities
+                entities_typed,
+                intent or (structured_intent.intent if structured_intent else None)
+            )
+        
+        # Extract Kaggle outcome
+        kaggle_stage_a_candidates = movie_info.get("kaggle_stage_a_candidates", 0)
+        kaggle_max_score = movie_info.get("kaggle_max_score", 0.0)
+        kaggle_threshold = movie_info.get("kaggle_threshold")
+        if kaggle_threshold is None:
+            from .config import KAGGLE_CORRELATION_THRESHOLD
+            kaggle_threshold = KAGGLE_CORRELATION_THRESHOLD
+        
+        # Count Kaggle results used
+        kaggle_results_used = sum(1 for r in search_results if r.get("source") == "kaggle_imdb")
+        
+        # Extract tool plan info
+        skip_tavily = False
+        need_freshness = False
+        freshness_reason = None
+        freshness_ttl_hours = None
+        if tool_plan:
+            skip_tavily = tool_plan.tool_plan_skip_tavily if hasattr(tool_plan, 'tool_plan_skip_tavily') else False
+            need_freshness = tool_plan.need_freshness if hasattr(tool_plan, 'need_freshness') else False
+            freshness_reason = tool_plan.freshness_reason if hasattr(tool_plan, 'freshness_reason') else None
+            freshness_ttl_hours = tool_plan.freshness_ttl_hours if hasattr(tool_plan, 'freshness_ttl_hours') else None
+        elif request_plan:
+            need_freshness = plan_dict.get('need_freshness', False)
+            freshness_reason = plan_dict.get('freshness_reason')
+            freshness_ttl_hours = plan_dict.get('freshness_ttl_hours')
+        
+        # Extract override fields
+        override_used = movie_info.get("override_used", False)
+        override_reason = movie_info.get("override_reason")
+        if tool_plan:
+            override_used = tool_plan.override_used if hasattr(tool_plan, 'override_used') else override_used
+            override_reason = tool_plan.override_reason if hasattr(tool_plan, 'override_reason') else override_reason
+        
+        # Extract final tool usage
+        cache_hit_bool = cache_hit is not None
+        tavily_used = movie_info.get("tavily_used", False)
+        fallback_used = movie_info.get("fallback_used", False)
+        if tool_plan:
+            tavily_used = tool_plan.tavily_used if hasattr(tool_plan, 'tavily_used') else tavily_used
+            fallback_used = tool_plan.fallback_used if hasattr(tool_plan, 'fallback_used') else fallback_used
+        
+        # Extract evidence summary (tier counts)
+        tier_counts_present = source_summary.get("tier_counts", {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0})
+        # Count tiers used (from search_results)
+        tier_counts_used = {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0}
+        for result in search_results:
+            tier = result.get("tier", "UNKNOWN")
+            tier_counts_used[tier] = tier_counts_used.get(tier, 0) + 1
+        
+        # Assemble routing decision
+        routing_decision = {
+            "request_id": request_id,
+            "request_type": request_type,
+            "intent": intent,
+            "entities_typed": entities_typed,
+            "mentioned_year": mentioned_year,
+            "kaggle_query_string": kaggle_query_string,
+            "kaggle_outcome": {
+                "stage_a_candidates": kaggle_stage_a_candidates,
+                "max_score": kaggle_max_score,
+                "threshold": kaggle_threshold,
+                "used_results_count": kaggle_results_used
+            },
+            "tool_plan": {
+                "skip_tavily": skip_tavily,
+                "need_freshness": need_freshness,
+                "freshness_reason": freshness_reason,
+                "freshness_ttl_hours": freshness_ttl_hours
+            },
+            "override": {
+                "override_used": override_used,
+                "override_reason": override_reason
+            },
+            "tool_usage": {
+                "cache_hit": cache_hit_bool,
+                "tavily_used": tavily_used,
+                "fallback_used": fallback_used
+            },
+            "evidence_summary": {
+                "tier_counts_present": tier_counts_present,
+                "tier_counts_used": tier_counts_used
+            }
+        }
+        
+        return routing_decision
+    
+    def _log_routing_decision_summary(self, request_id: str, routing_decision: Dict):
+        """
+        Log compact routing decision summary.
+        
+        Format: cache_hit, kaggle_max_score, tavily_used, override_reason, tiers_used
+        """
+        cache_hit = routing_decision.get("tool_usage", {}).get("cache_hit", False)
+        kaggle_max_score = routing_decision.get("kaggle_outcome", {}).get("max_score", 0.0)
+        tavily_used = routing_decision.get("tool_usage", {}).get("tavily_used", False)
+        override_reason = routing_decision.get("override", {}).get("override_reason")
+        
+        # Build tiers_used string
+        tier_counts_used = routing_decision.get("evidence_summary", {}).get("tier_counts_used", {})
+        tiers_parts = []
+        for tier in ["A", "B", "C", "UNKNOWN"]:
+            count = tier_counts_used.get(tier, 0)
+            if count > 0:
+                tiers_parts.append(f"{tier}:{count}")
+        tiers_used = ",".join(tiers_parts) if tiers_parts else "none"
+        
+        # Build summary
+        summary_parts = [
+            f"cache_hit={cache_hit}",
+            f"kaggle_max_score={kaggle_max_score:.3f}",
+            f"tavily_used={tavily_used}",
+            f"override_reason={override_reason or 'none'}",
+            f"tiers_used={tiers_used}"
+        ]
+        
+        logger.info(
+            f"[{request_id}] Routing decision: " + ", ".join(summary_parts)
+        )
     
     async def close(self):
         """Close connections and cleanup."""
