@@ -63,6 +63,98 @@ python tests/test_runner.py --verbose
 - **spoilers**: Spoiler handling tests
 - **fact_check**: Fact-checking queries
 
+## Offline Scenario Tests
+
+The offline scenario harness (`tests/test_scenarios_offline.py`) tests routing, prompt construction, evidence formatting, and validator behavior using YAML/JSON fixtures without calling external APIs.
+
+### Scenario Sets: Gold vs Explore
+
+Scenarios are organized into two sets:
+
+#### Gold Scenarios
+**Purpose**: Core regression tests that must pass before any release.
+
+- **9 simple fact cases**: Director, cast, release date, and runtime queries covering fundamental functionality
+- **2 freshness cases**: Where-to-watch and availability queries requiring fresh data
+- **2 recommendation cases**: Movie recommendation queries
+
+**Strictness Policy**: Gold scenarios **must pass with zero validator violations** (clean pass). Any violation will cause the test to fail.
+
+These are the essential tests that validate core functionality and should be run frequently (e.g., on every commit, in CI/CD).
+
+#### Explore Scenarios
+**Purpose**: Extended test coverage for edge cases, advanced features, and exploratory testing.
+
+Includes scenarios for:
+- Additional recommendation types
+- Edge cases (punctuation in titles, special characters, ambiguous queries)
+- Multi-movie comparisons
+- Deduplication tests
+- Violation handling (forbidden terms, verbosity)
+
+**Strictness Policy**: Explore scenarios **can pass with violations**. Violations are still recorded in reports and artifacts, but do not cause test failure.
+
+These scenarios provide broader coverage but may be run less frequently (e.g., nightly, before releases).
+
+### Running Scenario Tests
+
+By default, all scenarios from both sets are loaded:
+
+```bash
+pytest tests/test_scenarios_offline.py -v
+```
+
+#### Run Only Gold Scenarios
+
+Using environment variable:
+```bash
+CINEMIND_SCENARIO_SET=gold pytest tests/test_scenarios_offline.py -v
+```
+
+Using pytest marker:
+```bash
+pytest tests/test_scenarios_offline.py -m gold -v
+```
+
+#### Run Only Explore Scenarios
+
+Using environment variable:
+```bash
+CINEMIND_SCENARIO_SET=explore pytest tests/test_scenarios_offline.py -v
+```
+
+Using pytest marker:
+```bash
+pytest tests/test_scenarios_offline.py -m explore -v
+```
+
+### Test Reports
+
+Test reports include statistics broken out by `scenario_set`:
+- Total counts per set (gold vs explore)
+- Pass/fail rates per set
+- **Clean passes** vs **passes with violations**
+- Execution times per set
+
+The report distinguishes between:
+- **`passed_clean`**: Tests that passed with zero validator violations
+- **`passed_with_violations`**: Tests that passed but had validator violations (explore scenarios only)
+
+View the latest report at `tests/test_reports/latest.json`.
+
+### Strictness Policy Override
+
+You can override the default strictness policy on a per-scenario basis by adding `enforce_clean` to the scenario's `expected.validator_checks`:
+
+```yaml
+expected:
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false  # Allow violations (overrides gold default)
+```
+
+This is useful for testing violation handling or relaxing requirements for specific scenarios.
+
 ## Test Cases
 
 ### Current Test Cases

@@ -1,0 +1,53 @@
+name: release_date_get_out
+user_query: When was Get Out released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - Get Out
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt5052448/
+  title: Get Out
+  content: Get Out (2017) was released on February 24, 2017.
+  year: 2017
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - Get Out
+    - 2017
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - kaggle_imdb
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: Get Out was released on February 24, 2017.
+

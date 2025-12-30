@@ -35,6 +35,38 @@ def sanitize_filename(name: str) -> str:
     return sanitized
 
 
+def remove_failure_artifact(
+    scenario_name: str,
+    artifacts_dir: Optional[Path] = None
+) -> bool:
+    """
+    Remove a failure artifact file for a scenario that has passed.
+    
+    Args:
+        scenario_name: Name of the scenario
+        artifacts_dir: Directory containing artifacts (defaults to tests/test_reports/failures/)
+    
+    Returns:
+        True if file was removed (or didn't exist), False if removal failed
+    """
+    if artifacts_dir is None:
+        artifacts_dir = Path(__file__).parent / "test_reports" / "failures"
+    
+    # Sanitize scenario name for filename
+    safe_name = sanitize_filename(scenario_name)
+    artifact_file = artifacts_dir / f"{safe_name}.json"
+    
+    # Remove the file if it exists
+    try:
+        if artifact_file.exists():
+            artifact_file.unlink()
+            return True
+        return True  # File doesn't exist, which is fine
+    except Exception as e:
+        print(f"Warning: Failed to remove old artifact file {artifact_file}: {e}")
+        return False
+
+
 def write_failure_artifact(
     scenario_name: str,
     scenario_data: Dict[str, Any],
@@ -82,6 +114,21 @@ def write_failure_artifact(
     artifact_file = artifacts_dir / f"{safe_name}.json"
     
     # Extract request_plan fields
+    response_format = getattr(request_plan, "response_format", None)
+    # Convert ResponseFormat enum to its value for JSON serialization
+    response_format_str = None
+    if response_format is not None:
+        try:
+            # Try to get the enum value
+            if hasattr(response_format, 'value'):
+                response_format_str = response_format.value
+            elif hasattr(response_format, 'name'):
+                response_format_str = response_format.name
+            else:
+                response_format_str = str(response_format)
+        except Exception:
+            response_format_str = str(response_format) if response_format else None
+    
     request_plan_dict = {
         "request_type": getattr(request_plan, "request_type", None),
         "intent": getattr(request_plan, "intent", None),
@@ -91,16 +138,16 @@ def write_failure_artifact(
         "require_tier_a": getattr(request_plan, "require_tier_a", False),
         "allowed_source_tiers": getattr(request_plan, "allowed_source_tiers", []),
         "reject_tier_c": getattr(request_plan, "reject_tier_c", True),
-        "response_format": getattr(request_plan, "response_format", None),
+        "response_format": response_format_str,
     }
     
     # Extract formatted evidence data
     evidence_dict = {
-        "text": formatted_evidence.text if formatted_evidence else "",
-        "counts": formatted_evidence.counts if formatted_evidence else {"before": 0, "after": 0},
-        "max_snippet_len": formatted_evidence.max_snippet_len if formatted_evidence else 0,
-        "dedupe_removed": formatted_evidence.dedupe_removed if formatted_evidence else 0,
-        "items_count": len(formatted_evidence.items) if formatted_evidence else 0
+        "text": str(formatted_evidence.text) if formatted_evidence and hasattr(formatted_evidence, 'text') else "",
+        "counts": dict(formatted_evidence.counts) if formatted_evidence and hasattr(formatted_evidence, 'counts') else {"before": 0, "after": 0},
+        "max_snippet_len": int(formatted_evidence.max_snippet_len) if formatted_evidence and hasattr(formatted_evidence, 'max_snippet_len') else 0,
+        "dedupe_removed": int(formatted_evidence.dedupe_removed) if formatted_evidence and hasattr(formatted_evidence, 'dedupe_removed') else 0,
+        "items_count": len(formatted_evidence.items) if formatted_evidence and hasattr(formatted_evidence, 'items') else 0
     }
     
     # Extract validator result
@@ -138,7 +185,7 @@ def write_failure_artifact(
         },
         "request_plan": request_plan_dict,
         "template_id": template_id,
-        "messages": messages,
+        "messages": [dict(msg) if not isinstance(msg, dict) else msg for msg in messages] if messages else [],
         "formatted_evidence": evidence_dict,
         "validator": validator_dict,
         "failures": failures,
@@ -146,12 +193,69 @@ def write_failure_artifact(
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
     }
     
-    # Write JSON file
+    # Write JSON file with better error handling
     try:
-        with open(artifact_file, "w", encoding="utf-8") as f:
-            json.dump(artifact, f, indent=2, ensure_ascii=False)
-        return artifact_file
+        # Use a custom JSON encoder to handle edge cases
+        def json_serial(obj):
+            """JSON serializer for objects not serializable by default json code"""
+            if hasattr(obj, '__dict__'):
+                return obj.__dict__
+            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+                return list(obj)
+            else:
+                return str(obj)
+        
+        # Write to temporary file first, then rename (atomic write)
+        temp_file = artifact_file.with_suffix('.tmp')
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(artifact, f, indent=2, ensure_ascii=False, default=json_serial)
+            # Atomic rename
+            temp_file.replace(artifact_file)
+            return artifact_file
+        except Exception as e:
+            # Clean up temp file if it exists
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except:
+                    pass
+            raise e
+    except (TypeError, ValueError) as e:
+        # Try to identify what's not serializable
+        import traceback
+        error_msg = f"Failed to serialize artifact: {e}\n"
+        error_msg += "Attempting to identify non-serializable objects...\n"
+        try:
+            # Try serializing each part individually to find the issue
+            for key, value in artifact.items():
+                try:
+                    json.dumps(value, default=str)
+                except Exception as e2:
+                    error_msg += f"  - Problem with '{key}': {e2}\n"
+        except:
+            pass
+        error_msg += f"Traceback: {traceback.format_exc()}"
+        print(f"Warning: Failed to write failure artifact to {artifact_file}")
+        print(error_msg)
+        # Write a minimal artifact with just the failures and error info
+        try:
+            minimal_artifact = {
+                "scenario": artifact.get("scenario", {}),
+                "failures": artifact.get("failures", []),
+                "serialization_error": str(e),
+                "timestamp": artifact.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S"))
+            }
+            with open(artifact_file, "w", encoding="utf-8") as f:
+                json.dump(minimal_artifact, f, indent=2, ensure_ascii=False)
+            print(f"  Wrote minimal artifact to {artifact_file}")
+            return artifact_file
+        except Exception as e3:
+            print(f"  Failed to write even minimal artifact: {e3}")
+            return None
     except Exception as e:
+        import traceback
         print(f"Warning: Failed to write failure artifact to {artifact_file}: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return None
 

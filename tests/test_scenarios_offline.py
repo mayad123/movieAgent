@@ -4,6 +4,7 @@ Offline scenario matrix test harness for CineMind.
 Tests routing, prompt construction, evidence formatting, and validator behavior
 using YAML/JSON fixtures without calling external APIs.
 """
+import os
 import pytest
 import time
 from typing import Dict, Any, List
@@ -20,8 +21,41 @@ from tests.fixtures.scenario_loader import (
     get_expected_checks,
 )
 from tests.report_generator import get_collector
-from tests.failure_artifact_writer import write_failure_artifact
+from tests.failure_artifact_writer import write_failure_artifact, remove_failure_artifact
 from tests.violation_artifact_writer import write_violation_artifact
+
+
+def get_enforce_clean_policy(scenario: Dict[str, Any]) -> bool:
+    """
+    Determine if clean passes are enforced for a scenario.
+    
+    Policy:
+    - gold scenarios default to enforce_clean=True
+    - explore scenarios default to enforce_clean=False
+    - Per-scenario override via expected.validator_checks.enforce_clean takes precedence
+    
+    Args:
+        scenario: Scenario dictionary
+        
+    Returns:
+        True if clean passes are enforced, False otherwise
+    """
+    scenario_set = scenario.get("scenario_set", "").lower()
+    expected = get_expected_checks(scenario)
+    validator_checks = expected.get("validator_checks", {})
+    
+    # Check for per-scenario override first
+    if "enforce_clean" in validator_checks:
+        return bool(validator_checks["enforce_clean"])
+    
+    # Apply default policy based on scenario_set
+    if scenario_set == "gold":
+        return True
+    elif scenario_set == "explore":
+        return False
+    
+    # Default to strict (enforce_clean=True) for unknown sets
+    return True
 
 
 class ScenarioTester:
@@ -68,17 +102,30 @@ class ScenarioTester:
         # Combine all message content for content checks
         all_content = "\n".join([msg.get("content", "") for msg in messages])
         
-        # Check must_contain
+        # For must_not_contain, check only user message content (where evidence is included)
+        # This avoids false positives from system/developer prompts that mention these terms in rules
+        user_message_content = "\n".join([
+            msg.get("content", "") for msg in messages 
+            if msg.get("role") == "user"  # user message contains query + evidence
+        ])
+        
+        # Check must_contain (checks entire prompt)
         must_contain = prompt_checks.get("must_contain", [])
         for term in must_contain:
-            if term.lower() not in all_content.lower():
+            # Convert term to string for comparison (handles integers like years)
+            term_str = str(term).lower()
+            if term_str not in all_content.lower():
                 failures.append(f"Prompt must contain '{term}' but doesn't")
         
-        # Check must_not_contain
+        # Check must_not_contain (checks user message and evidence only, not system/developer instructions)
         must_not_contain = prompt_checks.get("must_not_contain", [])
         for term in must_not_contain:
-            if term.lower() in all_content.lower():
-                failures.append(f"Prompt must NOT contain '{term}' but does")
+            # Convert term to string for comparison
+            term_str = str(term).lower()
+            # Check only user message content (contains evidence), not system/developer instructions
+            # (system/developer prompts may mention these terms in rules about not using them)
+            if term_str in user_message_content.lower():
+                failures.append(f"Prompt must NOT contain '{term}' but does (found in user message/evidence)")
         
         return failures
     
@@ -194,17 +241,24 @@ class ScenarioTester:
 
 # Load all scenarios once at module import time
 _all_scenarios = None
+_scenario_set_filter = None
 
 def get_all_scenarios():
-    """Lazy load all scenarios."""
-    global _all_scenarios
-    if _all_scenarios is None:
-        _all_scenarios = load_all_scenarios()
+    """Lazy load all scenarios with optional filtering by scenario_set."""
+    global _all_scenarios, _scenario_set_filter
+    
+    # Check for environment variable first
+    # Treat empty string as None (no filter)
+    env_filter_raw = os.environ.get("CINEMIND_SCENARIO_SET")
+    env_filter = env_filter_raw.strip().lower() if env_filter_raw and env_filter_raw.strip() else None
+    
+    # Only reload if filter changed or scenarios not yet loaded
+    if _all_scenarios is None or env_filter != _scenario_set_filter:
+        _scenario_set_filter = env_filter
+        _all_scenarios = load_all_scenarios(scenario_set_filter=env_filter)
+    
     return _all_scenarios
 
-
-# Pre-load scenarios for parametrize (called at module import)
-_SCENARIOS = get_all_scenarios()
 
 @pytest.fixture
 def scenario_tester():
@@ -212,7 +266,81 @@ def scenario_tester():
     return ScenarioTester()
 
 
-@pytest.mark.parametrize("scenario", _SCENARIOS, ids=lambda s: s.get("name", "unknown"))
+def pytest_generate_tests(metafunc):
+    """Generate test parameters dynamically based on markers and env vars."""
+    if "scenario" in metafunc.fixturenames:
+        # Check for environment variable first
+        # Treat empty string as None (no filter)
+        env_filter_raw = os.environ.get("CINEMIND_SCENARIO_SET")
+        env_filter = env_filter_raw.strip().lower() if env_filter_raw and env_filter_raw.strip() else None
+        
+        # Load scenarios with filter (env var takes precedence)
+        scenarios = load_all_scenarios(scenario_set_filter=env_filter)
+        
+        # Validate we have scenarios
+        if not scenarios:
+            raise ValueError(f"No scenarios found for filter: {env_filter}")
+        
+        # Check for duplicate names (which would cause pytest to deduplicate)
+        scenario_names = [s.get("name") for s in scenarios]
+        duplicate_names = [name for name in set(scenario_names) if scenario_names.count(name) > 1]
+        if duplicate_names:
+            import warnings
+            warnings.warn(f"Duplicate scenario names found: {duplicate_names}. Pytest will deduplicate these!")
+        
+        # Debug: print scenario count and names
+        if env_filter:
+            print(f"\n[DEBUG] Collected {len(scenarios)} {env_filter} scenarios")
+            for i, s in enumerate(scenarios, 1):
+                print(f"  {i}. {s.get('name', 'unknown')}")
+        else:
+            gold_count = sum(1 for s in scenarios if s.get("scenario_set") == "gold")
+            explore_count = sum(1 for s in scenarios if s.get("scenario_set") == "explore")
+            print(f"\n[DEBUG] Collected {len(scenarios)} total scenarios (gold: {gold_count}, explore: {explore_count})")
+        
+        # Generate parametrize with unique IDs
+        def scenario_id(scenario):
+            name = scenario.get("name", "unknown")
+            # Use file path as fallback for uniqueness if name is missing
+            file_path = scenario.get("_file_path", "")
+            if not name or name == "unknown":
+                # Extract filename as fallback
+                if file_path:
+                    import os
+                    name = os.path.splitext(os.path.basename(file_path))[0]
+            return f"{name}"
+        
+        metafunc.parametrize(
+            "scenario",
+            scenarios,
+            ids=scenario_id
+        )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Add markers to test items based on scenario_set for marker-based filtering."""
+    # Get marker expression if specified
+    marker_expr = config.getoption("-m", default="")
+    
+    # If no marker expression, skip marker-based filtering
+    if not marker_expr or marker_expr == "":
+        # Check if env var is set - if so, we've already filtered in pytest_generate_tests
+        return
+    
+    # Add markers to test items based on their scenario_set
+    # This allows pytest's marker filtering to work
+    for item in items:
+        if hasattr(item, "callspec") and item.callspec:
+            # Get scenario from parametrize
+            scenario = item.callspec.params.get("scenario")
+            if scenario:
+                scenario_set = scenario.get("scenario_set")
+                if scenario_set == "gold":
+                    item.add_marker(pytest.mark.gold)
+                elif scenario_set == "explore":
+                    item.add_marker(pytest.mark.explore)
+
+
 def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
     """
     Test a single scenario.
@@ -331,11 +459,28 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
                 # Don't fail the test because violation artifact writing failed
                 print(f"Warning: Failed to write violation artifact for '{scenario_name}': {e}")
     
+    # Apply strictness policy: check if violations should cause failure
+    scenario_set = scenario.get("scenario_set")
+    enforce_clean = get_enforce_clean_policy(scenario)
+    
+    # Check for violations (only if validation was performed)
+    has_violations = False
+    if validation_result is not None:
+        has_violations = len(validation_result.violations) > 0
+        
+        # If enforce_clean is True and there are violations, add a failure
+        if enforce_clean and has_violations:
+            violation_msg = f"Scenario requires clean pass but has {len(validation_result.violations)} validator violation(s): {', '.join(validation_result.violations)}"
+            all_failures.append(violation_msg)
+    
     # Calculate duration
     duration_ms = (time.time() - start_time) * 1000
     
-    # Record result with collector
+    # Determine final pass status and clean pass status
     passed = len(all_failures) == 0
+    passed_clean = passed and not has_violations
+    
+    # Record result with collector
     collector.record_scenario_result(
         scenario_name=scenario_name,
         template_id=template_id,
@@ -345,10 +490,21 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
         violation_types=violation_types,
         evidence_items=evidence_items,
         evidence_deduped_count=evidence_deduped_count,
-        evidence_max_snippet_len=evidence_max_snippet_len
+        evidence_max_snippet_len=evidence_max_snippet_len,
+        scenario_set=scenario_set,
+        passed_clean=passed_clean,
+        has_violations=has_violations
     )
     
-    # Write failure artifact if test failed
+    # If test passed, remove any old failure artifacts
+    if passed:
+        try:
+            remove_failure_artifact(scenario_name)
+        except Exception as e:
+            # Don't fail the test if artifact cleanup fails
+            print(f"Warning: Failed to remove old artifact for '{scenario_name}': {e}")
+    
+    # Write failure artifact if test failed and fail the test
     if all_failures:
         try:
             # Get template for repair instruction building
@@ -389,8 +545,18 @@ def test_scenario(scenario: Dict[str, Any], scenario_tester: ScenarioTester):
 def test_scenario_count():
     """Ensure we have a reasonable number of scenarios."""
     scenarios = get_all_scenarios()
-    assert len(scenarios) >= 20, f"Expected at least 20 scenarios, found {len(scenarios)}"
-    print(f"\nLoaded {len(scenarios)} scenarios for testing")
+    # Check that we have scenarios in both gold and explore sets when loading all
+    gold_count = sum(1 for s in scenarios if s.get("scenario_set") == "gold")
+    explore_count = sum(1 for s in scenarios if s.get("scenario_set") == "explore")
+    
+    # If loading all (no filter), expect both sets
+    env_filter = os.environ.get("CINEMIND_SCENARIO_SET")
+    if not env_filter:
+        assert gold_count >= 10, f"Expected at least 10 gold scenarios, found {gold_count}"
+        assert explore_count >= 10, f"Expected at least 10 explore scenarios, found {explore_count}"
+    
+    assert len(scenarios) >= 10, f"Expected at least 10 scenarios, found {len(scenarios)}"
+    print(f"\nLoaded {len(scenarios)} scenarios for testing (gold: {gold_count}, explore: {explore_count})")
 
 
 if __name__ == "__main__":

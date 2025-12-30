@@ -1,0 +1,44 @@
+name: vague_recommendation_action
+user_query: I need an action movie to watch.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.rottentomatoes.com/browse/movies_at_home/genres:action/
+  title: Action Movies
+  content: Top action films include Mad Max: Fury Road, John Wick, The Raid, and Die Hard.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Here are excellent action films: 1. Mad Max: Fury Road (2015) - A high-octane post-apocalyptic thrill ride. 2. John Wick (2014) - Stylish action with Keanu Reeves. 3. The Raid (2011) - Intense Indonesian martial arts action. 4. Die Hard (1988) - The classic action movie that set the standard. These films represent different approaches to action, from practical stunts to stylized choreography. Each delivers thrilling sequences and memorable action set pieces that action fans appreciate. Whether you prefer practical effects or stylized action, these films offer exciting viewing experiences.
+

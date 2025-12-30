@@ -1,0 +1,53 @@
+name: incomplete_title_spiderman
+user_query: When was Spider-Man released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - Spider-Man
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+  entity_years: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0145487/
+  title: Spider-Man
+  content: Spider-Man (2002) was released on May 3, 2002.
+  year: 2002
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt2250912/
+  title: Spider-Man: Homecoming
+  content: Spider-Man: Homecoming (2017) was released on July 7, 2017.
+  year: 2017
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - Spider-Man
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Spider-Man (2002) was released on May 3, 2002.
+

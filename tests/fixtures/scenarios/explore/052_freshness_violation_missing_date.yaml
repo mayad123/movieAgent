@@ -1,0 +1,48 @@
+name: freshness_violation_missing_date
+user_query: Where can I watch Dune right now?
+request_plan:
+  intent: where_to_watch
+  request_type: info
+  entities_typed:
+    movies:
+    - Dune
+    people: []
+  need_freshness: true
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.justwatch.com/us/movie/dune-2021
+  title: Dune - Where to Watch
+  content: Dune is available on HBO Max and for rent on various platforms.
+  tier: B
+expected:
+  template_id: where_to_watch
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - Dune
+    - watch
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: false
+    expected_violation_types:
+    - freshness
+    enforce_clean: false
+  sample_model_output: Dune is available on HBO Max and for rent on various platforms.
+

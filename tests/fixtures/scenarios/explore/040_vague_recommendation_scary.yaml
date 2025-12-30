@@ -1,0 +1,44 @@
+name: vague_recommendation_scary
+user_query: I want to watch something scary.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.rottentomatoes.com/browse/movies_at_home/genres:horror/
+  title: Horror Movies
+  content: Top horror films include The Exorcist, The Shining, Hereditary, and Get Out.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Here are some excellent scary films: 1. The Exorcist (1973) - A classic horror masterpiece that set new standards for the genre. 2. The Shining (1980) - A psychological horror film from Stanley Kubrick. 3. Hereditary (2018) - A modern horror film with deep psychological themes. 4. Get Out (2017) - A horror thriller with social commentary. These films represent different approaches to horror, from supernatural scares to psychological terror. Each delivers genuine suspense and memorable moments that horror fans appreciate. Whether you prefer classic scares or modern psychological horror, these films offer intense viewing experiences.
+

@@ -104,6 +104,10 @@ expected:
 
 - **expected_valid** (boolean, required): Whether the response should be valid
 - **expected_violation_types** (array, optional): List of expected violation types (e.g., ["forbidden_terms", "verbosity"])
+- **enforce_clean** (boolean, optional): Whether to require zero violations for this scenario to pass. Overrides default policy:
+  - `gold` scenarios default to `true` (must pass clean)
+  - `explore` scenarios default to `false` (can pass with violations)
+  - If specified, this value takes precedence over the set default
 
 ## Example Scenarios
 
@@ -113,12 +117,37 @@ See the YAML files in this directory for complete examples covering:
 - Freshness-sensitive queries (where to watch, availability)
 - Edge cases (punctuation titles, multi-movie, ambiguity)
 
+## Folder Structure
+
+Scenarios are organized into two sets:
+
+- **`gold/`**: Core regression tests (13 scenarios)
+  - 9 simple fact cases (director, cast, release date, runtime)
+  - 2 freshness cases (where-to-watch, availability)
+  - 2 recommendation cases
+
+- **`explore/`**: Extended test coverage (14 scenarios)
+  - Additional recommendation types
+  - Edge cases (punctuation, special characters, ambiguity)
+  - Multi-movie comparisons
+  - Deduplication and violation tests
+
 ## Usage
 
 Scenarios are automatically loaded by `tests/test_scenarios_offline.py`:
 
 ```bash
+# Run all scenarios
 pytest tests/test_scenarios_offline.py -v
+
+# Run only gold scenarios (via env var)
+CINEMIND_SCENARIO_SET=gold pytest tests/test_scenarios_offline.py -v
+
+# Run only gold scenarios (via marker)
+pytest tests/test_scenarios_offline.py -m gold -v
+
+# Run only explore scenarios
+CINEMIND_SCENARIO_SET=explore pytest tests/test_scenarios_offline.py -v
 ```
 
 All scenarios run offline without calling external APIs, completing in <2-3 seconds.

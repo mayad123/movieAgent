@@ -1,0 +1,47 @@
+name: multi_intent_three_questions
+user_query: Who directed Inception, who was in it, and how long is it?
+request_plan:
+  intent: general_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Inception
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt1375666/
+  title: Inception
+  content: Inception (2010) was directed by Christopher Nolan and stars Leonardo DiCaprio, Marion Cotillard, and Tom Hardy. The film has a runtime of 148 minutes.
+  year: 2010
+  tier: A
+expected:
+  template_id: general_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - cast
+    - runtime
+    - Inception
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Inception was directed by Christopher Nolan, stars Leonardo DiCaprio, Marion Cotillard, and Tom Hardy, and has a runtime of 148 minutes.
+

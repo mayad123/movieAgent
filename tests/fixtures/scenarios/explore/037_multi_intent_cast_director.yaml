@@ -1,0 +1,46 @@
+name: multi_intent_cast_director
+user_query: Who directed Pulp Fiction and who was in it?
+request_plan:
+  intent: general_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Pulp Fiction
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0110912/
+  title: Pulp Fiction
+  content: Pulp Fiction (1994) was directed by Quentin Tarantino and stars John Travolta, Samuel L. Jackson, and Uma Thurman.
+  year: 1994
+  tier: A
+expected:
+  template_id: general_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - cast
+    - Pulp Fiction
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Pulp Fiction was directed by Quentin Tarantino and stars John Travolta, Samuel L. Jackson, and Uma Thurman.
+

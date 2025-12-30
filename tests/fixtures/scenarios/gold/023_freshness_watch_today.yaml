@@ -1,0 +1,53 @@
+name: freshness_watch_today
+user_query: Where can I watch The Shawshank Redemption today?
+request_plan:
+  intent: where_to_watch
+  request_type: info
+  entities_typed:
+    movies:
+    - The Shawshank Redemption
+    people: []
+  need_freshness: true
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.justwatch.com/us/movie/the-shawshank-redemption
+  title: The Shawshank Redemption - Where to Watch
+  content: As of December 2024, The Shawshank Redemption is available on Netflix and for rent on Amazon Prime Video.
+  tier: B
+expected:
+  template_id: where_to_watch
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - The Shawshank Redemption
+    - watch
+    - as of
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - tavily
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: As of December 2024, The Shawshank Redemption is available on Netflix and for rent on Amazon Prime Video.
+

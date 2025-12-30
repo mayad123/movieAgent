@@ -1,0 +1,48 @@
+name: release_date_interstellar
+user_query: When did Interstellar come out?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - Interstellar
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0816692/
+  title: Interstellar
+  content: Interstellar (2014) was released on November 5, 2014 in the United States.
+  year: 2014
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - Interstellar
+    - 2014
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: true
+  sample_model_output: Interstellar was released on November 5, 2014.

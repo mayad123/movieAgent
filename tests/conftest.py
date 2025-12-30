@@ -5,6 +5,12 @@ import pytest
 from tests.report_generator import get_collector
 
 
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "gold: marks tests as gold scenarios")
+    config.addinivalue_line("markers", "explore: marks tests as explore scenarios")
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """Hook to mark test results."""

@@ -1,0 +1,53 @@
+name: incomplete_title_alien
+user_query: What year was Alien released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - Alien
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+  entity_years: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0078748/
+  title: Alien
+  content: Alien (1979) was released on May 25, 1979.
+  year: 1979
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0090605/
+  title: Aliens
+  content: Aliens (1986) was released on July 18, 1986.
+  year: 1986
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - Alien
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Alien (1979) was released on May 25, 1979.
+

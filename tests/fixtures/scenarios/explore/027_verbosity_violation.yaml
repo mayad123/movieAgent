@@ -1,0 +1,50 @@
+name: verbosity_violation
+user_query: Who directed The Matrix?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - The Matrix
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0133093/
+  title: The Matrix
+  content: The Matrix (1999) was directed by the Wachowskis.
+  year: 1999
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - director
+    - The Matrix
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: false
+    expected_violation_types:
+    - verbosity
+    enforce_clean: false
+  sample_model_output: The Matrix is a groundbreaking science fiction film that was
+    released in 1999. It was written and directed by the Wachowskis, who are also
+    known as Lana and Lilly Wachowski. The film stars Keanu Reeves as Neo, Laurence
+    Fishburne as Morpheus, and Carrie-Anne Moss as Trinity. The Matrix explores themes
+    of reality, simulation, and human consciousness through its innovative visual
+    effects and philosophical narrative. The film's impact on popular culture and
+    cinema cannot be overstated, as it introduced many viewers to concepts of virtual
+    reality and the nature of existence.

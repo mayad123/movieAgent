@@ -1,0 +1,44 @@
+name: vague_recommendation_no_context
+user_query: What should I watch?
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.rottentomatoes.com/browse/movies_at_home/
+  title: Popular Movies
+  content: Currently popular films include Dune, The Power of the Dog, and CODA.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Here are some excellent films to consider: 1. Dune (2021) - An epic science fiction adaptation. 2. The Power of the Dog (2021) - A psychological drama. 3. CODA (2021) - A heartwarming coming-of-age story. These films represent diverse genres and storytelling approaches currently resonating with audiences. Each offers unique qualities and memorable experiences. Whether you're looking for epic storytelling, character drama, or emotional resonance, these films provide quality entertainment across different tastes.
+

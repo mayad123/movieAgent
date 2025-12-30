@@ -1,0 +1,52 @@
+name: runtime_mad_max
+user_query: "What is the runtime of Mad Max: Fury Road?"
+request_plan:
+  intent: runtime
+  request_type: info
+  entities_typed:
+    movies:
+    - "Mad Max: Fury Road"
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt1392190/
+  title: "Mad Max: Fury Road"
+  content: "Mad Max: Fury Road (2015) has a runtime of 120 minutes (2 hours)."
+  year: 2015
+  tier: A
+expected:
+  template_id: runtime
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - runtime
+    - Mad Max
+    - 120
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - kaggle_imdb
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: "Mad Max: Fury Road has a runtime of 120 minutes (2 hours)."
+

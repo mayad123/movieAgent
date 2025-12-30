@@ -1,57 +1,75 @@
 {
-  "timestamp": "2025-12-30T11:24:34",
+  "timestamp": "2025-12-30T12:26:01",
   "summary": {
-    "total": 27,
-    "passed": 27,
-    "failed": 0,
-    "pass_rate": 100.0,
-    "avg_time_ms": 0.29
+    "total": 59,
+    "passed": 54,
+    "failed": 5,
+    "pass_rate": 91.53,
+    "passed_clean": 51,
+    "passed_with_violations": 3,
+    "avg_time_ms": 0.38
   },
   "by_template_id": {
     "director_info": {
+      "passed": 16,
+      "failed": 0,
+      "total": 16
+    },
+    "cast_info": {
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    },
+    "release_date": {
+      "passed": 9,
+      "failed": 0,
+      "total": 9
+    },
+    "runtime": {
+      "passed": 3,
+      "failed": 0,
+      "total": 3
+    },
+    "recommendation": {
       "passed": 8,
       "failed": 0,
       "total": 8
     },
-    "cast_info": {
-      "passed": 2,
-      "failed": 0,
-      "total": 2
-    },
-    "release_date": {
-      "passed": 3,
-      "failed": 0,
-      "total": 3
-    },
-    "runtime": {
-      "passed": 2,
-      "failed": 0,
-      "total": 2
-    },
-    "general_info": {
-      "passed": 1,
-      "failed": 0,
-      "total": 1
-    },
-    "recommendation": {
-      "passed": 5,
-      "failed": 0,
-      "total": 5
-    },
     "where_to_watch": {
-      "passed": 3,
+      "passed": 6,
       "failed": 0,
-      "total": 3
+      "total": 6
     },
     "availability": {
-      "passed": 2,
+      "passed": 4,
       "failed": 0,
-      "total": 2
+      "total": 4
+    },
+    "general_info": {
+      "passed": 3,
+      "failed": 5,
+      "total": 8
     },
     "comparison": {
       "passed": 1,
       "failed": 0,
       "total": 1
+    }
+  },
+  "by_scenario_set": {
+    "gold": {
+      "passed": 28,
+      "failed": 0,
+      "total": 28,
+      "passed_clean": 28,
+      "passed_with_violations": 0
+    },
+    "explore": {
+      "passed": 26,
+      "failed": 5,
+      "total": 31,
+      "passed_clean": 23,
+      "passed_with_violations": 3
     }
   },
   "top_violations": [
@@ -62,11 +80,15 @@
     {
       "violation_type": "verbosity",
       "count": 2
+    },
+    {
+      "violation_type": "freshness",
+      "count": 1
     }
   ],
   "evidence_stats": {
-    "avg_evidence_items": 1.19,
-    "avg_dedupe_reduction": 1.23,
-    "max_snippet_length": 123
+    "avg_evidence_items": 1.29,
+    "avg_dedupe_reduction": 0.56,
+    "max_snippet_length": 167
   }
 }

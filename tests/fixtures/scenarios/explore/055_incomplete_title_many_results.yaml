@@ -1,0 +1,52 @@
+name: incomplete_title_many_results
+user_query: Who directed The Thing?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - The Thing
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+  entity_years: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0084787/
+  title: The Thing
+  content: The Thing (1982) was directed by John Carpenter.
+  year: 1982
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0455377/
+  title: The Thing
+  content: The Thing (2011) is a prequel directed by Matthijs van Heijningen Jr.
+  year: 2011
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - The Thing
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: The Thing (1982) was directed by John Carpenter.
+

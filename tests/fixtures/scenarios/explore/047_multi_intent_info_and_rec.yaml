@@ -1,0 +1,49 @@
+name: multi_intent_info_and_rec
+user_query: Tell me about The Matrix and recommend similar movies.
+request_plan:
+  intent: general_info
+  request_type: info
+  entities_typed:
+    movies:
+    - The Matrix
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0133093/
+  title: The Matrix
+  content: The Matrix (1999) is a science fiction action film directed by the Wachowskis.
+  year: 1999
+  tier: A
+- source: tavily
+  url: https://www.imdb.com/list/ls000000000/
+  title: Movies Similar to The Matrix
+  content: Similar films include Inception, Blade Runner, and The Terminator.
+  tier: B
+expected:
+  template_id: general_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - The Matrix
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: The Matrix (1999) is a science fiction action film directed by the Wachowskis. Similar films include Inception, Blade Runner, and The Terminator.
+

@@ -1,0 +1,53 @@
+name: incomplete_title_star_wars
+user_query: When was Star Wars released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - Star Wars
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+  entity_years: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0076759/
+  title: Star Wars
+  content: Star Wars (1977) was released on May 25, 1977.
+  year: 1977
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0120915/
+  title: Star Wars: Episode I - The Phantom Menace
+  content: Star Wars: Episode I (1999) was released on May 19, 1999.
+  year: 1999
+  tier: A
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - Star Wars
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Star Wars (1977) was released on May 25, 1977.
+

@@ -1,0 +1,52 @@
+name: incomplete_title_batman
+user_query: Who directed Batman?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Batman
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+  entity_years: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0096895/
+  title: Batman
+  content: Batman (1989) was directed by Tim Burton.
+  year: 1989
+  tier: A
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0468569/
+  title: The Dark Knight
+  content: The Dark Knight (2008) was directed by Christopher Nolan, also known as Batman Begins sequel.
+  year: 2008
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - Batman
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Batman (1989) was directed by Tim Burton.
+

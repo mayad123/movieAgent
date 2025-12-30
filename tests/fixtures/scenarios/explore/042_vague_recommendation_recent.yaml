@@ -1,0 +1,44 @@
+name: vague_recommendation_recent
+user_query: What are some good recent movies?
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.rottentomatoes.com/browse/movies_in_theaters/
+  title: Recent Movies
+  content: Highly-rated recent films include Everything Everywhere All at Once, The Fabelmans, and Top Gun: Maverick.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Here are some excellent recent films: 1. Everything Everywhere All at Once (2022) - An inventive multiverse adventure. 2. The Fabelmans (2022) - Steven Spielberg's autobiographical film. 3. Top Gun: Maverick (2022) - A thrilling action sequel. These films represent the best of recent cinema, offering diverse genres and storytelling approaches. Each has received critical acclaim and audience appreciation for their unique qualities. Whether you're looking for innovative storytelling or crowd-pleasing action, these films deliver quality entertainment.
+

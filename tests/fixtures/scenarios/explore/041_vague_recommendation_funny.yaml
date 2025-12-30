@@ -1,0 +1,44 @@
+name: vague_recommendation_funny
+user_query: Recommend a funny movie.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.rottentomatoes.com/browse/movies_at_home/genres:comedy/
+  title: Comedy Movies
+  content: Popular comedies include The Big Lebowski, Monty Python and the Holy Grail, Superbad, and The Grand Budapest Hotel.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Here are some excellent comedy films: 1. The Big Lebowski (1998) - A cult classic with unique humor and memorable characters. 2. Monty Python and the Holy Grail (1975) - Absurdist comedy at its finest. 3. Superbad (2007) - A coming-of-age comedy with great chemistry. 4. The Grand Budapest Hotel (2014) - Quirky comedy from Wes Anderson. These films showcase different styles of comedy, from surreal humor to character-driven laughs. Each offers memorable moments and quotable lines that comedy fans love. Whether you enjoy absurdist humor or character comedy, these films deliver laughs.
+

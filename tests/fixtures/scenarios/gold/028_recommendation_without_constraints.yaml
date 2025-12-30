@@ -1,0 +1,57 @@
+name: recommendation_without_constraints
+user_query: Recommend movies similar to Parasite.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies:
+    - Parasite
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000004/
+  title: Movies Similar to Parasite
+  content: Similar films include Memories of Murder, The Handmaiden, and Burning. These Korean films share themes of class tension and social commentary.
+  tier: B
+- source: tavily
+  url: https://www.rottentomatoes.com/m/parasite_2019
+  title: Parasite - Similar Movies
+  content: Fans of Parasite also enjoyed Shoplifters, The Square, and Triangle of Sadness for similar social satire and class dynamics.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    - Parasite
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - tavily
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: Movies similar to Parasite include Memories of Murder, The Handmaiden, and Burning. These films share Parasite's masterful blend of social commentary, class dynamics, and genre-bending storytelling. Memories of Murder offers the same director's early work with similar themes of social critique. The Handmaiden provides comparable narrative complexity and class tension. Burning delivers similar slow-burn tension and social observation. Each film explores themes of inequality and human nature that make Parasite so compelling. They all feature the same attention to detail and layered storytelling that fans of Parasite would appreciate.
+

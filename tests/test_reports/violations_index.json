@@ -1,6 +1,6 @@
 {
-  "timestamp": "2025-12-30T11:24:34",
-  "total_scenarios_with_violations": 2,
+  "timestamp": "2025-12-30T12:26:01",
+  "total_scenarios_with_violations": 3,
   "scenarios": [
     {
       "scenario_name": "forbidden_terms_violation",
@@ -11,6 +11,16 @@
       ],
       "violation_count": 4,
       "artifact_path": "violations\\forbidden_terms_violation.json"
+    },
+    {
+      "scenario_name": "freshness_violation_missing_date",
+      "template_id": "where_to_watch",
+      "user_query": "Where can I watch Dune right now?",
+      "violation_types": [
+        "freshness"
+      ],
+      "violation_count": 1,
+      "artifact_path": "violations\\freshness_violation_missing_date.json"
     },
     {
       "scenario_name": "verbosity_violation",

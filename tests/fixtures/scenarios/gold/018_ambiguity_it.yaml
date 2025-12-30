@@ -1,0 +1,52 @@
+name: ambiguity_it
+user_query: Who directed It?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - It
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+  entity_years:
+    It: 2017
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt1396484/
+  title: It
+  content: It (2017) was directed by Andy Muschietti.
+  year: 2017
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - Muschietti
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - kaggle_imdb
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: It (2017) was directed by Andy Muschietti.
+

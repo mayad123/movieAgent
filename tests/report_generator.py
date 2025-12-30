@@ -24,6 +24,9 @@ class ScenarioResult:
     evidence_items: int = 0
     evidence_deduped_count: int = 0
     evidence_max_snippet_len: int = 0
+    scenario_set: Optional[str] = None
+    passed_clean: bool = True  # True if passed with zero violations
+    has_violations: bool = False  # True if validation found violations
 
 
 class ScenarioReportCollector:
@@ -49,7 +52,10 @@ class ScenarioReportCollector:
         violation_types: List[str] = None,
         evidence_items: int = 0,
         evidence_deduped_count: int = 0,
-        evidence_max_snippet_len: int = 0
+        evidence_max_snippet_len: int = 0,
+        scenario_set: Optional[str] = None,
+        passed_clean: bool = True,
+        has_violations: bool = False
     ):
         """
         Record the result of a single scenario test.
@@ -75,7 +81,10 @@ class ScenarioReportCollector:
             violation_types=violation_types or [],
             evidence_items=evidence_items,
             evidence_deduped_count=evidence_deduped_count,
-            evidence_max_snippet_len=evidence_max_snippet_len
+            evidence_max_snippet_len=evidence_max_snippet_len,
+            scenario_set=scenario_set,
+            passed_clean=passed_clean,
+            has_violations=has_violations
         )
         self.results.append(result)
     
@@ -93,9 +102,12 @@ class ScenarioReportCollector:
                     "passed": 0,
                     "failed": 0,
                     "pass_rate": 0.0,
+                    "passed_clean": 0,
+                    "passed_with_violations": 0,
                     "avg_time_ms": 0.0
                 },
                 "by_template_id": {},
+                "by_scenario_set": {},
                 "top_violations": [],
                 "evidence_stats": {
                     "avg_evidence_items": 0.0,
@@ -109,6 +121,8 @@ class ScenarioReportCollector:
         passed = sum(1 for r in self.results if r.passed)
         failed = total - passed
         pass_rate = (passed / total * 100) if total > 0 else 0.0
+        passed_clean = sum(1 for r in self.results if r.passed and r.passed_clean)
+        passed_with_violations = sum(1 for r in self.results if r.passed and r.has_violations)
         avg_time_ms = sum(r.duration_ms for r in self.results) / total if total > 0 else 0.0
         
         # Group by template_id
@@ -120,6 +134,26 @@ class ScenarioReportCollector:
                 by_template[template_key]["passed"] += 1
             else:
                 by_template[template_key]["failed"] += 1
+        
+        # Group by scenario_set
+        by_scenario_set: Dict[str, Dict[str, int]] = defaultdict(lambda: {
+            "passed": 0, 
+            "failed": 0, 
+            "total": 0,
+            "passed_clean": 0,
+            "passed_with_violations": 0
+        })
+        for result in self.results:
+            set_key = result.scenario_set or "unknown"
+            by_scenario_set[set_key]["total"] += 1
+            if result.passed:
+                by_scenario_set[set_key]["passed"] += 1
+                if result.passed_clean:
+                    by_scenario_set[set_key]["passed_clean"] += 1
+                if result.has_violations:
+                    by_scenario_set[set_key]["passed_with_violations"] += 1
+            else:
+                by_scenario_set[set_key]["failed"] += 1
         
         # Calculate top violations
         violation_counts: Dict[str, int] = defaultdict(int)
@@ -154,9 +188,12 @@ class ScenarioReportCollector:
                 "passed": passed,
                 "failed": failed,
                 "pass_rate": round(pass_rate, 2),
+                "passed_clean": passed_clean,
+                "passed_with_violations": passed_with_violations,
                 "avg_time_ms": round(avg_time_ms, 2)
             },
             "by_template_id": dict(by_template),
+            "by_scenario_set": dict(by_scenario_set),
             "top_violations": top_violations[:10],  # Top 10 violations
             "evidence_stats": {
                 "avg_evidence_items": round(avg_evidence_items, 2),

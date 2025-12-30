@@ -27,12 +27,16 @@ def load_scenario_file(scenario_path: Path) -> Dict[str, Any]:
             return json.load(f)
 
 
-def load_all_scenarios() -> List[Dict[str, Any]]:
+def load_all_scenarios(scenario_set_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Load all scenario files from tests/fixtures/scenarios/.
+    Load all scenario files from tests/fixtures/scenarios/gold/ and tests/fixtures/scenarios/explore/.
+    
+    Args:
+        scenario_set_filter: Optional filter to load only "gold" or "explore" scenarios.
+                            If None, loads both sets.
     
     Returns:
-        List of scenario dictionaries
+        List of scenario dictionaries with scenario_set metadata
     """
     fixtures_dir = Path(__file__).parent
     scenarios_dir = fixtures_dir / "scenarios"
@@ -41,15 +45,39 @@ def load_all_scenarios() -> List[Dict[str, Any]]:
         return []
     
     scenarios = []
-    for ext in ["yaml", "yml", "json"]:
-        for path in scenarios_dir.glob(f"*.{ext}"):
-            try:
-                scenario = load_scenario_file(path)
-                scenario["_file_path"] = str(path)
-                scenarios.append(scenario)
-            except Exception as e:
-                print(f"Warning: Failed to load scenario {path}: {e}")
-                continue
+    
+    # Define which sets to load
+    sets_to_load = []
+    # Treat empty string as None (no filter)
+    if scenario_set_filter and scenario_set_filter.strip():
+        sets_to_load = [scenario_set_filter.strip().lower()]
+    else:
+        sets_to_load = ["gold", "explore"]
+    
+    # Load scenarios from each set
+    for scenario_set in sets_to_load:
+        set_dir = scenarios_dir / scenario_set
+        if not set_dir.exists():
+            continue
+        
+        for ext in ["yaml", "yml", "json"]:
+            for path in sorted(set_dir.glob(f"*.{ext}")):  # Sort for consistent ordering
+                try:
+                    scenario = load_scenario_file(path)
+                    if not scenario:
+                        print(f"Warning: Scenario file {path} is empty or invalid")
+                        continue
+                    if "name" not in scenario:
+                        print(f"Warning: Scenario file {path} missing 'name' field, skipping")
+                        continue
+                    scenario["_file_path"] = str(path)
+                    scenario["scenario_set"] = scenario_set
+                    scenarios.append(scenario)
+                except Exception as e:
+                    print(f"Warning: Failed to load scenario {path}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
     
     return scenarios
 

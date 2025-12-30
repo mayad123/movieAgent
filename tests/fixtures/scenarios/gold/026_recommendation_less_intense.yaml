@@ -1,0 +1,59 @@
+name: recommendation_less_intense
+user_query: Recommend movies like The Dark Knight but less intense.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies:
+    - The Dark Knight
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints:
+    intensity: less
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000002/
+  title: Movies Like The Dark Knight
+  content: Similar but less intense films include The Prestige, Batman Begins, and Unbreakable. These share themes of heroism and moral complexity but with lower violence levels.
+  tier: B
+- source: tavily
+  url: https://www.rottentomatoes.com/m/the_dark_knight
+  title: The Dark Knight - Similar Movies
+  content: Fans seeking less intense alternatives enjoyed Iron Man, The Incredibles, and Big Hero 6 for similar superhero themes with lighter tone.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    - The Dark Knight
+    - less intense
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - tavily
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: Movies similar to The Dark Knight but less intense include The Prestige, Batman Begins, and Iron Man. These films share themes of heroism and moral complexity with The Dark Knight, but feature lower levels of violence and darker themes. The Prestige offers a similar tone of mystery and psychological depth. Batman Begins provides the same hero but with a less intense narrative. Iron Man delivers superhero action with a lighter, more comedic approach. Each of these films maintains elements that fans of The Dark Knight would appreciate while being more accessible to viewers seeking less intense content.
+

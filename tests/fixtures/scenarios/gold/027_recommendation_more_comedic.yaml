@@ -1,0 +1,59 @@
+name: recommendation_more_comedic
+user_query: Recommend movies like The Matrix but more comedic.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies:
+    - The Matrix
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints:
+    tone: more_comedic
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000003/
+  title: Movies Like The Matrix
+  content: Similar but more comedic films include Men in Black, The Fifth Element, and Guardians of the Galaxy. These blend sci-fi action with humor.
+  tier: B
+- source: tavily
+  url: https://www.rottentomatoes.com/m/the_matrix
+  title: The Matrix - Similar Movies
+  content: For Matrix fans seeking more comedy, Spaceballs, Galaxy Quest, and The Hitchhiker's Guide to the Galaxy offer similar themes with humor.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    - The Matrix
+    - comedic
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - tavily
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: Movies similar to The Matrix but more comedic include Men in Black, The Fifth Element, and Guardians of the Galaxy. These films share The Matrix's blend of science fiction action and visual spectacle, but incorporate more humor and lighter tones. Men in Black offers similar themes of hidden reality and secret organizations with comedic elements. The Fifth Element provides the same sense of futuristic adventure with a more playful approach. Guardians of the Galaxy delivers space action with significant comedic relief. Each film maintains the sci-fi action that makes The Matrix compelling while adding comedy that makes them more entertaining for viewers seeking lighter fare.
+

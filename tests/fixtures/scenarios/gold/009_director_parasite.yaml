@@ -1,0 +1,46 @@
+name: director_parasite
+user_query: Who directed Parasite?
+request_plan:
+  intent: director_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Parasite
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt6751668/
+  title: Parasite
+  content: Parasite (2019) was written and directed by Bong Joon-ho.
+  year: 2019
+  tier: A
+expected:
+  template_id: director_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - director
+    - Bong Joon-ho
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: true
+  sample_model_output: Parasite was directed by Bong Joon-ho.

@@ -1,0 +1,51 @@
+name: cast_jaws
+user_query: Who was in Jaws?
+request_plan:
+  intent: cast_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Jaws
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: true
+  allowed_source_tiers:
+  - A
+  reject_tier_c: true
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0073195/
+  title: Jaws
+  content: Jaws (1975) stars Roy Scheider, Robert Shaw, Richard Dreyfuss, and Lorraine Gary.
+  year: 1975
+  tier: A
+expected:
+  template_id: cast_info
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - cast
+    - Roy Scheider
+    must_not_contain:
+    - Tier
+    - Kaggle
+    - Tavily
+    - authoritative structured data
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+    must_not_contain_terms:
+    - Tier
+    - kaggle_imdb
+  validator_checks:
+    expected_valid: true
+    expected_violation_types: []
+    enforce_clean: true
+  sample_model_output: Jaws stars Roy Scheider, Robert Shaw, Richard Dreyfuss, and Lorraine Gary.
+

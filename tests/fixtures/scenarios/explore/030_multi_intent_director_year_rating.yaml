@@ -1,0 +1,46 @@
+name: multi_intent_director_year_rating
+user_query: Who directed Parasite, what year did it come out, and what's it rated?
+request_plan:
+  intent: general_info
+  request_type: info
+  entities_typed:
+    movies:
+    - Parasite
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 168.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt6751668/
+  title: Parasite
+  content: Parasite (2019) was directed by Bong Joon-ho. The film is rated R.
+  year: 2019
+  tier: A
+expected:
+  template_id: general_info
+  prompt_checks:
+    required_sections:
+    - system
+    - user
+    must_contain:
+    - director
+    - 2019
+    - Parasite
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Parasite (2019) was directed by Bong Joon-ho and is rated R.
+

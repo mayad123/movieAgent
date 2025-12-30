@@ -1,0 +1,52 @@
+name: conflicting_evidence_release_date
+user_query: When was The Godfather released?
+request_plan:
+  intent: release_date
+  request_type: release-date
+  entities_typed:
+    movies:
+    - The Godfather
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 6.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  reject_tier_c: false
+  response_format: short_fact
+  constraints: {}
+evidence_input:
+- source: kaggle_imdb
+  url: https://www.imdb.com/title/tt0068646/
+  title: The Godfather
+  content: The Godfather (1972) premiered in New York on March 15, 1972.
+  year: 1972
+  tier: A
+- source: tavily
+  url: https://www.rottentomatoes.com/m/the_godfather
+  title: The Godfather
+  content: The Godfather was released on March 24, 1972 in the United States.
+  tier: B
+expected:
+  template_id: release_date
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - release
+    - The Godfather
+    - 1972
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 2
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: The Godfather was released in March 1972.
+

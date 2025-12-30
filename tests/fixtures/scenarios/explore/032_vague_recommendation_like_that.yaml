@@ -1,0 +1,45 @@
+name: vague_recommendation_like_that
+user_query: I liked that movie with the time travel. Recommend something similar.
+request_plan:
+  intent: recommendation
+  request_type: recs
+  entities_typed:
+    movies: []
+    people: []
+  need_freshness: false
+  freshness_ttl_hours: 336.0
+  require_tier_a: false
+  allowed_source_tiers:
+  - A
+  - B
+  - C
+  reject_tier_c: false
+  response_format: list
+  constraints: {}
+evidence_input:
+- source: tavily
+  url: https://www.imdb.com/list/ls000000005/
+  title: Time Travel Movies
+  content: Popular time travel films include Back to the Future, Looper, Primer, and About Time.
+  tier: B
+expected:
+  template_id: recommendation
+  prompt_checks:
+    required_sections:
+    - system
+    - developer
+    - user
+    must_contain:
+    - recommend
+    - time travel
+    must_not_contain:
+    - Tier
+    - Kaggle
+  evidence_checks:
+    dedupe_expected_count: 1
+    max_snippet_len: 400
+  validator_checks:
+    expected_valid: true
+    enforce_clean: false
+  sample_model_output: Based on your interest in time travel films, here are some excellent recommendations: 1. Back to the Future (1985) - A classic adventure combining time travel with humor and heart. 2. Looper (2012) - A sci-fi action thriller with unique time travel mechanics. 3. Primer (2004) - A mind-bending indie film with complex time travel logic. 4. About Time (2013) - A romantic comedy using time travel as a tool for personal growth. These films explore different aspects of time travel, from lighthearted adventures to complex scientific concepts. Each offers a unique take on the genre that should appeal to fans of time travel narratives.
+
