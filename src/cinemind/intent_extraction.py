@@ -177,8 +177,8 @@ class IntentExtractor:
         """
         query_lower = query.lower()
         
-        # Determine intent
-        intent = self._detect_intent(query_lower, request_type)
+        # Determine intent (with fuzzy matching support)
+        intent, match_strength, match_type = self._detect_intent(query_lower, request_type)
         
         # Extract typed entities
         typed_entities = self._extract_typed_entities(query)
@@ -204,12 +204,17 @@ class IntentExtractor:
             requires_disambiguation = True
             # candidate_year should remain None for award queries (use mentioned_year instead)
         
+        # Calculate confidence based on match strength and entities
+        base_confidence = match_strength  # Use match strength as base confidence
+        entity_boost = 0.1 if (typed_entities.get("movies") or typed_entities.get("people")) else 0.0
+        final_confidence = min(base_confidence + entity_boost, 1.0)
+        
         return StructuredIntent(
             intent=intent,
             entities=typed_entities,
             constraints=constraints,
             original_query=query,
-            confidence=0.9 if typed_entities.get("movies") or typed_entities.get("people") else 0.7,
+            confidence=final_confidence,  # Now includes match strength from fuzzy matching
             requires_disambiguation=requires_disambiguation,
             candidate_year=candidate_year,
             mentioned_year=mentioned_year,
@@ -472,8 +477,20 @@ class IntentExtractor:
             rule_intent.needs_clarification = True
             return (rule_intent, "rules", 0.6)  # Falls back to rules due to LLM failure
     
-    def _detect_intent(self, query_lower: str, request_type: str) -> str:
-        """Detect intent from query."""
+    def _detect_intent(self, query_lower: str, request_type: str) -> Tuple[str, float, str]:
+        """
+        Detect intent from query with fuzzy matching support.
+        
+        Args:
+            query_lower: User query (lowercased)
+            request_type: Classified request type
+            
+        Returns:
+            Tuple of (intent: str, match_strength: float, match_type: str)
+            match_type: "exact", "fuzzy_typo", "fuzzy_paraphrase", or "fallback"
+        """
+        from .fuzzy_intent_matcher import get_fuzzy_matcher
+        
         # Map request types to intents
         type_to_intent = {
             "info": "general_info",
@@ -484,14 +501,27 @@ class IntentExtractor:
             "fact-check": "fact_check",
         }
         
-        # Check for specific intent patterns
-        for intent, patterns in self.INTENT_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, query_lower):
-                    return intent
+        # Compile exact patterns for exact matching
+        exact_patterns = {}
+        for intent, pattern_strings in self.INTENT_PATTERNS.items():
+            exact_patterns[intent] = [re.compile(pattern, re.IGNORECASE) for pattern in pattern_strings]
         
-        # Fallback to request type mapping
-        return type_to_intent.get(request_type, "general_info")
+        # Step 1: Try exact matching first (highest priority)
+        fuzzy_matcher = get_fuzzy_matcher()
+        exact_match = fuzzy_matcher.match_exact(query_lower, exact_patterns)
+        
+        if exact_match:
+            return (exact_match.intent, exact_match.match_strength, exact_match.match_type)
+        
+        # Step 2: Try fuzzy matching (typos and paraphrases)
+        fuzzy_match = fuzzy_matcher.match_fuzzy(query_lower, exact_match_found=False)
+        
+        if fuzzy_match:
+            return (fuzzy_match.intent, fuzzy_match.match_strength, fuzzy_match.match_type)
+        
+        # Step 3: Fallback to request type mapping
+        fallback_intent = type_to_intent.get(request_type, "general_info")
+        return (fallback_intent, 0.6, "fallback")
     
     def _get_entity_stoplist(self) -> set:
         """

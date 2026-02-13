@@ -181,27 +181,57 @@ class RequestPlanner:
         self.classifier = classifier
         self.intent_extractor = intent_extractor
     
-    async def plan_request(self, prompt: str, client) -> RequestPlan:
+    async def plan_request(self, prompt: str, client, request_type: Optional[str] = None) -> RequestPlan:
         """
         Create RequestPlan from user prompt.
         This is the ONLY way to route requests.
         
+        Can build a complete RequestPlan from only the prompt (prompt-only mode) using:
+        - RequestTypeRouter (deterministic, offline) for request_type
+        - IntentExtractor (rules-first + LLM fallback) for intent and entities
+        - ToolPlanner for freshness decisions
+        - Format selection based on intent
+        
         Args:
             prompt: User's query
             client: OpenAI client (for LLM-based extraction if needed)
+            request_type: Optional pre-determined request_type (if provided, uses it directly)
+                        If None, infers from prompt using router
         
         Returns:
             RequestPlan with all routing information
         """
-        # Step 1: Classify the request
-        classification = await self.classifier.classify(prompt, client)
+        # Step 1: Determine request_type
+        # If not provided, infer it using rules-based router (offline, no LLM)
+        router_confidence = 1.0  # Default confidence when request_type is provided
+        router_rule_hit = "provided"  # Default rule_hit when request_type is provided
+        router_used = False
+        
+        if not request_type:
+            from .request_type_router import get_request_type_router
+            router = get_request_type_router()
+            router_result = router.route(prompt)
+            router_used = True
+            router_confidence = router_result.confidence
+            router_rule_hit = router_result.rule_hit
+            
+            # Use inferred type if confidence is high enough, otherwise default to "info"
+            if router.should_use_inferred_type(router_result):
+                request_type = router_result.request_type
+                logger.info(f"RequestTypeRouter inferred '{request_type}' (confidence: {router_confidence:.2f}, rule: {router_rule_hit})")
+            else:
+                request_type = "info"  # Safe default for low confidence
+                logger.info(f"RequestTypeRouter confidence too low ({router_confidence:.2f}), defaulting to 'info'")
+        else:
+            logger.info(f"Using provided request_type: '{request_type}'")
         
         # Step 2: Extract structured intent using smart routing (rules-first + LLM fallback)
+        # This provides: intent, entities, constraints, freshness needs, etc.
         structured_intent, extraction_mode, intent_confidence = await self.intent_extractor.extract_smart(
-            prompt, client, classification.predicted_type, force_llm=False
+            prompt, client, request_type, force_llm=False
         )
         
-        # Step 3: Extract typed entities (needed for freshness decision)
+        # Step 3: Extract typed entities (already extracted in structured_intent)
         entities_typed = structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
         if "movies" not in entities_typed:
             entities_typed["movies"] = []
@@ -209,14 +239,15 @@ class RequestPlanner:
             entities_typed["people"] = []
         
         # Step 4: Determine freshness requirements
-        # Get freshness signal from classifier (weak signal)
-        freshness_signal = classification.freshness_signal if hasattr(classification, 'freshness_signal') else False
+        # Use freshness signal from structured_intent (already determined by IntentExtractor)
+        freshness_signal = structured_intent.need_freshness  # Use intent extractor's freshness determination
         
         # Get entity year for freshness decision
         candidate_year = structured_intent.candidate_year if hasattr(structured_intent, 'candidate_year') else None
         mentioned_year = structured_intent.mentioned_year if hasattr(structured_intent, 'mentioned_year') else None
         
         # Use ToolPlanner to make final freshness decision
+        # ToolPlanner uses intent + signal + entity year to determine final freshness
         from .tool_plan import ToolPlanner
         tool_planner = ToolPlanner()
         need_freshness, ttl_hours, freshness_reason = tool_planner.determine_freshness(
@@ -228,18 +259,18 @@ class RequestPlanner:
         )
         logger.info(f"Freshness decision: signal={freshness_signal}, final={need_freshness}, reason={freshness_reason}, ttl={ttl_hours}h")
         
-        # Step 5: Determine source policy
+        # Step 5: Determine source policy (based on request_type and intent)
         allowed_tiers, require_tier_a, reject_tier_c = self._determine_source_policy(
-            classification.predicted_type, structured_intent.intent
+            request_type, structured_intent.intent
         )
         
-        # Step 6: Select tools
-        tools = self._select_tools(structured_intent.intent, classification.predicted_type)
+        # Step 6: Select tools (based on intent and request_type)
+        tools = self._select_tools(structured_intent.intent, request_type)
         
-        # Step 6: Determine response format
+        # Step 7: Determine response format (based on intent, request_type, and constraints)
         response_format = self._determine_response_format(
             structured_intent.intent, 
-            classification.predicted_type,
+            request_type,
             structured_intent.constraints
         )
         
@@ -261,13 +292,25 @@ class RequestPlanner:
         
         logger.info(f"Intent extraction: mode={extraction_mode}, confidence={intent_confidence:.2f}")
         
+        # Determine overall confidence (use router confidence if router was used, otherwise use intent confidence)
+        overall_confidence = router_confidence if router_used else intent_confidence
+        # If both router and intent extraction were used, take the minimum (conservative)
+        if router_used:
+            overall_confidence = min(router_confidence, intent_confidence)
+        
+        # Determine rule_hit (prefer router rule_hit if router was used)
+        rule_hit = router_rule_hit if router_used else None
+        
+        # Determine llm_used (true if intent extraction used LLM)
+        llm_used = (extraction_mode == "llm")
+        
         return RequestPlan(
             intent=structured_intent.intent,
-            request_type=classification.predicted_type,
+            request_type=request_type,  # Use request_type directly (from router or provided)
             entities=all_entities,  # Flat list for backward compatibility
             entities_typed=entities_typed,  # Typed entities (preferred)
             entity_years=entity_years,
-            freshness_signal=freshness_signal,  # Signal from classifier
+            freshness_signal=freshness_signal,  # Signal from structured_intent (from IntentExtractor)
             need_freshness=need_freshness,  # Final decision from ToolPlanner
             freshness_ttl_hours=ttl_hours,
             freshness_reason=freshness_reason,  # Reason for final decision
@@ -276,9 +319,9 @@ class RequestPlanner:
             reject_tier_c=reject_tier_c,
             tools_to_call=tools,
             response_format=response_format,
-            confidence=classification.confidence,
-            rule_hit=classification.rule_hit,
-            llm_used=classification.llm_used,
+            confidence=overall_confidence,  # Overall confidence from router + intent extraction
+            rule_hit=rule_hit,  # Rule hit from router
+            llm_used=llm_used,  # Whether LLM was used in intent extraction
             original_query=prompt,
             intent_extraction_mode=extraction_mode,  # "rules" or "llm"
             intent_confidence=intent_confidence  # Confidence from intent extraction (0-1)

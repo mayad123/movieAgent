@@ -30,43 +30,7 @@ if str(src_path) not in sys.path:
 
 from cinemind.agent import CineMind
 from cinemind.llm_client import FakeLLMClient
-
-
-def auto_detect_request_type(query: str) -> Optional[str]:
-    """
-    Auto-detect request_type from query using simple pattern matching.
-    
-    This helps bypass planning when request_type is not explicitly provided.
-    Uses the same patterns as FakeLLMClient for consistency.
-    
-    Args:
-        query: User query string
-        
-    Returns:
-        Detected request_type or None
-    """
-    query_lower = query.lower()
-    
-    # Priority order matters (most specific first)
-    if "compare" in query_lower:
-        return "comparison"
-    elif "recommend" in query_lower or ("similar" in query_lower and "movie" in query_lower) or ("like" in query_lower and "movie" in query_lower):
-        return "recs"
-    elif "where" in query_lower and ("watch" in query_lower or "stream" in query_lower):
-        return "info"  # where_to_watch uses info request_type
-    elif "available" in query_lower or "streaming" in query_lower:
-        return "info"  # availability uses info request_type
-    elif "director" in query_lower or "directed by" in query_lower or "directed" in query_lower:
-        return "info"
-    elif "cast" in query_lower or "starred" in query_lower or "who was in" in query_lower:
-        return "info"
-    elif "release" in query_lower or "when was" in query_lower or "came out" in query_lower:
-        return "release-date"
-    elif "runtime" in query_lower or "how long" in query_lower or "length" in query_lower:
-        return "info"
-    else:
-        # Default to "info" for most queries
-        return "info"
+from cinemind.request_type_router import get_request_type_router
 
 
 async def run_playground(
@@ -78,15 +42,18 @@ async def run_playground(
     
     Args:
         user_query: Free-form user query string
-        request_type: Optional request type to bypass planning (e.g., "info", "recs")
-                     If not provided, auto-detected from query using pattern matching
+        request_type: Optional request type (if not provided, auto-inferred using rules-based router)
     
     Returns:
         Full structured result from CineMind agent
+    
+    Note:
+        Request type is automatically inferred from the query using a deterministic
+        rules-based router (fully offline, no LLM calls). If provided explicitly,
+        it will be used directly.
     """
-    # Auto-detect request_type if not provided (helps bypass planning)
-    if not request_type:
-        request_type = auto_detect_request_type(user_query)
+    # Request type will be auto-inferred by RequestPlanner if not provided
+    # (uses rules-based router, fully offline)
     
     # Create FakeLLM client (same as offline e2e tests)
     fake_llm_client = FakeLLMClient()
@@ -179,10 +146,12 @@ Examples:
                     if len(parts) > 1:
                         request_type = parts[1].strip().split()[0] if parts[1].strip() else None
                 
-                # Auto-detect if not provided
-                detected_type = auto_detect_request_type(query) if not request_type else None
-                if detected_type:
-                    print(f"\n[Auto-detected request_type: {detected_type}]")
+                # Auto-detect if not provided (using rules-based router)
+                if not request_type:
+                    router = get_request_type_router()
+                    router_result = router.route(query)
+                    request_type = router_result.request_type
+                    print(f"\n[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]")
                 
                 print("\n[Executing through CineMind (offline, FakeLLM, no API calls)...]")
                 result = await run_playground(query, request_type=request_type)
@@ -226,10 +195,12 @@ Examples:
     # Single query mode
     request_type = args.request_type
     
-    # Auto-detect if not provided
+    # Auto-detect if not provided (using rules-based router)
     if not request_type:
-        request_type = auto_detect_request_type(user_query)
-        print(f"[Auto-detected request_type: {request_type}]")
+        router = get_request_type_router()
+        router_result = router.route(user_query)
+        request_type = router_result.request_type
+        print(f"[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]")
     else:
         print(f"[Using provided request_type: {request_type}]")
     
