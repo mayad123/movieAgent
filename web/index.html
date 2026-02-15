@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineMind · Movie Chat</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <div class="app" id="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button type="button" class="new-chat" id="newChatBtn">+ New chat</button>
+            </div>
+            <div class="conversation-list-label">This chat</div>
+            <div class="conversation-list" id="conversationList"></div>
+        </aside>
+        <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+            <span class="toggle-icon"></span>
+        </button>
+        <main class="main">
+            <header class="header">
+                <h1 class="header-title" id="conversationTitle">New conversation</h1>
+                <span class="mode-badge" id="modeBadge">Offline</span>
+                <div class="header-actions">
+                    <button type="button" id="headerNewChat" aria-label="New chat">New</button>
+                </div>
+            </header>
+            <div class="chat-column empty" id="chatColumn">
+                <div class="chat-inner">
+                    <div class="empty-state" id="emptyState">
+                        <h2>CineMind</h2>
+                        <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>
+                    </div>
+                    <div id="messageList"></div>
+                    <div class="retrieving hidden" id="retrievingRow">
+                        <div class="message-avatar">C</div>
+                        <div class="retrieving-content">
+                            <span class="retrieving-dots">Retrieving<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="composer-wrap">
+                <div class="composer-inner">
+                    <textarea
+                        class="composer-input"
+                        id="composerInput"
+                        placeholder="Message CineMind…"
+                        rows="1"
+                        autocomplete="off"
+                    ></textarea>
+                    <button type="button" class="composer-send" id="sendBtn" aria-label="Send">↑</button>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

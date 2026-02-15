@@ -1,351 +1,802 @@
 <!DOCTYPE html>
+<!-- LEGACY: Canonical UI is in web/ (index.html + css/app.css + js/app.js). Use http://localhost:8000/ or /app/ -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CineMind Offline Playground</title>
+    <title>CineMind · Movie Chat</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        /* --- Reset & base --- */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-size: 15px;
             line-height: 1.6;
-            color: #333;
-            background: #f5f5f5;
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
+            color: #0d0d0d;
+            background: #fff;
+            overflow: hidden;
         }
 
-        h1 {
-            margin-bottom: 10px;
-            color: #222;
+        /*
+         * Layout: header, collapsible sidebar, single chat column, fixed composer.
+         * Loading: "Retrieving..." row with animated dots; cleared when response arrives.
+         * Empty state: centered title + subtitle when no messages.
+         */
+        .app {
+            display: flex;
+            height: 100%;
         }
-
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: #f7f7f8;
+            border-right: 1px solid #e5e5e5;
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.2s, min-width 0.2s, width 0.2s;
+            z-index: 10;
         }
-
-        .container {
-            background: white;
-            border-radius: 8px;
-            padding: 30px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .sidebar.collapsed {
+            min-width: 0;
+            width: 0;
+            overflow: hidden;
+            pointer-events: none;
         }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #444;
-        }
-
-        input[type="text"],
-        select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: inherit;
-        }
-
-        input[type="text"]:focus,
-        select:focus {
-            outline: none;
-            border-color: #4a90e2;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-        }
-
-        button {
-            background: #4a90e2;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #357abd;
-        }
-
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .status {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .status.error {
-            background: #fee;
-            color: #c33;
-            border: 1px solid #fcc;
-        }
-
-        .status.info {
-            background: #e8f4f8;
-            color: #2c5f7c;
-            border: 1px solid #b8d4e8;
-        }
-
-        .output {
-            margin-top: 30px;
-            padding-top: 30px;
-            border-top: 2px solid #eee;
-        }
-
-        .output.hidden {
-            display: none;
-        }
-
-        .response-text {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 4px;
-            border-left: 4px solid #4a90e2;
-            white-space: pre-wrap;
-            line-height: 1.8;
-            margin-bottom: 20px;
-        }
-
-        .metadata {
-            margin-top: 20px;
-        }
-
-        .metadata-header {
+        .sidebar-header {
+            padding: 12px 14px;
+            border-bottom: 1px solid #e5e5e5;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px;
-            background: #f5f5f5;
-            border-radius: 4px;
-            cursor: pointer;
-            user-select: none;
+            min-height: 52px;
         }
-
-        .metadata-header:hover {
+        .sidebar-header .new-chat {
+            font-size: 14px;
+            color: #0d0d0d;
+            background: transparent;
+            border: 1px solid #d1d5db;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .sidebar-header .new-chat:hover {
             background: #eee;
         }
-
-        .metadata-header h3 {
-            font-size: 14px;
+        .conversation-list-label {
+            padding: 6px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .conversation-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+        .conversation-list:empty::after {
+            content: 'No messages in this chat';
+            display: block;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .conversation-item {
+            padding: 8px 14px;
+            font-size: 13px;
+            color: #374151;
+            cursor: pointer;
+            border-radius: 6px;
+            margin: 2px 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: none;
+            background: transparent;
+            text-align: left;
+            width: 100%;
+            line-height: 1.3;
+        }
+        .conversation-item:hover {
+            background: #eee;
+        }
+        .conversation-item.active {
+            background: #e5e7eb;
             font-weight: 500;
-            color: #666;
-            margin: 0;
+        }
+        .sidebar-toggle {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 56px;
+            background: #f7f7f8;
+            border: 1px solid #e5e5e5;
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #6b7280;
+            z-index: 30;
+            transition: left 0.2s, box-shadow 0.2s;
+        }
+        .sidebar-toggle:hover { background: #eee; color: #0d0d0d; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .sidebar:not(.collapsed) ~ .sidebar-toggle { left: 260px; }
+        .sidebar.collapsed ~ .sidebar-toggle { left: 0; }
+        .sidebar.collapsed ~ .sidebar-toggle .toggle-icon::before { content: '›'; }
+        .toggle-icon::before { content: '‹'; }
+        .app.sidebar-collapsed .sidebar { margin-left: -260px; min-width: 0; width: 0; }
+        .composer-wrap { left: 260px; }
+        .app.sidebar-collapsed .composer-wrap { left: 0; }
+
+        /* --- Main column --- */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
         }
 
-        .metadata-toggle {
-            font-size: 18px;
-            color: #999;
+        /* --- Header --- */
+        .header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 52px;
+            flex-shrink: 0;
         }
-
-        .metadata-content {
-            margin-top: 10px;
-            padding: 15px;
-            background: #fafafa;
+        .header-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #0d0d0d;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mode-badge {
+            font-size: 11px;
+            font-weight: 500;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 4px 8px;
             border-radius: 4px;
-            font-family: 'Courier New', monospace;
+        }
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .header-actions button {
+            background: transparent;
+            border: none;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .header-actions button:hover { color: #0d0d0d; background: #f3f4f6; }
+
+        /* --- Chat column --- */
+        .chat-column {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 0 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chat-inner {
+            width: 100%;
+            max-width: 768px;
+            margin: 0 auto;
+        }
+
+        /* --- Empty state --- */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: #6b7280;
+        }
+        .empty-state h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        .empty-state p {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .chat-column:not(.empty) .empty-state { display: none; }
+
+        /*
+         * Message styling spec (ChatGPT-like)
+         * - User: right-aligned, dark bubble (#0d0d0d), white text, avatar "U"
+         * - Assistant: left-aligned, light bubble (#f7f7f8), dark text, avatar "C"
+         * - Spacing: 24px vertical padding per message; 12px 16px bubble padding
+         * - Typography: 15px, line-height 1.6, pre-wrap for line breaks
+         */
+        .message {
+            padding: 24px 0;
+            display: flex;
+            gap: 16px;
+            width: 100%;
+        }
+        .message.user { flex-direction: row-reverse; }
+        .message-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .message.assistant .message-avatar { background: #0d0d0d; color: #fff; }
+        .message.user .message-avatar { background: #4a90e2; color: #fff; }
+        .message-content {
+            flex: 1;
+            min-width: 0;
+            max-width: 100%;
+        }
+        .message.user .message-content { display: flex; justify-content: flex-end; }
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .message.assistant .message-bubble {
+            background: #f7f7f8;
+            color: #0d0d0d;
+            border: 1px solid #e5e5e5;
+        }
+        .message.user .message-bubble {
+            background: #0d0d0d;
+            color: #fff;
+        }
+        .message-meta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .message.user .message-meta { text-align: right; }
+        .metadata-toggle-btn {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 0;
+            text-decoration: underline;
+        }
+        .metadata-toggle-btn:hover { color: #6b7280; }
+        .message-metadata {
+            margin-top: 8px;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            font-family: ui-monospace, monospace;
             font-size: 12px;
             overflow-x: auto;
-            max-height: 400px;
+            max-height: 240px;
             overflow-y: auto;
         }
+        .message-metadata.hidden { display: none; }
 
-        .metadata-content.hidden {
+        /*
+         * Media Strip — visual media slots (with and without images).
+         * - With images: 1 primary + up to 3 thumbnails; fixed-height slots, skeleton shimmer until load.
+         * - Without images: single placeholder card (movie title + "No image available yet.").
+         * - Where: top of assistant message bubble, only when API includes media_strip.movie_title.
+         * - No API required: strip is optional; message renders correctly with no media_strip.
+         */
+        .media-strip {
+            width: 100%;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+        .media-strip-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            min-height: 140px;
+        }
+        .media-strip-primary {
+            grid-column: 1;
+            grid-row: 1 / 3;
+            min-height: 140px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e5e7eb;
+        }
+        .media-strip-primary img {
+            width: 100%;
+            height: 100%;
+            min-height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+        .media-strip-thumbnails {
+            grid-column: 2;
+            grid-row: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            justify-content: stretch;
+        }
+        .media-strip-thumb {
+            flex: 1;
+            min-height: 64px;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #e5e7eb;
+        }
+        .media-strip-thumb img {
+            width: 100%;
+            height: 100%;
+            min-height: 64px;
+            object-fit: cover;
+            display: block;
+        }
+        /* Placeholder when no images: single card, fixed height */
+        .media-strip-placeholder {
+            min-height: 140px;
+            border-radius: 8px;
+            border: 1px dashed #d1d5db;
+            background: #f9fafb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            text-align: center;
+        }
+        .media-strip-placeholder-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        .media-strip-placeholder-caption {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        /* Skeleton loading: shimmer on image slots until loaded */
+        .media-strip-primary.media-strip-skeleton,
+        .media-strip-thumb.media-strip-skeleton {
+            position: relative;
+        }
+        .media-strip-primary.media-strip-skeleton::after,
+        .media-strip-thumb.media-strip-skeleton::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255,255,255,0.4) 50%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            animation: media-strip-shimmer 1.2s ease-in-out infinite;
+        }
+        @keyframes media-strip-shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        .media-strip.has-primary-only .media-strip-layout {
+            grid-template-columns: 1fr;
+        }
+        .media-strip.has-primary-only .media-strip-thumbnails {
             display: none;
         }
 
-        .verbosity {
-            margin-top: 10px;
-            font-size: 13px;
-            color: #666;
+        /* --- Retrieving / loading state --- */
+        .retrieving {
+            padding: 24px 0;
+            display: flex;
+            gap: 16px;
+            width: 100%;
+        }
+        .retrieving .message-avatar { background: #0d0d0d; color: #fff; width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+        .retrieving-content {
+            flex: 1;
+            padding: 12px 16px;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .retrieving-dots .dot {
+            display: inline-block;
+            animation: dotPulse 0.6s ease-in-out infinite;
+        }
+        .retrieving-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+        .retrieving-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dotPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
         }
 
-        .verbosity-label {
-            font-weight: 500;
+        /* --- Composer (fixed bottom) --- */
+        .composer-wrap {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            background: #fff;
+            border-top: 1px solid #e5e5e5;
+            padding: 16px;
+            padding-left: max(16px, env(safe-area-inset-left));
+            padding-right: max(16px, env(safe-area-inset-right));
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
         }
-
-        pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+        .composer-inner {
+            max-width: 768px;
+            margin: 0 auto;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            background: #f7f7f8;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 12px 12px 12px 16px;
+        }
+        .composer-inner:focus-within {
+            border-color: #0d0d0d;
+            box-shadow: 0 0 0 1px #0d0d0d;
+        }
+        .composer-input {
+            flex: 1;
+            min-height: 24px;
+            max-height: 200px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            font-size: 15px;
+            font-family: inherit;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+        }
+        .composer-input::placeholder { color: #9ca3af; }
+        .composer-send {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: #0d0d0d;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .composer-send:hover:not(:disabled) { background: #333; }
+        .composer-send:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>CineMind Offline Playground</h1>
-        <p class="subtitle">Developer playground - Execute queries through CineMind agent (FakeLLM, no API calls)</p>
-
-        <form id="queryForm">
-            <div class="form-group">
-                <label for="userQuery">Movie Question</label>
-                <input 
-                    type="text" 
-                    id="userQuery" 
-                    name="userQuery" 
-                    placeholder="e.g., Who directed The Matrix?"
-                    autocomplete="off"
-                    required
-                >
+    <div class="app" id="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button type="button" class="new-chat" id="newChatBtn">+ New chat</button>
             </div>
-
-
-            <button type="submit" id="submitBtn">Submit Query</button>
-        </form>
-
-        <div id="status" class="status hidden"></div>
-
-        <div id="output" class="output hidden">
-            <h2>Response</h2>
-            <div id="responseText" class="response-text"></div>
-            <div id="verbosity" class="verbosity"></div>
-
-            <div class="metadata">
-                <div class="metadata-header" id="metadataToggle">
-                    <h3>Developer: Raw Response Metadata</h3>
-                    <span class="metadata-toggle" id="metadataToggleIcon">▼</span>
+            <div class="conversation-list-label">This chat</div>
+            <div class="conversation-list" id="conversationList"></div>
+        </aside>
+        <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+            <span class="toggle-icon"></span>
+        </button>
+        <main class="main">
+            <header class="header">
+                <h1 class="header-title" id="conversationTitle">New conversation</h1>
+                <span class="mode-badge" id="modeBadge">Offline</span>
+                <div class="header-actions">
+                    <button type="button" id="headerNewChat" aria-label="New chat">New</button>
                 </div>
-                <div id="metadataContent" class="metadata-content hidden">
-                    <pre id="metadataJson"></pre>
+            </header>
+            <div class="chat-column empty" id="chatColumn">
+                <div class="chat-inner">
+                    <div class="empty-state" id="emptyState">
+                        <h2>CineMind</h2>
+                        <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>
+                    </div>
+                    <div id="messageList"></div>
+                    <div class="retrieving hidden" id="retrievingRow">
+                        <div class="message-avatar">C</div>
+                        <div class="retrieving-content">
+                            <span class="retrieving-dots">Retrieving<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+            <div class="composer-wrap">
+                <div class="composer-inner">
+                    <textarea
+                        class="composer-input"
+                        id="composerInput"
+                        placeholder="Message CineMind…"
+                        rows="1"
+                        autocomplete="off"
+                    ></textarea>
+                    <button type="button" class="composer-send" id="sendBtn" aria-label="Send">↑</button>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script>
         const API_BASE = 'http://localhost:8000';
 
-            const form = document.getElementById('queryForm');
-            const userQueryInput = document.getElementById('userQuery');
-            const submitBtn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('status');
-        const outputDiv = document.getElementById('output');
-        const responseTextDiv = document.getElementById('responseText');
-        const verbosityDiv = document.getElementById('verbosity');
-        const metadataToggle = document.getElementById('metadataToggle');
-        const metadataContent = document.getElementById('metadataContent');
-        const metadataJson = document.getElementById('metadataJson');
-        const metadataToggleIcon = document.getElementById('metadataToggleIcon');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const conversationList = document.getElementById('conversationList');
+        const conversationTitle = document.getElementById('conversationTitle');
+        const chatColumn = document.getElementById('chatColumn');
+        const emptyState = document.getElementById('emptyState');
+        const messageList = document.getElementById('messageList');
+        const retrievingRow = document.getElementById('retrievingRow');
+        const composerInput = document.getElementById('composerInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const newChatBtn = document.getElementById('newChatBtn');
+        const headerNewChat = document.getElementById('headerNewChat');
 
-        // Toggle metadata visibility
-        metadataToggle.addEventListener('click', () => {
-            const isHidden = metadataContent.classList.contains('hidden');
-            if (isHidden) {
-                metadataContent.classList.remove('hidden');
-                metadataToggleIcon.textContent = '▲';
+        let messages = [];
+        let isSending = false;
+
+        const app = document.getElementById('app');
+        function toggleSidebar() {
+            sidebar.classList.toggle('collapsed');
+            app.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+        }
+        sidebarToggle.addEventListener('click', toggleSidebar);
+
+        function startNewChat() {
+            messages = [];
+            renderMessages();
+            updateConversationList();
+            conversationTitle.textContent = 'New conversation';
+            composerInput.value = '';
+            composerInput.focus();
+        }
+        newChatBtn.addEventListener('click', startNewChat);
+        headerNewChat.addEventListener('click', startNewChat);
+
+        function getConversationTitle() {
+            const firstUser = messages.find(m => m.role === 'user');
+            if (!firstUser) return 'New conversation';
+            const text = firstUser.content;
+            return text.length > 40 ? text.slice(0, 40) + '…' : text;
+        }
+
+        function updateConversationList() {
+            conversationList.innerHTML = '';
+            const userMessages = messages.filter(m => m.role === 'user');
+            userMessages.forEach((m, i) => {
+                const el = document.createElement('div');
+                el.className = 'conversation-item';
+                el.textContent = m.content.length > 36 ? m.content.slice(0, 36) + '…' : m.content;
+                const msgIndex = messages.indexOf(m);
+                el.addEventListener('click', () => {
+                    const msgEl = messageList.querySelector(`[data-msg-index="${msgIndex}"]`);
+                    if (msgEl) msgEl.scrollIntoView({ behavior: 'smooth' });
+                });
+                conversationList.appendChild(el);
+            });
+        }
+
+        function showRetrieving() {
+            retrievingRow.classList.remove('hidden');
+            chatColumn.scrollTop = chatColumn.scrollHeight;
+        }
+        function hideRetrieving() {
+            retrievingRow.classList.add('hidden');
+        }
+
+        function appendMessage(role, content, meta) {
+            messages.push({ role, content, meta: meta || null });
+            renderMessages();
+            updateConversationList();
+            if (messages.length === 1 && role === 'user') {
+                conversationTitle.textContent = content.length > 40 ? content.slice(0, 40) + '…' : content;
+            }
+        }
+
+        /**
+         * Media Strip — rules for where it appears (per assistant response):
+         * 1. Only on assistant messages (never on user).
+         * 2. Only when the API response includes meta.media_strip with at least movie_title.
+         * 3. Position: top of the message bubble, above the response text.
+         * 4. If no media_strip is present, the bubble shows only text (no empty slot).
+         * Data contract: media_strip = { movie_title, primary_image_url?, thumbnail_urls? } (all optional except movie_title).
+         */
+        function createMediaStrip(mediaStrip) {
+            if (!mediaStrip || !mediaStrip.movie_title) return null;
+            const title = String(mediaStrip.movie_title).trim();
+            const primaryUrl = mediaStrip.primary_image_url && mediaStrip.primary_image_url.trim();
+            const thumbUrls = Array.isArray(mediaStrip.thumbnail_urls)
+                ? mediaStrip.thumbnail_urls.slice(0, 3).filter(Boolean)
+                : [];
+
+            const wrap = document.createElement('div');
+            wrap.className = 'media-strip';
+
+            if (!primaryUrl && thumbUrls.length === 0) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'media-strip-placeholder';
+                placeholder.innerHTML = '<span class="media-strip-placeholder-title">' + escapeHtml(title) + '</span><span class="media-strip-placeholder-caption">No image available yet.</span>';
+                wrap.appendChild(placeholder);
+                return wrap;
+            }
+
+            const layout = document.createElement('div');
+            layout.className = 'media-strip-layout';
+            if (primaryUrl && thumbUrls.length === 0) wrap.classList.add('has-primary-only');
+
+            const primarySlot = document.createElement('div');
+            primarySlot.className = 'media-strip-primary';
+            if (primaryUrl) {
+                primarySlot.classList.add('media-strip-skeleton');
+                const img = document.createElement('img');
+                img.src = primaryUrl;
+                img.alt = title;
+                img.loading = 'lazy';
+                img.onload = function () { primarySlot.classList.remove('media-strip-skeleton'); };
+                img.onerror = function () {
+                    primarySlot.classList.remove('media-strip-skeleton');
+                    primarySlot.innerHTML = '';
+                    const ph = document.createElement('div');
+                    ph.className = 'media-strip-placeholder';
+                    ph.style.minHeight = '140px';
+                    ph.innerHTML = '<span class="media-strip-placeholder-title">' + escapeHtml(title) + '</span><span class="media-strip-placeholder-caption">No image available yet.</span>';
+                    primarySlot.appendChild(ph);
+                };
+                primarySlot.appendChild(img);
             } else {
-                metadataContent.classList.add('hidden');
-                metadataToggleIcon.textContent = '▼';
+                const ph = document.createElement('div');
+                ph.className = 'media-strip-placeholder';
+                ph.style.minHeight = '100%';
+                ph.innerHTML = '<span class="media-strip-placeholder-title">' + escapeHtml(title) + '</span><span class="media-strip-placeholder-caption">No image available yet.</span>';
+                primarySlot.appendChild(ph);
             }
-        });
+            layout.appendChild(primarySlot);
 
-        // Handle form submission
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+            const thumbContainer = document.createElement('div');
+            thumbContainer.className = 'media-strip-thumbnails';
+            thumbUrls.forEach(url => {
+                const thumb = document.createElement('div');
+                thumb.className = 'media-strip-thumb media-strip-skeleton';
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = '';
+                img.loading = 'lazy';
+                img.onload = function () { thumb.classList.remove('media-strip-skeleton'); };
+                img.onerror = function () { thumb.classList.remove('media-strip-skeleton'); };
+                thumb.appendChild(img);
+                thumbContainer.appendChild(thumb);
+            });
+            layout.appendChild(thumbContainer);
+            wrap.appendChild(layout);
+            return wrap;
+        }
+        function escapeHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
 
-            const userQuery = userQueryInput.value.trim();
+        function renderMessages() {
+            messageList.innerHTML = '';
+            chatColumn.classList.toggle('empty', messages.length === 0);
+            messages.forEach((msg, i) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'message ' + msg.role;
+                wrap.setAttribute('data-msg-index', i);
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.textContent = msg.role === 'user' ? 'U' : 'C';
+                const content = document.createElement('div');
+                content.className = 'message-content';
+                const bubble = document.createElement('div');
+                bubble.className = 'message-bubble';
+                const mediaStrip = msg.role === 'assistant' && msg.meta && msg.meta.media_strip ? createMediaStrip(msg.meta.media_strip) : null;
+                if (mediaStrip) bubble.appendChild(mediaStrip);
+                const textNode = document.createTextNode(msg.content);
+                bubble.appendChild(textNode);
+                content.appendChild(bubble);
+                if (msg.meta && msg.role === 'assistant') {
+                    const metaRow = document.createElement('div');
+                    metaRow.className = 'message-meta';
+                    const toggle = document.createElement('button');
+                    toggle.type = 'button';
+                    toggle.className = 'metadata-toggle-btn';
+                    toggle.textContent = 'Raw response';
+                    const metaBlock = document.createElement('pre');
+                    metaBlock.className = 'message-metadata hidden';
+                    metaBlock.textContent = typeof msg.meta === 'string' ? msg.meta : JSON.stringify(msg.meta, null, 2);
+                    toggle.addEventListener('click', () => metaBlock.classList.toggle('hidden'));
+                    metaRow.appendChild(toggle);
+                    content.appendChild(metaRow);
+                    content.appendChild(metaBlock);
+                }
+                wrap.appendChild(avatar);
+                wrap.appendChild(content);
+                messageList.appendChild(wrap);
+            });
+            chatColumn.scrollTop = chatColumn.scrollHeight;
+        }
 
-            if (!userQuery) {
-                showStatus('Please enter a query', 'error');
-                return;
-            }
+        async function sendMessage() {
+            const text = composerInput.value.trim();
+            if (!text || isSending) return;
+            isSending = true;
+            sendBtn.disabled = true;
+            composerInput.value = '';
+            composerInput.style.height = 'auto';
 
-            // Disable form during request
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Processing...';
-            hideStatus();
-            hideOutput();
+            appendMessage('user', text);
+            showRetrieving();
 
             try {
                 const response = await fetch(`${API_BASE}/query`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        user_query: userQuery
-                        // request_type is auto-inferred by the server
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_query: text })
                 });
-
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail?.error || `HTTP ${response.status}: ${response.statusText}`);
+                    const err = await response.json();
+                    throw new Error(err.detail?.error || `HTTP ${response.status}`);
                 }
-
                 const result = await response.json();
-
-                // Display response
-                displayResponse(result);
-
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, 'error');
-                hideOutput();
+                const responseText = result.response || result.answer || 'No response.';
+                hideRetrieving();
+                appendMessage('assistant', responseText, result);
+            } catch (err) {
+                hideRetrieving();
+                appendMessage('assistant', `Error: ${err.message}`, null);
             } finally {
-                // Re-enable form
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Query';
+                isSending = false;
+                sendBtn.disabled = false;
+                composerInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        composerInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
             }
         });
 
-        function displayResponse(result) {
-            // Extract response text (try multiple possible fields)
-            const responseText = result.response || result.answer || 'No response text available';
-            responseTextDiv.textContent = responseText;
-
-            // Calculate verbosity (sentence count)
-            const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-            const sentenceCount = sentences.length;
-            verbosityDiv.innerHTML = `<span class="verbosity-label">Verbosity:</span> ${sentenceCount} sentence${sentenceCount !== 1 ? 's' : ''}`;
-
-            // Display raw metadata
-            metadataJson.textContent = JSON.stringify(result, null, 2);
-
-            // Show output
-            showOutput();
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 200) + 'px';
         }
+        composerInput.addEventListener('input', () => autoResize(composerInput));
 
-        function showStatus(message, type = 'info') {
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            statusDiv.classList.remove('hidden');
-        }
-
-        function hideStatus() {
-            statusDiv.classList.add('hidden');
-        }
-
-        function showOutput() {
-            outputDiv.classList.remove('hidden');
-        }
-
-        function hideOutput() {
-            outputDiv.classList.add('hidden');
-        }
-
-        // Focus query input on load
-        userQueryInput.focus();
+        composerInput.focus();
     </script>
 </body>
 </html>
-
