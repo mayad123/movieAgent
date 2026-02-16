@@ -6,6 +6,7 @@ Performance optimizations:
 - Parallel search execution (multiple searches run concurrently)
 - Non-blocking database writes (runs in background thread pool)
 """
+import asyncio
 import os
 import json
 import logging
@@ -35,6 +36,7 @@ from .tool_plan import ToolPlanner, ToolPlan
 from .prompting import PromptBuilder, EvidenceBundle, get_template
 from .prompting.output_validator import OutputValidator
 from .llm_client import LLMClient, OpenAILLMClient
+from .media_enrichment import attach_media_to_result
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -284,6 +286,9 @@ class CineMind:
                     "openai_skipped": True,
                     "skip_reason": reason
                 }
+                
+                # Wikipedia-only media enrichment (runs regardless of Tavily/OpenAI availability)
+                await asyncio.to_thread(attach_media_to_result, user_query, result)
                 
                 if track_ctx:
                     track_ctx.__exit__(None, None, None)
@@ -1082,7 +1087,6 @@ class CineMind:
                 
                 # Run database writes in background to avoid blocking
                 if self.observability:
-                    import asyncio
                     def save_to_db():
                         try:
                             self.observability.db.save_response(
@@ -1185,6 +1189,14 @@ class CineMind:
                         "candidates_used": candidates_used if 'candidates_used' in locals() else len([r for r in search_results if r.get("tier") == "A"]),
                         "no_browse_reason": "skip_tavily_enforced"
                     }
+
+                # Pass recommended_movies for batch enrichment (e.g. similar movies from FakeLLM)
+                meta = getattr(llm_response, "metadata", None) or {}
+                if meta.get("similar_movies"):
+                    result["recommended_movies"] = meta["similar_movies"]
+                
+                # Wikipedia-only media enrichment (runs regardless of Tavily/OpenAI availability)
+                await asyncio.to_thread(attach_media_to_result, user_query, result)
                 
                 if track_ctx:
                     track_ctx.__exit__(None, None, None)

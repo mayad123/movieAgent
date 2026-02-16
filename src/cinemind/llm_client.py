@@ -13,6 +13,7 @@ class LLMResponse:
     """Response from LLM client."""
     content: str
     usage: Optional[Dict[str, int]] = None
+    metadata: Optional[Dict[str, Any]] = None  # e.g. similar_movies for batch enrichment
 
 
 class LLMClient(ABC):
@@ -317,7 +318,7 @@ class FakeLLMClient(LLMClient):
     
     def _generate_recommendation_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
         """Generate recommendation response (must be at least 5 sentences)."""
-        similar_movies = []
+        similar_movies: List[str] = []
         if "matrix" in text_lower:
             similar_movies = ["Inception", "Blade Runner", "The Terminator"]
         elif "pulp fiction" in text_lower:
@@ -329,9 +330,11 @@ class FakeLLMClient(LLMClient):
             content = f"Movies similar to {movie_title} include several films with similar themes and styles. These films share common elements that make them appealing. Each offers a unique perspective on storytelling. They are perfect for fans of {movie_title}'s distinctive approach. If you enjoyed {movie_title}, these films will likely appeal to you."
         else:
             content = "There are several movies with similar themes and styles. These films share common elements that make them appealing. Each offers a unique perspective on storytelling. They are perfect for fans seeking similar experiences. If you enjoyed the original film, these will likely appeal to you."
+        metadata: Optional[Dict[str, Any]] = {"similar_movies": similar_movies} if similar_movies else None
         return LLMResponse(
             content=content,
-            usage={"prompt_tokens": 250, "completion_tokens": 80, "total_tokens": 330}
+            usage={"prompt_tokens": 250, "completion_tokens": 80, "total_tokens": 330},
+            metadata=metadata
         )
     
     def _generate_comparison_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:

@@ -182,6 +182,12 @@ async def test_recommendation_pass_through(agent_offline):
     # Recommendation template requires at least 5 sentences
     sentences = [s.strip() for s in response_text.split(".") if s.strip()]
     assert len(sentences) >= 5
+    # Batch enrichment: similar movies from FakeLLM -> media_strip + media_candidates
+    assert "media_strip" in result
+    assert result["media_strip"].get("movie_title")
+    assert "media_candidates" in result
+    assert len(result["media_candidates"]) >= 1
+    assert result.get("media_gallery_label") == "Similar movies"
 
 
 @pytest.mark.asyncio

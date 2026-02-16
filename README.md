@@ -45,9 +45,18 @@ See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed setup instructions.
 
 ## Installation
 
+Use a virtual environment (recommended):
+
 ```bash
+# Create and activate (macOS/Linux)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
+
+On Windows: `.venv\Scripts\activate` then `pip install -r requirements.txt`.
 
 ## Usage
 

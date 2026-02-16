@@ -7,36 +7,35 @@
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-    <div class="app" id="app">
+    <div class="app" id="app" data-poster-scale="comfortable">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <button type="button" class="new-chat" id="newChatBtn">+ New chat</button>
             </div>
-            <div class="conversation-list-label">This chat</div>
+            <div class="conversation-list-label">Conversations</div>
             <div class="conversation-list" id="conversationList"></div>
         </aside>
         <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
             <span class="toggle-icon"></span>
         </button>
         <main class="main">
-            <header class="header">
-                <h1 class="header-title" id="conversationTitle">New conversation</h1>
-                <span class="mode-badge" id="modeBadge">Offline</span>
-                <div class="header-actions">
-                    <button type="button" id="headerNewChat" aria-label="New chat">New</button>
-                </div>
-            </header>
-            <div class="chat-column empty" id="chatColumn">
-                <div class="chat-inner">
-                    <div class="empty-state" id="emptyState">
-                        <h2>CineMind</h2>
-                        <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>
-                    </div>
-                    <div id="messageList"></div>
-                    <div class="retrieving hidden" id="retrievingRow">
-                        <div class="message-avatar">C</div>
-                        <div class="retrieving-content">
-                            <span class="retrieving-dots">Retrieving<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+            <div class="main-center">
+                <header class="header">
+                    <h1 class="header-title" id="conversationTitle">New conversation</h1>
+                    <span class="mode-badge" id="modeBadge">Offline</span>
+                </header>
+                <div class="chat-column empty" id="chatColumn">
+                    <div class="chat-inner">
+                        <div class="empty-state" id="emptyState">
+                            <h2>CineMind</h2>
+                            <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>
+                        </div>
+                        <div id="messageList"></div>
+                        <div class="retrieving hidden" id="retrievingRow">
+                            <div class="message-avatar">C</div>
+                            <div class="retrieving-content">
+                                <span class="retrieving-dots">Retrieving<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -54,6 +53,36 @@
                 </div>
             </div>
         </main>
+        <aside class="right-panel collapsed" id="rightPanel" aria-label="Right panel">
+            <div class="right-panel-header">
+                <div class="right-panel-header-row">
+                    <button type="button" class="right-panel-hamburger" id="rightPanelHamburger" aria-label="Open menu" aria-expanded="false" aria-haspopup="true"></button>
+                    <div class="right-panel-header-titles">
+                        <h2 class="right-panel-title">Collections</h2>
+                        <span class="right-panel-scope" id="rightPanelScope">This Conversation</span>
+                        <span class="right-panel-saved-toast" id="rightPanelSavedToast" aria-live="polite"></span>
+                    </div>
+                </div>
+                <div class="right-panel-dropdown" id="rightPanelDropdown" role="menu" aria-hidden="true">
+                    <div class="right-panel-dropdown-section">
+                        <span class="right-panel-dropdown-section-title">This Conversation</span>
+                        <button type="button" class="right-panel-dropdown-item" role="menuitem" data-scope="This Conversation">This Conversation</button>
+                    </div>
+                    <div class="right-panel-dropdown-section" id="rightPanelProjectsSection">
+                        <span class="right-panel-dropdown-section-title">Projects</span>
+                        <div id="rightPanelProjectsList" class="right-panel-dropdown-projects"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="right-panel-collections" id="collectionList"></div>
+            <div class="right-panel-project-assets hidden" id="rightPanelProjectAssets">
+                <h3 class="right-panel-project-assets-title">Project Assets</h3>
+                <div class="right-panel-project-assets-strip" id="rightPanelProjectAssetsList"></div>
+            </div>
+        </aside>
+        <button type="button" class="right-panel-toggle" id="rightPanelToggle" aria-label="Toggle right panel">
+            <span class="right-panel-toggle-icon"></span>
+        </button>
     </div>
     <script src="js/config.js"></script>
     <script src="js/app.js"></script>

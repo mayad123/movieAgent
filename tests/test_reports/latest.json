@@ -1,64 +1,20 @@
 {
-  "timestamp": "2025-12-30T15:33:49",
+  "timestamp": "2026-02-15T20:49:10",
   "summary": {
-    "total": 28,
-    "passed": 28,
+    "total": 0,
+    "passed": 0,
     "failed": 0,
-    "pass_rate": 100.0,
-    "passed_clean": 28,
+    "pass_rate": 0.0,
+    "passed_clean": 0,
     "passed_with_violations": 0,
-    "avg_time_ms": 0.22
+    "avg_time_ms": 0.0
   },
-  "by_template_id": {
-    "director_info": {
-      "passed": 7,
-      "failed": 0,
-      "total": 7
-    },
-    "cast_info": {
-      "passed": 3,
-      "failed": 0,
-      "total": 3
-    },
-    "release_date": {
-      "passed": 5,
-      "failed": 0,
-      "total": 5
-    },
-    "runtime": {
-      "passed": 3,
-      "failed": 0,
-      "total": 3
-    },
-    "recommendation": {
-      "passed": 5,
-      "failed": 0,
-      "total": 5
-    },
-    "where_to_watch": {
-      "passed": 2,
-      "failed": 0,
-      "total": 2
-    },
-    "availability": {
-      "passed": 3,
-      "failed": 0,
-      "total": 3
-    }
-  },
-  "by_scenario_set": {
-    "gold": {
-      "passed": 28,
-      "failed": 0,
-      "total": 28,
-      "passed_clean": 28,
-      "passed_with_violations": 0
-    }
-  },
+  "by_template_id": {},
+  "by_scenario_set": {},
   "top_violations": [],
   "evidence_stats": {
-    "avg_evidence_items": 1.14,
+    "avg_evidence_items": 0.0,
     "avg_dedupe_reduction": 0.0,
-    "max_snippet_length": 167
+    "max_snippet_length": 0
   }
 }

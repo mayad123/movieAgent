@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-12-30T15:33:49",
+  "timestamp": "2026-02-15T20:49:10",
   "total_scenarios_with_violations": 3,
   "scenarios": [
     {
@@ -10,7 +10,7 @@
         "forbidden_terms"
       ],
       "violation_count": 4,
-      "artifact_path": "violations\\forbidden_terms_violation.json"
+      "artifact_path": "violations/forbidden_terms_violation.json"
     },
     {
       "scenario_name": "freshness_violation_missing_date",
@@ -20,7 +20,7 @@
         "freshness"
       ],
       "violation_count": 1,
-      "artifact_path": "violations\\freshness_violation_missing_date.json"
+      "artifact_path": "violations/freshness_violation_missing_date.json"
     },
     {
       "scenario_name": "verbosity_violation",
@@ -30,7 +30,7 @@
         "verbosity"
       ],
       "violation_count": 2,
-      "artifact_path": "violations\\verbosity_violation.json"
+      "artifact_path": "violations/verbosity_violation.json"
     }
   ]
 }

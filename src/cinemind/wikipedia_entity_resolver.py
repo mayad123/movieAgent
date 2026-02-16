@@ -10,14 +10,21 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import quote
 
 import requests
+
+if TYPE_CHECKING:
+    from .wikipedia_cache import WikipediaCache
 
 logger = logging.getLogger(__name__)
 
 WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
 REQUEST_TIMEOUT = 10
+
+# Wikimedia requires a descriptive User-Agent; default python-requests gets 403 Forbidden.
+WIKIPEDIA_USER_AGENT = "CineMind/1.0 (https://github.com/; MovieAgent) Python-requests"
 MAX_CANDIDATES = 7
 SEARCH_LIMIT = 15
 CATEGORY_BATCH_SIZE = 10
@@ -83,8 +90,16 @@ def _has_film_category(categories: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _search_wikipedia(session: requests.Session, query: str) -> list[dict[str, Any]]:
+def _search_wikipedia(
+    session: requests.Session,
+    query: str,
+    cache: Optional["WikipediaCache"] = None,
+) -> list[dict[str, Any]]:
     """Return list of search result items with 'title' and optional 'snippet'."""
+    if cache:
+        cached = cache.get_search(query)
+        if cached is not None:
+            return cached
     params = {
         "action": "query",
         "list": "search",
@@ -97,7 +112,10 @@ def _search_wikipedia(session: requests.Session, query: str) -> list[dict[str, A
         r = session.get(WIKIPEDIA_API_URL, params=params, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         data = r.json()
-        return data.get("query", {}).get("search") or []
+        results = data.get("query", {}).get("search") or []
+        if cache:
+            cache.set_search(query, results)
+        return results
     except requests.RequestException as e:
         logger.warning("Wikipedia search request failed: %s", e)
         raise
@@ -106,11 +124,19 @@ def _search_wikipedia(session: requests.Session, query: str) -> list[dict[str, A
         raise
 
 
-def _get_categories_batch(session: requests.Session, titles: list[str]) -> dict[str, list[dict[str, Any]]]:
+def _get_categories_batch(
+    session: requests.Session,
+    titles: list[str],
+    cache: Optional["WikipediaCache"] = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Get categories for up to CATEGORY_BATCH_SIZE titles. Returns map title -> list of category dicts."""
     if not titles:
         return {}
     titles = titles[:CATEGORY_BATCH_SIZE]
+    if cache:
+        cached = cache.get_categories(titles)
+        if cached is not None:
+            return cached
     params = {
         "action": "query",
         "prop": "categories",
@@ -128,6 +154,8 @@ def _get_categories_batch(session: requests.Session, titles: list[str]) -> dict[
         for _pid, p in pages.items():
             title = p.get("title", "")
             out[title] = p.get("categories") or []
+        if cache:
+            cache.set_categories(titles, out)
         return out
     except requests.RequestException as e:
         logger.warning("Wikipedia categories request failed: %s", e)
@@ -139,15 +167,40 @@ def _page_title_to_display(title: str) -> str:
     return title.replace("_", " ")
 
 
+def _extract_year_from_title(title: str) -> Optional[int]:
+    """Extract year from title suffix, e.g. 'Dune (2021 film)' -> 2021, 'Inception (2010)' -> 2010."""
+    # Match (YYYY) or (YYYY film) or (YYYY movie) - year can be inside parens with optional suffix
+    m = re.search(r"\((\d{4})(?:\s+(?:film|movie))?\)\s*$", title, re.I) or re.search(r"\((\d{4})\)\s*$", title)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def _build_page_url(page_title: str) -> str:
+    """Build Wikipedia page URL from canonical title (underscores)."""
+    encoded = quote(page_title.replace(" ", "_"), safe="/")
+    return f"https://en.wikipedia.org/wiki/{encoded}"
+
+
 class WikipediaEntityResolver:
     """
     Resolves raw user text to a Wikipedia movie page or a disambiguation candidate list.
     Wikipedia APIs only; no UI logic.
     """
 
-    def __init__(self, session: Optional[requests.Session] = None, timeout: int = REQUEST_TIMEOUT):
+    def __init__(
+        self,
+        session: Optional[requests.Session] = None,
+        timeout: int = REQUEST_TIMEOUT,
+        cache: Optional["WikipediaCache"] = None,
+    ):
         self._session = session or requests.Session()
+        self._session.headers["User-Agent"] = WIKIPEDIA_USER_AGENT
         self._timeout = timeout
+        self._cache = cache
 
     def resolve(self, raw_user_text: str) -> ResolverResult:
         """
@@ -168,7 +221,7 @@ class WikipediaEntityResolver:
             )
 
         try:
-            search_results = _search_wikipedia(self._session, query)
+            search_results = _search_wikipedia(self._session, query, self._cache)
         except Exception as e:
             logger.exception("Wikipedia unavailable during search")
             return ResolverResult(
@@ -180,7 +233,7 @@ class WikipediaEntityResolver:
             return ResolverResult(status="not_found")
 
         titles = [item["title"] for item in search_results]
-        categories_map = _get_categories_batch(self._session, titles)
+        categories_map = _get_categories_batch(self._session, titles, self._cache)
 
         movie_scores: list[tuple[str, int]] = []
         for title in titles:
@@ -192,14 +245,28 @@ class WikipediaEntityResolver:
                 score += 2
             movie_scores.append((title, score))
 
-        movie_titles = [t for t, s in movie_scores if s > 0]
-        if not movie_titles:
-            movie_titles = titles[:MAX_CANDIDATES]
+        # Build ranked candidates with score, year, page_url
+        scored = [(t, s) for t, s in movie_scores if s > 0]
+        if not scored:
+            scored = [(t, 0) for t in titles[:MAX_CANDIDATES]]
 
-        candidates_list = [
-            {"pageTitle": t, "displayTitle": _page_title_to_display(t)}
-            for t in movie_titles[:MAX_CANDIDATES]
-        ]
+        candidates_list = []
+        for t, score in scored[:MAX_CANDIDATES]:
+            display = _page_title_to_display(t)
+            year = _extract_year_from_title(t)
+            candidates_list.append({
+                "pageTitle": t,
+                "displayTitle": display,
+                "year": year,
+                "page_url": _build_page_url(t),
+                "score": score,
+            })
+
+        # Rank: score desc, then year desc (prefer newer), then title asc
+        def _rank_key(c: dict) -> tuple:
+            return (-c["score"], -(c["year"] or 0), c["displayTitle"])
+
+        candidates_list.sort(key=_rank_key)
 
         # Single clear movie match → auto-resolve
         if len(candidates_list) == 1:

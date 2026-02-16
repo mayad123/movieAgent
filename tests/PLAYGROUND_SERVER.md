@@ -93,19 +93,18 @@ This server exists solely to support UI development. It allows frontend develope
 
 ## Web UI
 
-A minimal single-page HTML UI is available at `tests/playground_ui.html`. Simply open this file in your browser after starting the server.
-
-The UI provides:
-- Text input for movie questions
-- Request type selector (with auto-detect option)
-- Submit button
-- Response display with verbosity feedback
-- Collapsible raw metadata section for developers
+The canonical UI is in `web/` (index.html + css/app.css + js/app.js). The server serves it at the root.
 
 **Usage:**
 1. Start the server: `python -m tests.playground_server`
-2. Open `tests/playground_ui.html` in your browser
-3. Enter queries and click "Submit Query"
+2. Open `http://localhost:8000/` in your browser
+3. Enter queries in the composer and send messages
+
+The UI provides:
+- Chat interface with message history
+- Media strip (poster images) when available
+- "Did you mean…?" candidate strip for ambiguous queries
+- Raw response toggle for debugging
 
 ## Stopping the Server
 

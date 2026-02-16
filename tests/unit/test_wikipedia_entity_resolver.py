@@ -17,6 +17,8 @@ from cinemind.wikipedia_entity_resolver import (
     _title_looks_like_movie,
     _has_film_category,
     _page_title_to_display,
+    _extract_year_from_title,
+    _build_page_url,
 )
 
 
@@ -43,6 +45,21 @@ def test_has_film_category():
 
 def test_page_title_to_display():
     assert _page_title_to_display("The_Matrix_(film)") == "The Matrix (film)"
+
+
+def test_extract_year_from_title():
+    assert _extract_year_from_title("Dune (2021 film)") == 2021
+    assert _extract_year_from_title("Inception (2010)") == 2010
+    assert _extract_year_from_title("The Matrix (film)") is None
+    assert _extract_year_from_title("Something") is None
+
+
+def test_build_page_url():
+    # URL encodes parens
+    url = _build_page_url("Inception_(film)")
+    assert url.startswith("https://en.wikipedia.org/wiki/")
+    assert "Inception" in url
+    assert "Dune" in _build_page_url("Dune (2021 film)")
 
 
 def test_resolve_empty_query():
@@ -92,6 +109,7 @@ def test_resolve_multiple_results_ambiguous(mock_search):
     assert out.resolved_entity is None
     assert len(out.candidates) >= 2
     assert all("pageTitle" in c and "displayTitle" in c for c in out.candidates)
+    assert all("page_url" in c and "year" in c and "score" in c for c in out.candidates)
     assert len(out.candidates) <= 7
 
 

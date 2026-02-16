@@ -2,6 +2,8 @@
 
 Normalized contracts for the production UI so it runs correctly before additional APIs are added. The UI MUST tolerate missing or legacy fields (backward compatibility).
 
+**For contributors:** The **stable UI response payload** (hero media, candidate gallery, placeholders, error handling) and a reference JSON schema are defined in **[UI_RESPONSE_CONTRACT.md](./UI_RESPONSE_CONTRACT.md)**. Playground and full agent use the same contract; the UI normalizes and renders from that shape and never breaks on missing or malformed data.
+
 ---
 
 ## 1. Message contract
@@ -17,6 +19,7 @@ Messages are the unit of a single user or assistant turn.
 **Assistant `meta` (optional):**
 
 - **`media_strip`** — Optional. When present and valid, the UI renders a Media Strip at the top of the assistant bubble. See [Media Strip contract](#2-media-strip-contract).
+- **`media_candidates`** — Optional. When present, the UI renders a "Did you mean…?" candidate strip (small gallery). See [Media Candidates contract](#3-media-candidates-contract).
 - **Raw response** — The entire `meta` object may be shown for debugging via the “Raw response” toggle. No specific shape required; the UI stringifies `meta` as JSON. Additional fields in `meta` are allowed and preserved.
 
 **Constraints:**
@@ -34,6 +37,8 @@ The Media Strip is **optional** and **non-blocking**. It is rendered only for **
 |---------------------|----------|---------------------------|-------------|--------|
 | `movie_title`       | string   | **Yes**                   | Non-empty after trim. | Used as label and for placeholder / accessibility. |
 | `primary_image_url` | string   | No                        | Valid URL string if present. | One primary image; empty string treated as absent. |
+| `page_url`          | string   | No                        | Valid URL if present. | Link to Wikipedia page. |
+| `year`              | number   | No                        | 4-digit year. | Extracted from title when available. |
 | `thumbnail_urls`    | string[] | No                        | Array of URL strings; UI uses at most first 3. | Extra elements ignored. Non-strings filtered out. |
 
 **Render rules (align with current playground):**
@@ -51,7 +56,27 @@ The Media Strip is **optional** and **non-blocking**. It is rendered only for **
 
 ---
 
-## 3. Conversation contract
+## 3. Media Candidates contract ("Did you mean…?" gallery)
+
+When the query is ambiguous (e.g. remakes, sequels, same-name films), the API may return `meta.media_candidates` — a small gallery for disambiguation. The UI shows this above or alongside the main response when present.
+
+| Field               | Type     | Required | Constraints | Notes |
+|---------------------|----------|----------|-------------|--------|
+| `movie_title`       | string   | **Yes**  | Non-empty after trim. | Display label. |
+| `page_url`          | string   | **Yes**  | Valid URL. | Link to Wikipedia page. |
+| `year`              | number   | No       | 4-digit year. | Extracted from title when available. |
+| `primary_image_url` | string   | No       | Valid URL if present. | Thumbnail for the candidate card. |
+
+**Render rules:**
+
+1. **Show candidate strip** when `meta.media_candidates` exists, is an array, and has at least one item.
+2. **Layout:** Horizontal strip of clickable cards; each card shows title (+ year if present), optional thumbnail, links to `page_url`.
+3. **Fallback:** If `primary_image_url` is missing, show placeholder per card.
+4. **Single vs gallery:** If only `media_strip` is present, render the single hero (no candidate strip). If both are present, render the hero plus the candidate strip for "Did you mean…?".
+
+---
+
+## 4. Conversation contract
 
 A conversation is the top-level container for a chat session (sidebar item + message list).
 
@@ -78,7 +103,7 @@ So that **older cached conversations** and **responses from older backends** sti
 2. **`meta` without `media_strip`:** No Media Strip. Other `meta` fields (e.g. for raw response) still used if present.
 3. **`media_strip` without `movie_title`:** Do not render the Media Strip. Ignore the strip object.
 4. **`movie_title` empty or whitespace:** After trim, treat as missing; do not render the strip.
-5. **Wrong types:** Use defensive normalization: `content = String(msg.content ?? '')`, `role` only used if `"user"` or `"assistant"` (otherwise treat as assistant or skip invalid entries per product rule). For `media_strip`, use `String(movie_title).trim()`, and treat `thumbnail_urls` as array only if `Array.isArray(...)` else `[]`.
+5. **Wrong types:** Use defensive normalization: `content = String(msg.content ?? '')`, `role` only used if `"user"` or `"assistant"` (otherwise treat as assistant or skip invalid entries per product rule). For `media_strip`, use `String(movie_title).trim()`, and treat `thumbnail_urls` as array only if `Array.isArray(...)` else `[]`. For `media_candidates`, treat as array only if `Array.isArray(...)` else `[]` (ignore otherwise).
 6. **Conversation without `id`:** If loading from cache, generate or use a fallback id so the conversation can still be shown; avoid overwriting other conversations.
 7. **Conversation without `messages`:** Treat as `messages: []`. Show empty state.
 8. **Raw response:** Always show whatever is in `meta` (even if empty or legacy shape) when the user opens “Raw response”. No requirement that `meta` match a fixed schema for debugging.
@@ -89,7 +114,7 @@ The UI MUST NOT throw or break the thread when it encounters unknown fields or m
 
 ## 5. Reference: current playground Media Strip rules
 
-Aligned with `tests/playground_ui.html` and `web/js/app.js`:
+Aligned with `web/index.html` and `web/js/app.js`:
 
 - **Where:** Top of the assistant message bubble, above the response text.
 - **When:** Only when the API (or cached payload) includes `meta.media_strip` with at least `movie_title`.
@@ -105,5 +130,6 @@ Aligned with `tests/playground_ui.html` and `web/js/app.js`:
 | Contract       | Required fields           | Optional fields | Backward compatibility |
 |----------------|---------------------------|-----------------|-------------------------|
 | **Message**    | `role`, `content`         | `meta`          | Missing `meta` → no strip, no raw payload. |
-| **Media Strip**| `movie_title` (to show strip) | `primary_image_url`, `thumbnail_urls` | Empty/missing URLs → placeholder card. |
+| **Media Strip**| `movie_title` (to show strip) | `primary_image_url`, `page_url`, `year`, `thumbnail_urls` | Empty/missing URLs → placeholder card. |
+| **Media Candidates** | `movie_title`, `page_url` | `year`, `primary_image_url` | Optional; show "Did you mean…?" strip when present. |
 | **Conversation** | `id`, `messages`        | `title`, `createdAt`, `updatedAt` | Missing `messages` → []. Derive title from first user message if needed. |

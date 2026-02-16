@@ -22,7 +22,6 @@ Examples:
          -H "Content-Type: application/json" \
          -d '{"user_query": "Who directed The Matrix?", "request_type": "info"}'
 """
-import asyncio
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -39,8 +38,13 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 from tests.playground_runner import run_playground
-from cinemind.wikipedia_entity_resolver import WikipediaEntityResolver, ResolvedEntity, ResolverResult
-from cinemind.wikipedia_media_provider import WikipediaMediaProvider
+from tests.playground_projects_store import (
+    list_all as projects_list_all,
+    get_by_id as projects_get_by_id,
+    create as projects_create,
+    seed_if_needed as projects_seed_if_needed,
+    add_assets as projects_add_assets,
+)
 
 # Create FastAPI app
 app = FastAPI(
@@ -73,6 +77,26 @@ class QueryRequest(BaseModel):
     request_type: Optional[str] = None  # Optional: if not provided, auto-inferred using rules-based router
 
 
+class ProjectCreate(BaseModel):
+    """Request body for creating a project."""
+    name: str
+    description: Optional[str] = ""
+
+
+class AssetIn(BaseModel):
+    """One asset to capture (poster image, title, page, conversation)."""
+    posterImageUrl: Optional[str] = None
+    title: str
+    pageUrl: Optional[str] = None
+    pageId: Optional[str] = None
+    conversationId: Optional[str] = None
+
+
+class ProjectAssetsBody(BaseModel):
+    """Request body for appending assets to a project."""
+    assets: list
+
+
 class HealthResponse(BaseModel):
     """Response model for health endpoint."""
     status: str
@@ -93,102 +117,6 @@ async def health_check():
     )
 
 
-# Common question prefixes to strip when resolving movie title (so "Who directed The Matrix?" → try "The Matrix")
-# Order matters: try shorter prefixes first so we keep "The" in "The Matrix".
-_MOVIE_QUERY_PREFIXES = (
-    "who directed ",
-    "who directed the ",
-    "when was ",
-    "when did ",
-    "what is ",
-    "what was ",
-    "tell me about ",
-    "information about ",
-    "about ",
-    "how to train your ",  # "How to Train Your Dragon"
-    "recommend movies like ",
-    "movies like ",
-    "similar to ",
-    "compare ",
-    "difference between ",
-)
-
-
-def _extract_movie_phrase_for_resolution(user_query: str) -> list[str]:
-    """
-    Return search strings to try: [full_query, extracted_phrase?].
-    Extracted phrase strips common prefixes and trailing '?' so questions resolve to the movie.
-    """
-    q = (user_query or "").strip()
-    if not q:
-        return []
-    out = [q]
-    low = q.lower()
-    # Strip trailing ? and whitespace for a second attempt
-    trimmed = q.rstrip("?").strip()
-    if trimmed != q:
-        out.append(trimmed)
-    # Try without common prefixes (use trimmed)
-    for prefix in _MOVIE_QUERY_PREFIXES:
-        if low.startswith(prefix):
-            rest = trimmed[len(prefix) :].strip()
-            if len(rest) >= 2 and rest not in out:
-                out.append(rest)
-            break
-    return out
-
-
-def _entity_from_resolve_result(resolve_result: ResolverResult) -> Optional[ResolvedEntity]:
-    """Get a ResolvedEntity from resolver output: either resolved_entity or first candidate."""
-    if resolve_result.resolved_entity is not None:
-        return resolve_result.resolved_entity
-    if resolve_result.candidates:
-        c = resolve_result.candidates[0]
-        return ResolvedEntity(
-            page_title=c.get("pageTitle", ""),
-            display_title=c.get("displayTitle", c.get("pageTitle", "").replace("_", " ")),
-        )
-    return None
-
-
-def _fallback_movie_title(result: Dict[str, Any], user_query: str) -> Optional[str]:
-    """Use result.query or first source title so we can show a placeholder strip when Wikipedia fails."""
-    title = (result.get("query") or "").strip()
-    if title:
-        return title
-    sources = result.get("sources") or []
-    if sources and isinstance(sources[0], dict):
-        title = (sources[0].get("title") or "").strip()
-        if title:
-            return title
-    return None
-
-
-def _attach_media_strip_sync(user_query: str, result: Dict[str, Any]) -> None:
-    """
-    Attach media_strip so the UI can show image or placeholder.
-    First tries Wikipedia (resolver + provider). If that fails, attaches placeholder from query/sources.
-    """
-    try:
-        resolver = WikipediaEntityResolver()
-        provider = WikipediaMediaProvider()
-        for search_text in _extract_movie_phrase_for_resolution(user_query):
-            resolve_result = resolver.resolve(search_text)
-            entity = _entity_from_resolve_result(resolve_result)
-            if entity is None:
-                continue
-            media_strip = provider.get_media_strip(entity)
-            if media_strip.get("movie_title"):
-                result["media_strip"] = media_strip
-                return
-    except Exception:
-        pass
-    # Fallback: Wikipedia failed or no candidates; still show placeholder strip using query/sources
-    fallback_title = _fallback_movie_title(result, user_query) or (user_query or "").strip()
-    if fallback_title:
-        result["media_strip"] = {"movie_title": fallback_title}
-
-
 @app.post("/query")
 async def execute_query(request: QueryRequest) -> Dict[str, Any]:
     """
@@ -206,12 +134,11 @@ async def execute_query(request: QueryRequest) -> Dict[str, Any]:
     """
     try:
         # Execute query through playground runner (offline, FakeLLM)
+        # Media enrichment (media_strip) is attached by the agent via shared media_enrichment module
         result = await run_playground(
             user_query=request.user_query,
             request_type=request.request_type
         )
-        # Attach media_strip when one movie is resolved (Wikipedia only; never block or crash)
-        await asyncio.to_thread(_attach_media_strip_sync, request.user_query, result)
         return result
     except Exception as e:
         # Return error details for debugging
@@ -224,10 +151,46 @@ async def execute_query(request: QueryRequest) -> Dict[str, Any]:
         )
 
 
+# --- Projects API (playground persistence; replace backend for auth/hosting) ---
+projects_seed_if_needed()
+
+
+@app.get("/api/projects")
+async def get_projects():
+    """Return all projects (id, name, createdAt, description). Loaded from file store."""
+    return projects_list_all()
+
+
+@app.post("/api/projects")
+async def post_project(body: ProjectCreate):
+    """Create a project. Returns the created project."""
+    project = projects_create(name=body.name or "Unnamed", description=(body.description or "").strip())
+    return project
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: str):
+    """Return one project by id (with assets). For Project Assets view."""
+    project = projects_get_by_id(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.post("/api/projects/{project_id}/assets")
+async def post_project_assets(project_id: str, body: ProjectAssetsBody):
+    """
+    Append assets to a project (auto-capture when project scope is active).
+    De-duplication is applied; returns number of assets added.
+    """
+    if not isinstance(body.assets, list):
+        raise HTTPException(status_code=400, detail="assets must be a list")
+    payloads = [a if isinstance(a, dict) else {} for a in body.assets]
+    added = projects_add_assets(project_id, payloads)
+    return {"added": added}
+
+
 # Mount static files after API routes so /query and /health are matched first (avoid 405 on POST /query)
-if web_dir.is_dir():
-    app.mount("/app", StaticFiles(directory=web_dir, html=True), name="app")
-app.mount("/tests", StaticFiles(directory=project_root / "tests"), name="tests")
 if web_dir.is_dir():
     app.mount("/", StaticFiles(directory=web_dir, html=True), name="root")
 
@@ -240,8 +203,7 @@ def main():
     print("CineMind Offline Playground Server")
     print("=" * 60)
     print("Server: http://localhost:8000")
-    print("UI:     http://localhost:8000/  or  http://localhost:8000/app/  (canonical app in web/)")
-    print("Legacy: http://localhost:8000/tests/playground_ui.html")
+    print("UI:     http://localhost:8000/  (index.html from web/)")
     print("Health: http://localhost:8000/health")
     print("Docs:   http://localhost:8000/docs")
     print("=" * 60)

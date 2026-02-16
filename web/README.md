@@ -1,6 +1,6 @@
 # CineMind Web App (canonical UI)
 
-**This is the canonical playground UI.** The file `tests/playground_ui.html` is legacy; the server serves this `web/` app at the root and at `/app/`.
+**This is the canonical playground UI.** The server serves this `web/` app at `http://localhost:8000/`.
 
 ## Structure
 
@@ -34,7 +34,7 @@ python -m tests.playground_server
 
 Then open: **http://localhost:8000/** or **http://localhost:8000/app/**.
 
-The server serves the API (`/query`, `/health`) and this `web/` folder at the **root** and at `/app/`. The old UI at `/tests/playground_ui.html` is deprecated.
+The server serves the API (`/query`, `/health`) and this `web/` folder at the root (`http://localhost:8000/`).
 
 ### Option 2: Any static server
 
