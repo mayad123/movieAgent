@@ -11,6 +11,10 @@ from cinemind.media_enrichment import (
     enrich,
     enrich_batch,
     attach_media_to_result,
+    build_attachments_from_media,
+    SECTION_PRIMARY_MOVIE,
+    SECTION_MOVIE_LIST,
+    SECTION_DID_YOU_MEAN,
 )
 from cinemind.wikipedia_entity_resolver import WikipediaEntityResolver, ResolverResult, ResolvedEntity
 from cinemind.wikipedia_media_provider import WikipediaMediaProvider
@@ -47,12 +51,72 @@ def test_enrich_fallback_from_result():
     assert result.media_strip.get("movie_title") == "Inception"
 
 
+def test_build_attachments_from_media_primary_only():
+    """build_attachments_from_media produces primary_movie section from media_strip."""
+    result = {
+        "media_strip": {
+            "movie_title": "Dune (1984 film)",
+            "year": 1984,
+            "primary_image_url": "https://example.com/dune.jpg",
+            "page_url": "https://en.wikipedia.org/wiki/Dune_(1984_film)",
+        },
+        "media_candidates": [],
+    }
+    out = build_attachments_from_media(result)
+    assert "sections" in out
+    assert len(out["sections"]) == 1
+    assert out["sections"][0]["type"] == SECTION_PRIMARY_MOVIE
+    assert out["sections"][0]["title"] == "This movie"
+    assert len(out["sections"][0]["items"]) == 1
+    item = out["sections"][0]["items"][0]
+    assert item["title"] == "Dune (1984 film)"
+    assert item["year"] == 1984
+    assert item.get("imageUrl") and "dune" in item["imageUrl"]
+    assert item.get("sourceUrl") and "wikipedia" in item["sourceUrl"]
+
+
+def test_build_attachments_from_media_movie_list():
+    """build_attachments_from_media produces movie_list section from media_candidates with label."""
+    result = {
+        "media_strip": {"movie_title": "Dune", "page_url": "https://en.wikipedia.org/wiki/Dune"},
+        "media_candidates": [
+            {"movie_title": "Inception", "year": 2010, "page_url": "https://en.wikipedia.org/wiki/Inception", "primary_image_url": "https://ex.inception.jpg"},
+        ],
+        "media_gallery_label": "Similar movies",
+    }
+    out = build_attachments_from_media(result)
+    assert len(out["sections"]) == 2
+    assert out["sections"][0]["type"] == SECTION_PRIMARY_MOVIE
+    assert out["sections"][1]["type"] == SECTION_MOVIE_LIST
+    assert out["sections"][1]["title"] == "Similar movies"
+    assert len(out["sections"][1]["items"]) == 1
+    assert out["sections"][1]["items"][0]["title"] == "Inception"
+
+
+def test_build_attachments_from_media_did_you_mean():
+    """build_attachments_from_media produces did_you_mean when label starts with Did you mean."""
+    result = {
+        "media_strip": {},
+        "media_candidates": [
+            {"movie_title": "Dune (1984 film)", "page_url": "https://en.wikipedia.org/wiki/Dune_(1984_film)"},
+        ],
+        "media_gallery_label": "Did you mean?",
+    }
+    out = build_attachments_from_media(result)
+    assert len(out["sections"]) == 1
+    assert out["sections"][0]["type"] == SECTION_DID_YOU_MEAN
+    assert "Did you mean" in out["sections"][0]["title"]
+
+
 def test_attach_media_to_result_mutates_in_place():
-    """attach_media_to_result mutates result dict in place."""
+    """attach_media_to_result mutates result dict in place and sets attachments."""
     result = {"response": "test", "query": "The Matrix"}
     attach_media_to_result("The Matrix", result)
     assert "media_strip" in result
     assert result["media_strip"].get("movie_title")
+    assert "attachments" in result
+    assert "sections" in result["attachments"]
+    assert isinstance(result["attachments"]["sections"], list)
 
 
 def test_enrich_never_raises():

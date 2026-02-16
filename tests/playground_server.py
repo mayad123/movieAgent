@@ -75,6 +75,7 @@ class QueryRequest(BaseModel):
     """Request model for query endpoint."""
     user_query: str
     request_type: Optional[str] = None  # Optional: if not provided, auto-inferred using rules-based router
+    requestedAgentMode: Optional[str] = None  # UI hint; playground always runs PLAYGROUND, returns agent_mode
 
 
 class ProjectCreate(BaseModel):
@@ -135,10 +136,20 @@ async def execute_query(request: QueryRequest) -> Dict[str, Any]:
     try:
         # Execute query through playground runner (offline, FakeLLM)
         # Media enrichment (media_strip) is attached by the agent via shared media_enrichment module
+        # requestedAgentMode is ignored; backend is authority. Always return explicit mode metadata.
         result = await run_playground(
             user_query=request.user_query,
             request_type=request.request_type
         )
+        result["agent_mode"] = "PLAYGROUND"
+        result["actualAgentMode"] = "PLAYGROUND"
+        result["requestedAgentMode"] = getattr(request, "requestedAgentMode", None) or "PLAYGROUND"
+        result["modeFallback"] = False
+        result["toolsUsed"] = ["wikipedia"]
+        if getattr(request, "requestedAgentMode", None) == "REAL_AGENT":
+            result["modeOverrideReason"] = (
+                "Playground Server is running (offline only). Start the CineMind API (src.api.main) for Real Agent."
+            )
         return result
     except Exception as e:
         # Return error details for debugging
@@ -207,10 +218,12 @@ def main():
     print("Health: http://localhost:8000/health")
     print("Docs:   http://localhost:8000/docs")
     print("=" * 60)
-    print("\nThis server is OFFLINE ONLY:")
-    print("  - No OpenAI API calls (uses FakeLLM)")
+    print("\nThis server is OFFLINE ONLY (always PLAYGROUND):")
+    print("  - No OpenAI API calls (uses FakeLLM); logs will not appear in OpenAI dashboard")
     print("  - No Tavily API calls (live data disabled)")
-    print("  - No internet access")
+    print("  - requestedAgentMode is ignored; response is always Playground")
+    print("\nFor Real Agent (OpenAI): run the CineMind API instead, e.g.")
+    print("  python -m src.api.main   OR   uvicorn src.api.main:app --reload")
     print("\nPress Ctrl+C to stop the server")
     print("=" * 60)
     print()

@@ -2,10 +2,26 @@
 Configuration settings for CineMind movie agent.
 """
 import os
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+
+def _find_dotenv() -> Optional[str]:
+    """Find .env in current directory or any parent (e.g. repo root)."""
+    cwd = Path.cwd()
+    for d in [cwd] + list(cwd.parents):
+        p = d / ".env"
+        if p.is_file():
+            return str(p)
+    return None
+
+
+_env_path = _find_dotenv()
+if _env_path:
+    load_dotenv(_env_path)
+else:
+    load_dotenv()
 
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -42,6 +58,11 @@ MOVIE_DATA_SOURCES = {
 
 # Prompt Version Configuration
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v1")  # v1, v2, v3
+
+# Real Agent safety limits (backend-enforced; prevent runaway cost / uncontrolled execution)
+REAL_AGENT_TIMEOUT_SECONDS = float(os.getenv("CINEMIND_REAL_AGENT_TIMEOUT", "90"))
+REAL_AGENT_MAX_TOKENS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOKENS", "2000"))
+REAL_AGENT_MAX_TOOL_CALLS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOOL_CALLS", "10"))
 
 # System Prompt (load from version)
 def get_system_prompt(version: Optional[str] = None) -> str:

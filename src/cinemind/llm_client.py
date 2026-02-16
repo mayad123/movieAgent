@@ -166,7 +166,11 @@ class FakeLLMClient(LLMClient):
         # Check for specific intents in user query (priority order matters)
         if "compare" in text_to_check:
             return "comparison"
-        elif "recommend" in text_to_check or ("similar" in text_to_check and "movies" in text_to_check) or ("like" in text_to_check and "movies" in text_to_check):
+        elif (
+            "recommend" in text_to_check
+            or ("similar" in text_to_check and ("movie" in text_to_check or "movies" in text_to_check))
+            or ("like" in text_to_check and ("movie" in text_to_check or "movies" in text_to_check))
+        ):
             return "recommendation"
         elif "where" in text_to_check and ("watch" in text_to_check or "stream" in text_to_check):
             return "where_to_watch"
@@ -323,6 +327,8 @@ class FakeLLMClient(LLMClient):
             similar_movies = ["Inception", "Blade Runner", "The Terminator"]
         elif "pulp fiction" in text_lower:
             similar_movies = ["Reservoir Dogs", "Kill Bill", "Django Unchained"]
+        elif "avatar" in text_lower:
+            similar_movies = ["Dune (2021)", "Interstellar (2014)", "The Last Airbender (2010)", "District 9 (2009)"]
         
         if movie_title and similar_movies:
             content = f"Movies similar to {movie_title} include {', '.join(similar_movies)}. These films share similar themes and styles. Each offers a unique perspective on storytelling. They are perfect for fans of {movie_title}'s distinctive approach. If you enjoyed {movie_title}, these films will likely appeal to you."

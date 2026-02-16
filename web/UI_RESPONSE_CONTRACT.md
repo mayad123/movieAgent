@@ -11,10 +11,11 @@ The `/query` response is stored as **message meta** for assistant messages. The 
 | Field              | Type     | Required | Description |
 |--------------------|----------|----------|-------------|
 | `response`         | string   | **Yes**  | Assistant reply text (or `answer` for legacy). |
-| `media_strip`      | object   | No       | Hero media: single title + optional image. See §2. |
-| `media_candidates` | array    | No       | "Did you mean…?" gallery. See §3. |
+| `attachments`       | object   | No       | **Preferred.** Ordered `sections[]` (primary_movie, movie_list, did_you_mean, scenes). See [ATTACHMENTS_SCHEMA.md](../docs/ATTACHMENTS_SCHEMA.md). |
+| `media_strip`      | object   | No       | Hero media (legacy). See §2. Kept for backward compatibility. |
+| `media_candidates` | array    | No       | "Did you mean…?" / similar list (legacy). See §3. Kept for backward compatibility. |
 
-**Normalization:** The UI MUST treat `content = String(meta.response ?? meta.answer ?? '').trim()` and use that for the message body. Missing `meta` → render content only, no media.
+**Normalization:** The UI MUST treat `content = String(meta.response ?? meta.answer ?? '').trim()` and use that for the message body. When `meta.attachments.sections` is present and non-empty, the UI SHOULD render attachments by section type; otherwise fall back to `media_strip` + `media_candidates`. Missing `meta` → render content only, no media.
 
 ---
 

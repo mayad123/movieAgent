@@ -34,6 +34,12 @@ from .wikipedia_cache import (
 
 logger = logging.getLogger(__name__)
 
+# Attachments section types (see docs/ATTACHMENTS_SCHEMA.md)
+SECTION_PRIMARY_MOVIE = "primary_movie"
+SECTION_MOVIE_LIST = "movie_list"
+SECTION_DID_YOU_MEAN = "did_you_mean"
+SECTION_SCENES = "scenes"
+
 # Score gap above which we treat the top candidate as a clear winner (single, not gallery)
 CLEAR_WIN_SCORE_GAP = 2
 MAX_GALLERY_CANDIDATES = 5
@@ -325,6 +331,58 @@ def enrich(
     return MediaEnrichmentResult(media_strip={})
 
 
+def _movie_card_item(card: dict[str, Any]) -> dict[str, Any]:
+    """Build stable movie-card item for attachments (title, year?, imageUrl?, sourceUrl?, id?)."""
+    title = (card.get("movie_title") or card.get("displayTitle") or "").strip()
+    item: dict[str, Any] = {"title": title or "Untitled"}
+    if card.get("year") is not None:
+        item["year"] = card["year"]
+    if (card.get("primary_image_url") or "").strip():
+        item["imageUrl"] = (card.get("primary_image_url") or "").strip()
+    if (card.get("page_url") or "").strip():
+        url = (card.get("page_url") or "").strip()
+        item["sourceUrl"] = url
+        item["id"] = url
+    return item
+
+
+def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build attachments.sections from media_strip and media_candidates (and media_gallery_label).
+
+    Section types: primary_movie (hero), movie_list | did_you_mean (candidates).
+    Keeps backward compatibility: does not remove or alter media_strip/media_candidates.
+    See docs/ATTACHMENTS_SCHEMA.md.
+    """
+    sections: list[dict[str, Any]] = []
+    strip = result.get("media_strip") or {}
+    candidates = result.get("media_candidates") or []
+    gallery_label = (result.get("media_gallery_label") or "").strip()
+
+    if strip and (strip.get("movie_title") or "").strip():
+        sections.append({
+            "type": SECTION_PRIMARY_MOVIE,
+            "title": "This movie",
+            "items": [_movie_card_item(strip)],
+        })
+
+    if candidates:
+        # did_you_mean for disambiguation (no label or "Did you mean?"); else movie_list
+        if gallery_label.lower().startswith("did you mean") or gallery_label == "":
+            section_type = SECTION_DID_YOU_MEAN
+            title = gallery_label or "Did you mean?"
+        else:
+            section_type = SECTION_MOVIE_LIST
+            title = gallery_label or "Similar movies"
+        sections.append({
+            "type": section_type,
+            "title": title,
+            "items": [_movie_card_item(c) for c in candidates if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
+        })
+
+    return {"sections": sections}
+
+
 def attach_media_to_result(
     user_query: str,
     result: dict[str, Any],
@@ -363,6 +421,7 @@ def attach_media_to_result(
                 result["media_gallery_label"] = "Similar movies"
             else:
                 result["media_gallery_label"] = "Movies"
+        result["attachments"] = build_attachments_from_media(result)
         return
 
     # Single-title path
@@ -376,3 +435,4 @@ def attach_media_to_result(
         result["media_strip"] = enrichment.media_strip
         if enrichment.media_candidates:
             result["media_candidates"] = enrichment.media_candidates
+    result["attachments"] = build_attachments_from_media(result)

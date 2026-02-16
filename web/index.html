@@ -14,6 +14,14 @@
             </div>
             <div class="conversation-list-label">Conversations</div>
             <div class="conversation-list" id="conversationList"></div>
+            <div class="sidebar-agent-toggle-wrap">
+                <label class="sidebar-agent-toggle" for="useRealAgentToggle">
+                    <span class="sidebar-agent-toggle-label">Use Real Agent (Testing)</span>
+                    <input type="checkbox" id="useRealAgentToggle" class="sidebar-agent-toggle-input" aria-describedby="useRealAgentHint">
+                    <span class="sidebar-agent-toggle-slider"></span>
+                </label>
+                <span id="useRealAgentHint" class="sidebar-agent-toggle-hint">Backend may override if keys missing.</span>
+            </div>
         </aside>
         <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
             <span class="toggle-icon"></span>
@@ -53,7 +61,7 @@
                 </div>
             </div>
         </main>
-        <aside class="right-panel collapsed" id="rightPanel" aria-label="Right panel">
+        <aside class="right-panel collapsed" id="rightPanel" aria-label="Right panel" tabindex="0">
             <div class="right-panel-header">
                 <div class="right-panel-header-row">
                     <button type="button" class="right-panel-hamburger" id="rightPanelHamburger" aria-label="Open menu" aria-expanded="false" aria-haspopup="true"></button>
@@ -83,6 +91,17 @@
         <button type="button" class="right-panel-toggle" id="rightPanelToggle" aria-label="Toggle right panel">
             <span class="right-panel-toggle-icon"></span>
         </button>
+        <div id="realAgentConfirmModal" class="real-agent-modal hidden" role="dialog" aria-modal="true" aria-labelledby="realAgentConfirmTitle">
+            <div class="real-agent-modal-backdrop"></div>
+            <div class="real-agent-modal-content">
+                <h2 id="realAgentConfirmTitle" class="real-agent-modal-title">Real Agent Mode</h2>
+                <p class="real-agent-modal-body">Real Agent Mode may use external APIs and incur cost. Continue?</p>
+                <div class="real-agent-modal-actions">
+                    <button type="button" class="real-agent-modal-btn real-agent-modal-cancel" id="realAgentConfirmCancel">Cancel</button>
+                    <button type="button" class="real-agent-modal-btn real-agent-modal-confirm" id="realAgentConfirmContinue">Continue</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="js/config.js"></script>
     <script src="js/app.js"></script>

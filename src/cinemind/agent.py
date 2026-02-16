@@ -21,7 +21,15 @@ try:
 except ImportError:
     AsyncOpenAI = None
 
-from .config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL, PROMPT_VERSION
+from .config import (
+    SYSTEM_PROMPT,
+    AGENT_NAME,
+    AGENT_VERSION,
+    OPENAI_MODEL,
+    PROMPT_VERSION,
+    REAL_AGENT_MAX_TOKENS,
+    REAL_AGENT_MAX_TOOL_CALLS,
+)
 from .search_engine import SearchEngine, MovieDataAggregator
 from .database import Database
 from .observability import Observability, calculate_openai_cost
@@ -144,6 +152,13 @@ class CineMind:
         # Generate or use provided request ID
         if not request_id:
             request_id = self.observability.generate_request_id() if self.observability else str(uuid.uuid4())
+
+        # Safety: cap tool calls per request (backend-enforced)
+        _tool_calls = {"n": 0}
+        def _check_tool_limit():
+            _tool_calls["n"] += 1
+            if _tool_calls["n"] > REAL_AGENT_MAX_TOOL_CALLS:
+                raise ValueError("Real agent safety: max tool calls per request exceeded")
         
         # PIPELINE ORDER:
         # 1. Check cache FIRST (if nothing correlating returns, proceed to step 2)
@@ -460,6 +475,7 @@ class CineMind:
                     
                     if tracker:
                         with tracker.time_operation("search"):
+                            _check_tool_limit()
                             movie_info = await self.aggregator.get_movie_info(
                                 user_query, 
                                 include_recent_news=not should_skip_tavily,  # Only include news if Tavily allowed
@@ -473,6 +489,7 @@ class CineMind:
                             )
                     else:
                         logger.info(f"[{request_id}] Performing search (Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
+                        _check_tool_limit()
                         movie_info = await self.aggregator.get_movie_info(
                             user_query,
                             include_recent_news=not should_skip_tavily,
@@ -592,6 +609,7 @@ class CineMind:
                             # Retry with override
                             # Get typed entities from structured_intent
                             entities_typed_for_search = structured_intent.entities if structured_intent else None
+                            _check_tool_limit()
                             movie_info = await self.aggregator.get_movie_info(
                                 user_query,
                                 include_recent_news=False,
@@ -618,6 +636,7 @@ class CineMind:
                             # Retry with override
                             # Get typed entities from structured_intent
                             entities_typed_for_search = structured_intent.entities if structured_intent else None
+                            _check_tool_limit()
                             movie_info = await self.aggregator.get_movie_info(
                                 user_query,
                                 include_recent_news=False,
@@ -928,14 +947,14 @@ class CineMind:
                             model=OPENAI_MODEL,
                             messages=messages,
                             temperature=0.7,
-                            max_tokens=2000
+                            max_tokens=REAL_AGENT_MAX_TOKENS
                         )
                 else:
                     llm_response = await self.client.chat_completions_create(
                         model=OPENAI_MODEL,
                         messages=messages,
                         temperature=0.7,
-                        max_tokens=2000
+                        max_tokens=REAL_AGENT_MAX_TOKENS
                     )
                 
                 agent_response = llm_response.content
@@ -990,14 +1009,14 @@ class CineMind:
                                 model=OPENAI_MODEL,
                                 messages=correction_messages,
                                 temperature=0.3,  # Lower temperature for corrections
-                                max_tokens=2000
+                                max_tokens=REAL_AGENT_MAX_TOKENS
                             )
                     else:
                         correction_llm_response = await self.client.chat_completions_create(
                             model=OPENAI_MODEL,
                             messages=correction_messages,
                             temperature=0.3,
-                            max_tokens=2000
+                            max_tokens=REAL_AGENT_MAX_TOKENS
                         )
                     
                     agent_response = correction_llm_response.content
@@ -1285,7 +1304,7 @@ class CineMind:
                     {"role": "user", "content": user_message}
                 ],
                 temperature=0.7,
-                max_tokens=2000,
+                max_tokens=REAL_AGENT_MAX_TOKENS,
                 stream=True
             )
             
