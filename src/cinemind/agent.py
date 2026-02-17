@@ -135,17 +135,20 @@ class CineMind:
     async def search_and_analyze(self, user_query: str, use_live_data: bool = True,
                                 request_id: Optional[str] = None,
                                 request_type: Optional[str] = None,
-                                outcome: Optional[str] = None) -> Dict:
+                                outcome: Optional[str] = None,
+                                playground_mode: bool = False) -> Dict:
         """
         Search for real-time movie data and provide analysis.
-        
+
         Args:
             user_query: User's question about movies
             use_live_data: Whether to perform real-time searches
             request_id: Optional request ID for tracking (auto-generated if not provided)
             request_type: Optional request type tag (auto-classified if not provided)
             outcome: Optional outcome tag (can be set later)
-            
+            playground_mode: If True, skip default media attachment; caller applies
+                playground-specific attachment behavior (single → poster+scenes, multi → posters only).
+
         Returns:
             Dictionary with agent response and sources
         """
@@ -302,14 +305,15 @@ class CineMind:
                     "skip_reason": reason
                 }
                 
-                # Wikipedia-only media enrichment (runs regardless of Tavily/OpenAI availability)
-                await asyncio.to_thread(attach_media_to_result, user_query, result)
-                
+                # Wikipedia-only media enrichment (skip in playground_mode; playground applies its own rule)
+                if not playground_mode:
+                    await asyncio.to_thread(attach_media_to_result, user_query, result)
+
                 if track_ctx:
                     track_ctx.__exit__(None, None, None)
-                
+
                 return result
-            
+
             # Decision tree says YES OpenAI (e.g., re-verify, rewrite, etc.)
             # Fall through to normal flow but use cached sources/data
             logger.info(f"[{request_id}] Cache hit but OpenAI needed for: {reason}")
@@ -1213,13 +1217,14 @@ class CineMind:
                 meta = getattr(llm_response, "metadata", None) or {}
                 if meta.get("similar_movies"):
                     result["recommended_movies"] = meta["similar_movies"]
-                
-                # Wikipedia-only media enrichment (runs regardless of Tavily/OpenAI availability)
-                await asyncio.to_thread(attach_media_to_result, user_query, result)
-                
+
+                # Wikipedia-only media enrichment (skip in playground_mode; playground applies its own rule)
+                if not playground_mode:
+                    await asyncio.to_thread(attach_media_to_result, user_query, result)
+
                 if track_ctx:
                     track_ctx.__exit__(None, None, None)
-                
+
                 return result
             
             except Exception as e:

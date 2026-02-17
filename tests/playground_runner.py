@@ -30,6 +30,8 @@ if str(src_path) not in sys.path:
 
 from cinemind.agent import CineMind
 from cinemind.llm_client import FakeLLMClient
+from cinemind.playground_attachments import apply_playground_attachment_behavior
+from cinemind.playground import PLAYGROUND_ATTACHMENT_RULE_ENABLED
 from cinemind.request_type_router import get_request_type_router
 
 
@@ -70,12 +72,15 @@ async def run_playground(
         # Execute query through agent (same path as offline e2e tests)
         # Always disable live data to avoid external API calls
         # Use request_type to bypass planning (same as tests)
+        # playground_mode=True when attachment rule enabled so we apply single/multi rule here
         result = await agent.search_and_analyze(
             user_query=user_query,
             use_live_data=False,  # Always disabled - no external API calls
-            request_type=request_type  # Bypass planning (same as offline e2e tests)
+            request_type=request_type,  # Bypass planning (same as offline e2e tests)
+            playground_mode=PLAYGROUND_ATTACHMENT_RULE_ENABLED,
         )
-        
+        if PLAYGROUND_ATTACHMENT_RULE_ENABLED:
+            apply_playground_attachment_behavior(user_query, result)
         return result
     
     finally:

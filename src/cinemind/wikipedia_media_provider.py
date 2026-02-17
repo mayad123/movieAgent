@@ -8,7 +8,6 @@ Never blocks message rendering; on failure returns movie_title only (UI shows pl
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, Any, Optional
 
 import requests
@@ -46,48 +45,37 @@ def _fetch_page_image(
     cache: Optional["WikipediaCache"] = None,
 ) -> Optional[str]:
     """
-    Fetch primary image URL for a Wikipedia page using pageimages API.
-    PageImages often returns no image for titles like "X (film)"; fallback to base "X".
-    Returns None on any failure or if no image. Never raises.
+    Fetch primary image URL for the given Wikipedia page using pageimages API.
+    Uses only the resolved page (no fallback to other titles). Returns None on failure or no image.
     """
-    titles_to_try = [page_title]
-    # Fallback: "Inception (film)" often has no pageimage; "Inception" does
-    m = re.match(r"^(.+?)\s+\((?:film|movie|franchise|film series|animated film)\)\s*$", page_title, re.I)
-    if m:
-        base = m.group(1).strip()
-        if base and base not in titles_to_try:
-            titles_to_try.append(base)
-
-    for title in titles_to_try:
-        if cache:
-            url, hit = cache.get_pageimage(title)
-            if hit:
+    if cache:
+        url, hit = cache.get_pageimage(page_title)
+        if hit:
+            return url
+    try:
+        params = {
+            "action": "query",
+            "prop": "pageimages",
+            "titles": page_title,
+            "pithumbsize": PITHUMB_SIZE,
+            "pilicense": "any",
+            "format": "json",
+            "origin": "*",
+        }
+        r = session.get(WIKIPEDIA_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        pages = data.get("query", {}).get("pages") or {}
+        for _pid, p in pages.items():
+            url = _extract_url_from_page(p)
+            if url:
+                if cache:
+                    cache.set_pageimage(page_title, url)
                 return url
-        try:
-            params = {
-                "action": "query",
-                "prop": "pageimages",
-                "titles": title,
-                "pithumbsize": PITHUMB_SIZE,
-                "pilicense": "any",
-                "format": "json",
-                "origin": "*",
-            }
-            r = session.get(WIKIPEDIA_API_URL, params=params, timeout=REQUEST_TIMEOUT)
-            r.raise_for_status()
-            data = r.json()
-            pages = data.get("query", {}).get("pages") or {}
-            for _pid, p in pages.items():
-                url = _extract_url_from_page(p)
-                if url:
-                    if cache:
-                        cache.set_pageimage(title, url)
-                    return url
-            if cache:
-                cache.set_pageimage(title, None)
-        except Exception as e:
-            logger.debug("Wikipedia pageimage request failed for %s: %s", title, e)
-            # Don't cache failures; allow retry on next request
+        if cache:
+            cache.set_pageimage(page_title, None)
+    except Exception as e:
+        logger.debug("Wikipedia pageimage request failed for %s: %s", page_title, e)
     return None
 
 

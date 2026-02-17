@@ -148,6 +148,30 @@ def add_assets(project_id: str, new_assets: List[dict]) -> int:
     return 0
 
 
+def remove_asset(project_id: str, asset_index: int) -> bool:
+    """
+    Remove one asset from a project by index. Returns True if removed.
+    """
+    project_id = str(project_id).strip()
+    if not project_id or asset_index < 0:
+        return False
+    projects = _read_raw()
+    for p in projects:
+        if not isinstance(p, dict):
+            continue
+        pid = str(p.get("id") or "")
+        if pid != project_id:
+            continue
+        existing = p.get("assets")
+        if not isinstance(existing, list) or asset_index >= len(existing):
+            return False
+        existing.pop(asset_index)
+        p["assets"] = existing
+        _write_raw(projects)
+        return True
+    return False
+
+
 def create(name: str, description: str = "") -> dict:
     """Create a project; return the created project."""
     projects = _read_raw()

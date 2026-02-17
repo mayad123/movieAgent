@@ -26,6 +26,57 @@ else:
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+# --- TMDB (single source of truth for backend) ---
+# TMDB enablement is backend config only (env vars). There is no UI toggle; the UI requestedAgentMode
+# controls PLAYGROUND vs REAL_AGENT, not TMDB. Env: ENABLE_TMDB_SCENES (true/false/1/0), TMDB_READ_ACCESS_TOKEN.
+# Token is trimmed; empty token disables TMDB. Never log or send token to client.
+
+def _parse_bool_env(name: str, default: str = "false") -> bool:
+    """Parse env as boolean deterministically: true, 1, yes -> True; false, 0, no, '' -> False."""
+    raw = (os.getenv(name, default) or "").strip().lower()
+    return raw in ("true", "1", "yes")
+
+
+# Raw values (used only for startup log and is_tmdb_enabled)
+_TMDB_TOKEN_RAW = (os.getenv("TMDB_READ_ACCESS_TOKEN", "") or "").strip()
+_TMDB_ENABLED_FLAG = _parse_bool_env("ENABLE_TMDB_SCENES", "false")
+
+# Single source of truth: enabled only when flag is true AND token is non-empty
+def is_tmdb_enabled() -> bool:
+    """True only when ENABLE_TMDB_SCENES is true and TMDB_READ_ACCESS_TOKEN is non-empty."""
+    return bool(_TMDB_TOKEN_RAW and _TMDB_ENABLED_FLAG)
+
+
+def get_tmdb_access_token() -> str:
+    """Return the TMDB read access token (empty if not set). Do not log or expose to client."""
+    return _TMDB_TOKEN_RAW
+
+
+# Poster mode: "fallback_only" (default) = use TMDB poster when Wikipedia missing/low confidence
+TMDB_POSTER_MODE = (os.getenv("TMDB_POSTER_MODE", "fallback_only") or "fallback_only").strip().lower()
+
+# Legacy names for backward compatibility (enrichment/scenes import these)
+ENABLE_TMDB_SCENES = is_tmdb_enabled()
+TMDB_READ_ACCESS_TOKEN = _TMDB_TOKEN_RAW
+
+
+def _log_tmdb_status() -> None:
+    """Startup diagnostic: tmdb_enabled and token_present only (no secrets)."""
+    import logging
+    log = logging.getLogger(__name__)
+    token_present = bool(_TMDB_TOKEN_RAW)
+    tmdb_enabled = is_tmdb_enabled()
+    log.info(
+        "TMDB config: tmdb_enabled=%s, token_present=%s",
+        tmdb_enabled,
+        token_present,
+    )
+    if not tmdb_enabled and _TMDB_ENABLED_FLAG and not token_present:
+        log.debug("TMDB disabled: set TMDB_READ_ACCESS_TOKEN in .env to enable")
+
+
+# Run once at config load so any process that imports config sees the status
+_log_tmdb_status()
 
 # Agent Configuration
 AGENT_NAME = "CineMind"

@@ -34,10 +34,12 @@ def _parsed(
     scene_indicators: bool = False,
     scene_like_enumeration: bool = False,
     the_film_movie_references: int = 0,
+    movie_confidence: float | None = None,
 ) -> ResponseParseResult:
     """Build a ResponseParseResult for tests."""
+    conf = movie_confidence if movie_confidence is not None else 0.9
     return ResponseParseResult(
-        movies=[ExtractedMovie(title=t, year=y, confidence=0.9) for t, y in movies],
+        movies=[ExtractedMovie(title=t, year=y, confidence=conf) for t, y in movies],
         structure=ParseStructure(
             has_bullets=has_bullets,
             has_numbered_list=has_numbered,
@@ -78,7 +80,7 @@ class TestPrecedenceAmbiguity:
 
 
 class TestPrecedenceMovieList:
-    """Precedence 2: 2+ movies AND list-like → movie_list."""
+    """Precedence 2: Guardrail — 2+ distinct movies → always movie_list (never scenes)."""
 
     def test_two_movies_list_like(self):
         parsed = _parsed([("Inception", 2010), ("Dune", 2021)], has_bullets=True)
@@ -86,6 +88,7 @@ class TestPrecedenceMovieList:
         assert r.intent == INTENT_MOVIE_LIST
         assert len(r.titles) == 2
         assert "movie_list" in r.rationale
+        assert "guardrail" in r.rationale
 
     def test_two_movies_numbered_list(self):
         parsed = _parsed([("A", None), ("B", None)], has_numbered=True)
@@ -93,16 +96,29 @@ class TestPrecedenceMovieList:
         assert r.intent == INTENT_MOVIE_LIST
         assert len(r.titles) == 2
 
-    def test_two_movies_not_list_like_falls_through_to_none(self):
-        # 2+ movies but NOT list-like → precedence 2 fails; no 1-movie rule; → none (no query title).
+    def test_two_movies_not_list_like_still_movie_list_guardrail(self):
+        # Guardrail: 2+ distinct movies → always movie_list (even without list-like structure).
         parsed = ResponseParseResult(
             movies=[ExtractedMovie(title="Inception", year=2010), ExtractedMovie(title="Dune", year=2021)],
             structure=ParseStructure(has_bullets=False, has_numbered_list=False, has_bold_titles=False, has_title_year_pattern=False, has_dash_blurb_pattern=False),
             signals=ParseSignals(deep_dive_indicators=[], scene_indicators=[]),
         )
         r = classify_attachment_intent(parsed)
-        assert r.intent == INTENT_NONE
-        assert len(r.titles) == 0
+        assert r.intent == INTENT_MOVIE_LIST
+        assert len(r.titles) == 2
+        assert "guardrail" in r.rationale
+
+    def test_multi_movie_with_scene_words_in_blurb_guardrail(self):
+        """Recommendation list with 'iconic scenes' in blurb must yield movie_list, not scenes."""
+        parsed = _parsed(
+            [("Inception", 2010), ("Dune", 2021)],
+            has_bullets=True,
+            scene_indicators=True,  # e.g. "iconic scenes" in one of the blurbs
+        )
+        r = classify_attachment_intent(parsed)
+        assert r.intent == INTENT_MOVIE_LIST
+        assert len(r.titles) == 2
+        assert "guardrail" in r.rationale
 
 
 class TestPrecedenceScenes:
@@ -139,6 +155,17 @@ class TestPrecedenceScenes:
         parsed = _parsed([("Inception", 2010)], scene_like_enumeration=False, the_film_movie_references=1)
         r = classify_attachment_intent(parsed)
         assert r.intent == INTENT_PRIMARY_MOVIE
+
+    def test_one_movie_scene_signals_low_confidence_primary_movie(self):
+        """Single movie with scene-like signals but low confidence → primary_movie (guardrail)."""
+        parsed = _parsed(
+            [("Inception", 2010)],
+            scene_indicators=True,
+            movie_confidence=0.5,
+        )
+        r = classify_attachment_intent(parsed)
+        assert r.intent == INTENT_PRIMARY_MOVIE
+        assert r.titles == ["Inception"]
 
 
 class TestPrecedencePrimaryMovie:

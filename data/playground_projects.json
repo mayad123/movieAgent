@@ -1,43 +1,15 @@
 [
   {
-    "id": "53fa35cb-0e8d-4b35-86b5-c09dd42b72cd",
+    "id": "b9a915ed-d0a0-45ce-815c-134e927aaaa8",
     "name": "Project 1",
-    "createdAt": "2026-02-16T06:52:16.093350+00:00",
+    "createdAt": "2026-02-17T06:19:23.710141+00:00",
     "description": "Default project",
-    "assets": [
-      {
-        "posterImageUrl": "https://upload.wikimedia.org/wikipedia/en/d/db/The_Matrix.png",
-        "title": "The Matrix",
-        "pageUrl": "https://en.wikipedia.org/wiki/The_Matrix",
-        "pageId": "The_Matrix",
-        "conversationId": "conv_1771224739520_wnrsxb3",
-        "capturedAt": "2026-02-16T06:52:49.692095+00:00",
-        "storedRef": null
-      },
-      {
-        "posterImageUrl": "https://upload.wikimedia.org/wikipedia/en/d/db/The_Matrix.png",
-        "title": "The Matrix (franchise)",
-        "pageUrl": "https://en.wikipedia.org/wiki/The_Matrix_%28franchise%29",
-        "pageId": "The_Matrix_%28franchise%29",
-        "conversationId": "conv_1771224739520_wnrsxb3",
-        "capturedAt": "2026-02-16T06:52:49.692131+00:00",
-        "storedRef": null
-      },
-      {
-        "posterImageUrl": "https://upload.wikimedia.org/wikipedia/en/2/2e/Inception_%282010%29_theatrical_poster.jpg",
-        "title": "Inception",
-        "pageUrl": "https://en.wikipedia.org/wiki/Inception",
-        "pageId": "Inception",
-        "conversationId": "conv_1771224739520_wnrsxb3",
-        "capturedAt": "2026-02-16T06:52:49.695500+00:00",
-        "storedRef": null
-      }
-    ]
+    "assets": []
   },
   {
-    "id": "6eeceb2b-3655-4a09-8c85-e94821b81af9",
+    "id": "a2866324-2c73-478a-808e-6256a189510a",
     "name": "Project 2",
-    "createdAt": "2026-02-16T06:52:16.093503+00:00",
+    "createdAt": "2026-02-17T06:19:23.710270+00:00",
     "description": "Default project",
     "assets": []
   }

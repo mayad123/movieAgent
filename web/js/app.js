@@ -78,6 +78,11 @@
     var rightPanelToggle = document.getElementById('rightPanelToggle');
     var conversationList = document.getElementById('conversationList');
     var conversationTitle = document.getElementById('conversationTitle');
+    var headerMainView = document.getElementById('headerMainView');
+    var headerSubView = document.getElementById('headerSubView');
+    var headerBreadcrumb = document.getElementById('headerBreadcrumb');
+    var subConversationMovieBadge = document.getElementById('subConversationMovieBadge');
+    var mainEl = document.querySelector('main.main');
     var chatColumn = document.getElementById('chatColumn');
     var messageList = document.getElementById('messageList');
     var retrievingRow = document.getElementById('retrievingRow');
@@ -101,9 +106,24 @@
     /** Session-only: user has confirmed Real Agent this session (no modal again until reload). */
     var realAgentConfirmedThisSession = useRealAgent;
 
-    /** Conversation state: list of { id, title, messages } and active id. */
+    /**
+     * Conversation state: main tabs only; each can have sub-threads.
+     * conversations[] = main conversations only.
+     * Each: { id, title, messages, collection, activeScope, subConversations: [ { id, title, contextMovie, messages } ] }.
+     * activeConversationId = main conversation id.
+     * activeSubConversationId = null (main thread) or sub-conversation id (sub thread).
+     */
     var conversations = [];
     var activeConversationId = null;
+    var activeSubConversationId = null;
+    /** 'main' = parent conversation screen; 'sub' = dedicated sub-conversation screen (SubConversationView). */
+    var conversationView = 'main';
+    /** Per main conversation: last-opened view so switching tabs preserves parent vs sub. */
+    var lastViewByConversationId = {};
+    /** Scroll position of main thread when user navigated to sub; restored on Back. */
+    var mainScrollTopByConversationId = {};
+    /** When set, renderMessages will restore this scroll instead of scrolling to bottom. */
+    var restoreScrollTop = null;
     var isSending = false;
     var app = document.getElementById('app');
 
@@ -144,7 +164,8 @@
     /**
      * Whether the given poster is already in the active collection (same de-dupe key).
      * Active collection = conversation collection when scope is "This Conversation",
-     * or the current project's assets when scope is a project.
+     * or the current project's assets when scope is a project. Uses getActiveConversation()
+     * so behavior is identical on main and sub-conversation screens.
      * poster: { title, imageUrl, pageUrl?, pageId? }
      */
     function isPosterInActiveCollection(poster) {
@@ -180,26 +201,33 @@
         var scope = (conv.activeScope != null && conv.activeScope !== '') ? conv.activeScope : 'This Conversation';
         if (String(scope).indexOf('project:') === 0) {
             var projectId = String(scope).slice(8);
+            var assetPayload = {
+                title: String(title).trim(),
+                posterImageUrl: (imageUrl && String(imageUrl).trim()) || undefined,
+                pageUrl: (pageUrl && String(pageUrl).trim()) || undefined,
+                pageId: (pageId && String(pageId).trim()) || undefined,
+                conversationId: (conv.id && String(conv.id).trim()) || undefined
+            };
+            if (conversationView === 'sub' && activeSubConversationId) assetPayload.subConversationId = activeSubConversationId;
+            var payload = { assets: [assetPayload] };
             fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId) + '/assets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    assets: [{
-                        title: String(title).trim(),
-                        posterImageUrl: (imageUrl && String(imageUrl).trim()) || undefined,
-                        pageUrl: (pageUrl && String(pageUrl).trim()) || undefined,
-                        pageId: (pageId && String(pageId).trim()) || undefined
-                    }]
-                })
+                body: JSON.stringify(payload)
             })
-                .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('Failed to save')); })
+                .then(function (res) {
+                    if (!res.ok) return Promise.reject(new Error('Failed to save'));
+                    return res.json();
+                })
                 .then(function (result) {
                     var proj = projects.filter(function (p) { return p.id === projectId; })[0];
                     showSavedToProjectToast(proj ? proj.name : null);
                     loadProjectAssets(projectId);
-                    renderMessages();
+                    updateRightPanelScope();
                 })
-                .catch(function () { /* ignore */ });
+                .catch(function () {
+                    showFallbackToast('Could not add to project. Check that the server supports projects.');
+                });
             return;
         }
         if (!conv.collection) conv.collection = [];
@@ -211,9 +239,10 @@
         };
         if (pageUrl && String(pageUrl).trim()) item.pageUrl = String(pageUrl).trim();
         if (pageId && String(pageId).trim()) item.pageId = String(pageId).trim();
+        if (conversationView === 'sub' && activeSubConversationId) item.addedFromSubConversationId = activeSubConversationId;
         conv.collection.push(item);
         renderCollectionPanel();
-        renderMessages();
+        /* Do not re-render messages: it tears down the carousel DOM and breaks subsequent "Add to Collection" clicks. */
     }
 
     /** Max stack layers (above/below active) from panel height for adaptive layout. */
@@ -390,23 +419,109 @@
     function renderCollectionPanel() {
         var container = document.getElementById('collectionList');
         if (!container) return;
+        container._stackUpdate = null;
+        stackNavigationState = null;
         var conv = getActiveConversation();
         var items = (conv && conv.collection) ? conv.collection : [];
-        var activeIndex = (conv && typeof conv.collectionActiveIndex === 'number') ? conv.collectionActiveIndex : 0;
-        var normalized = items.map(function (item) {
-            return { title: item.title, imageUrl: item.imageUrl };
+        if (items.length === 0) {
+            container.innerHTML = '';
+            var empty = document.createElement('p');
+            empty.className = 'right-panel-stack-empty';
+            empty.textContent = 'No posters yet. Add from the conversation.';
+            container.appendChild(empty);
+            return;
+        }
+        var list = document.createElement('div');
+        list.className = 'right-panel-collection-list';
+        items.forEach(function (item, idx) {
+            var title = String((item && item.title) || '').trim() || 'Unnamed';
+            var imageUrl = (item && item.imageUrl) && String(item.imageUrl).trim() ? item.imageUrl : '';
+            var card = document.createElement('div');
+            card.className = 'right-panel-collection-item';
+            card.setAttribute('data-index', String(idx));
+            var posterWrap = document.createElement('div');
+            posterWrap.className = 'right-panel-collection-item-poster-wrap';
+            if (imageUrl) {
+                var img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = title;
+                img.loading = 'lazy';
+                posterWrap.appendChild(img);
+            } else {
+                var ph = document.createElement('div');
+                ph.className = 'right-panel-collection-placeholder';
+                ph.textContent = '?';
+                posterWrap.appendChild(ph);
+            }
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'right-panel-collection-item-remove';
+            removeBtn.setAttribute('aria-label', 'Remove from collection');
+            removeBtn.setAttribute('title', 'Remove from collection');
+            removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            removeBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var i = parseInt(card.getAttribute('data-index'), 10);
+                if (conv && conv.collection && !isNaN(i) && i >= 0 && i < conv.collection.length) {
+                    conv.collection.splice(i, 1);
+                    renderCollectionPanel();
+                }
+            });
+            posterWrap.appendChild(removeBtn);
+            card.appendChild(posterWrap);
+            var titleEl = document.createElement('span');
+            titleEl.className = 'right-panel-collection-item-title';
+            titleEl.textContent = title;
+            card.appendChild(titleEl);
+            list.appendChild(card);
         });
-        renderPosterStack(container, normalized, activeIndex, function (index) {
-            if (conv) conv.collectionActiveIndex = index;
-            if (container._stackUpdate) container._stackUpdate(index);
-            else renderCollectionPanel();
-        });
+        container.innerHTML = '';
+        container.appendChild(list);
     }
 
     function nextId() {
         return 'conv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     }
 
+    /**
+     * Create a sub-conversation (child thread) anchored to a movie and switch the UI to it.
+     * movie: { title, year?, pageUrl?, pageId?, imageUrl? }
+     * Sub is stored under the active main conversation's subConversations[].
+     */
+    function addSubConversationFromPoster(movie) {
+        var main = getActiveConversation();
+        if (!main || !movie || !String(movie.title || '').trim()) return;
+        var title = String(movie.title).trim();
+        var subTitle = 'Re: ' + title + (movie.year != null ? ' (' + movie.year + ')' : '');
+        var contextMovie = {
+            title: title,
+            year: movie.year,
+            pageUrl: (movie.pageUrl && String(movie.pageUrl).trim()) || undefined,
+            pageId: (movie.pageId && String(movie.pageId).trim()) || undefined,
+            imageUrl: (movie.imageUrl && String(movie.imageUrl).trim()) || undefined
+        };
+        var sub = {
+            id: nextId(),
+            title: subTitle,
+            contextMovie: contextMovie,
+            messages: []
+        };
+        if (!main.subConversations) main.subConversations = [];
+        main.subConversations.unshift(sub);
+        if (conversationView === 'main' && chatColumn) mainScrollTopByConversationId[main.id] = chatColumn.scrollTop;
+        activeSubConversationId = sub.id;
+        conversationView = 'sub';
+        lastViewByConversationId[main.id] = { view: 'sub', subId: sub.id };
+        updateConversationList();
+        renderMessages();
+        renderCollectionPanel();
+        updateHeaderForView();
+        updateRightPanelScope();
+        if (composerInput) composerInput.focus();
+    }
+
+    /** Return the active main conversation (for collection, scope, etc.). */
     function getActiveConversation() {
         if (!activeConversationId) return null;
         for (var i = 0; i < conversations.length; i++) {
@@ -415,39 +530,139 @@
         return null;
     }
 
+    /**
+     * Return the currently active thread: either main or a sub-conversation.
+     * { main, sub, messages, title } so callers can read/write messages and title.
+     */
+    function getActiveThread() {
+        var main = getActiveConversation();
+        if (!main) return { main: null, sub: null, messages: [], title: 'New conversation' };
+        if (!activeSubConversationId) {
+            return { main: main, sub: null, messages: main.messages, title: main.title || 'New conversation' };
+        }
+        var subs = main.subConversations && Array.isArray(main.subConversations) ? main.subConversations : [];
+        for (var j = 0; j < subs.length; j++) {
+            if (subs[j].id === activeSubConversationId) {
+                return {
+                    main: main,
+                    sub: subs[j],
+                    messages: subs[j].messages,
+                    title: subs[j].title || 'Re: ' + (subs[j].contextMovie && subs[j].contextMovie.title) || 'Sub'
+                };
+            }
+        }
+        activeSubConversationId = null;
+        return { main: main, sub: null, messages: main.messages, title: main.title || 'New conversation' };
+    }
+
     function addConversation() {
         var id = nextId();
-        // Agent mode is session-scoped; do not add to conversation object
         conversations.unshift({
             id: id,
             title: 'New conversation',
             messages: [],
             collection: [],
-            activeScope: 'This Conversation'
+            activeScope: 'This Conversation',
+            subConversations: []
         });
         activeConversationId = id;
+        activeSubConversationId = null;
+        conversationView = 'main';
+        lastViewByConversationId[id] = { view: 'main', subId: null };
         composerInput.value = '';
         updateConversationList();
         renderMessages();
         renderCollectionPanel();
-        updateHeaderTitle();
+        updateHeaderForView();
         updateRightPanelScope();
         if (composerInput) composerInput.focus();
     }
 
-    function switchConversation(id) {
-        if (id === activeConversationId) return;
-        activeConversationId = id;
+    /**
+     * Switch to a thread: parent (main) or sub-conversation. Left-panel navigation.
+     * Parent click → parent conversation screen (main view). Sub click → SubConversationView (sub view).
+     * Saves scroll when leaving main view. Persists last-opened sub per parent when opening a sub.
+     * mainId: main conversation id. subId: optional sub-conversation id (undefined/null = open parent screen).
+     */
+    function switchConversation(mainId, subId) {
+        if (mainId === activeConversationId && (subId == null ? !activeSubConversationId : subId === activeSubConversationId)) return;
+        if (conversationView === 'main' && chatColumn && activeConversationId) mainScrollTopByConversationId[activeConversationId] = chatColumn.scrollTop;
+        activeConversationId = mainId;
+        if (subId != null && subId !== '') {
+            activeSubConversationId = subId;
+            conversationView = 'sub';
+            lastViewByConversationId[mainId] = { view: 'sub', subId: subId };
+        } else {
+            activeSubConversationId = null;
+            conversationView = 'main';
+        }
+        restoreScrollTop = (conversationView === 'main') ? (mainScrollTopByConversationId[mainId] != null ? mainScrollTopByConversationId[mainId] : null) : null;
         updateConversationList();
         renderMessages();
         renderCollectionPanel();
-        updateHeaderTitle();
+        updateHeaderForView();
         updateRightPanelScope();
     }
 
     function updateHeaderTitle() {
-        var conv = getActiveConversation();
-        conversationTitle.textContent = conv ? conv.title : 'New conversation';
+        var thread = getActiveThread();
+        conversationTitle.textContent = thread.title || 'New conversation';
+    }
+
+    /**
+     * Update header for current view: main (title only) or sub (back + breadcrumb "Parent → Movie (year)").
+     * Call after changing conversationView, activeConversationId, or activeSubConversationId.
+     */
+    function updateHeaderForView() {
+        if (!headerMainView || !headerSubView) return;
+        if (mainEl) mainEl.classList.toggle('sub-conversation-view', conversationView === 'sub');
+        if (conversationView === 'sub') {
+            headerMainView.classList.add('hidden');
+            headerSubView.classList.remove('hidden');
+            var thread = getActiveThread();
+            var main = getActiveConversation();
+            var parentName = (main && (main.title || 'New conversation')) ? (main.title || 'New conversation') : 'New conversation';
+            var movieLabel = thread.sub && thread.sub.contextMovie
+                ? (thread.sub.contextMovie.title || '') + (thread.sub.contextMovie.year != null ? ' (' + thread.sub.contextMovie.year + ')' : '')
+                : (thread.title || '');
+            if (headerBreadcrumb) headerBreadcrumb.textContent = parentName + ' → ' + (movieLabel || 'Sub');
+            if (subConversationMovieBadge) {
+                subConversationMovieBadge.classList.remove('hidden');
+                subConversationMovieBadge.setAttribute('aria-hidden', 'false');
+                var movie = thread.sub && thread.sub.contextMovie;
+                var imgUrl = movie && movie.imageUrl && String(movie.imageUrl).trim();
+                if (imgUrl) {
+                    var existing = subConversationMovieBadge.querySelector('img');
+                    if (existing) existing.src = imgUrl;
+                    else {
+                        var placeholder = subConversationMovieBadge.querySelector('.sub-conversation-badge-placeholder');
+                        if (placeholder) placeholder.remove();
+                        var img = document.createElement('img');
+                        img.src = imgUrl;
+                        img.alt = movie.title ? (movie.title + (movie.year != null ? ' (' + movie.year + ')' : '')) : 'Movie';
+                        subConversationMovieBadge.appendChild(img);
+                    }
+                } else {
+                    var im = subConversationMovieBadge.querySelector('img');
+                    if (im) im.remove();
+                    if (!subConversationMovieBadge.querySelector('.sub-conversation-badge-placeholder')) {
+                        var span = document.createElement('span');
+                        span.className = 'sub-conversation-badge-placeholder';
+                        span.textContent = '\uD83C\uDFAC';
+                        subConversationMovieBadge.appendChild(span);
+                    }
+                }
+            }
+        } else {
+            headerMainView.classList.remove('hidden');
+            headerSubView.classList.add('hidden');
+            var t = getActiveThread();
+            if (conversationTitle) conversationTitle.textContent = t.title || 'New conversation';
+            if (subConversationMovieBadge) {
+                subConversationMovieBadge.classList.add('hidden');
+                subConversationMovieBadge.setAttribute('aria-hidden', 'true');
+            }
+        }
     }
 
     /** Sync right-panel scope label and dropdown highlight from the active conversation’s activeScope (UI-only, per-tab). */
@@ -496,7 +711,9 @@
         var strip = document.getElementById('rightPanelProjectAssetsList');
         if (!strip) return;
         strip.innerHTML = '';
-        fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId))
+        var url = API_BASE + '/api/projects/' + encodeURIComponent(projectId);
+        url += (url.indexOf('?') !== -1 ? '&' : '?') + '_=' + Date.now();
+        fetch(url)
             .then(function (res) {
                 if (!res.ok) throw new Error('Project not found');
                 return res.json();
@@ -514,20 +731,73 @@
             });
     }
 
-    /** Render the current project's assets as a poster stack (uses renderPosterStack). */
+    /** Render the current project's assets as a simple poster + title list (same style as "This Conversation" collection). */
     function renderProjectAssetsStack() {
         var strip = document.getElementById('rightPanelProjectAssetsList');
         if (!strip) return;
-        var activeIndex = currentProjectId ? (projectAssetsActiveIndex[currentProjectId] || 0) : 0;
-        var normalized = currentProjectAssets.map(function (a) {
-            var imgUrl = (a.storedRef && String(a.storedRef).trim()) || (a.posterImageUrl && String(a.posterImageUrl).trim()) || '';
-            return { title: (a.title && String(a.title).trim()) || 'Unnamed', imageUrl: imgUrl };
+        strip._stackUpdate = null;
+        stackNavigationState = null;
+        var items = currentProjectAssets;
+        if (items.length === 0) {
+            strip.innerHTML = '';
+            var empty = document.createElement('p');
+            empty.className = 'right-panel-stack-empty';
+            empty.textContent = 'No saved posters in this project yet.';
+            strip.appendChild(empty);
+            return;
+        }
+        var list = document.createElement('div');
+        list.className = 'right-panel-collection-list';
+        var projectId = currentProjectId;
+        items.forEach(function (item, idx) {
+            var title = String((item && item.title) || '').trim() || 'Unnamed';
+            var imageUrl = (item && item.storedRef && String(item.storedRef).trim()) ? item.storedRef.trim() : (item && item.posterImageUrl && String(item.posterImageUrl).trim()) ? item.posterImageUrl.trim() : '';
+            var card = document.createElement('div');
+            card.className = 'right-panel-collection-item';
+            card.setAttribute('data-index', String(idx));
+            var posterWrap = document.createElement('div');
+            posterWrap.className = 'right-panel-collection-item-poster-wrap';
+            if (imageUrl) {
+                var img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = title;
+                img.loading = 'lazy';
+                posterWrap.appendChild(img);
+            } else {
+                var ph = document.createElement('div');
+                ph.className = 'right-panel-collection-placeholder';
+                ph.textContent = '?';
+                posterWrap.appendChild(ph);
+            }
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'right-panel-collection-item-remove';
+            removeBtn.setAttribute('aria-label', 'Remove from project');
+            removeBtn.setAttribute('title', 'Remove from project');
+            removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            removeBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var i = parseInt(card.getAttribute('data-index'), 10);
+                if (!projectId || isNaN(i) || i < 0) return;
+                fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId) + '/assets/' + i, { method: 'DELETE' })
+                    .then(function (res) {
+                        if (!res.ok) return Promise.reject(new Error('Failed to remove'));
+                        return res.json();
+                    })
+                    .then(function () { loadProjectAssets(projectId); })
+                    .catch(function () { showFallbackToast('Could not remove from project.'); });
+            });
+            posterWrap.appendChild(removeBtn);
+            card.appendChild(posterWrap);
+            var titleEl = document.createElement('span');
+            titleEl.className = 'right-panel-collection-item-title';
+            titleEl.textContent = title;
+            card.appendChild(titleEl);
+            list.appendChild(card);
         });
-        renderPosterStack(strip, normalized, activeIndex, function (index) {
-            if (currentProjectId) projectAssetsActiveIndex[currentProjectId] = index;
-            if (strip._stackUpdate) strip._stackUpdate(index);
-            else renderProjectAssetsStack();
-        });
+        strip.innerHTML = '';
+        strip.appendChild(list);
     }
 
     /** Load projects from API and populate dropdown. Call on app init. */
@@ -665,10 +935,12 @@
     (function setupStackKeyboard() {
         document.addEventListener('keydown', function (e) {
             if (!rightPanel || !rightPanel.contains(document.activeElement)) return;
-            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            var isPrev = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+            var isNext = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+            if (!isPrev && !isNext) return;
             if (!stackNavigationState) return;
             e.preventDefault();
-            if (e.key === 'ArrowUp') stackNavigationState.onPrev();
+            if (isPrev) stackNavigationState.onPrev();
             else stackNavigationState.onNext();
         });
     })();
@@ -723,16 +995,112 @@
     }
     if (newChatBtn) newChatBtn.addEventListener('click', startNewChat);
 
+    function navigateBackToParentConversation() {
+        var main = getActiveConversation();
+        if (!main || conversationView !== 'sub') return;
+        lastViewByConversationId[main.id] = { view: 'main', subId: null };
+        conversationView = 'main';
+        restoreScrollTop = mainScrollTopByConversationId[main.id] != null ? mainScrollTopByConversationId[main.id] : 0;
+        activeSubConversationId = null;
+        updateConversationList();
+        renderMessages();
+        renderCollectionPanel();
+        updateHeaderForView();
+        updateRightPanelScope();
+    }
+    var headerBackBtn = document.getElementById('headerBackBtn');
+    if (headerBackBtn) headerBackBtn.addEventListener('click', navigateBackToParentConversation);
+
+    function renameSubConversation() {
+        var thread = getActiveThread();
+        if (!thread.sub) return;
+        var current = thread.sub.title || (thread.sub.contextMovie && thread.sub.contextMovie.title) || 'Re: movie';
+        var newTitle = typeof prompt === 'function' ? prompt('Rename sub-conversation', current) : null;
+        if (newTitle != null && String(newTitle).trim() !== '') {
+            thread.sub.title = String(newTitle).trim();
+            updateConversationList();
+            updateHeaderForView();
+        }
+    }
+    /**
+     * Close = hide from list only. Sets sub.archived = true; data (messages, etc.) is not deleted.
+     * Navigates to parent so the user is not left on a hidden sub. State remains stable across tab switching.
+     */
+    function closeSubConversation() {
+        var thread = getActiveThread();
+        var main = getActiveConversation();
+        if (!thread.sub || !main) return;
+        thread.sub.archived = true;
+        switchConversation(main.id);
+    }
+    var headerSubRenameBtn = document.getElementById('headerSubRenameBtn');
+    var headerSubCloseBtn = document.getElementById('headerSubCloseBtn');
+    if (headerSubRenameBtn) headerSubRenameBtn.addEventListener('click', renameSubConversation);
+    if (headerSubCloseBtn) headerSubCloseBtn.addEventListener('click', closeSubConversation);
+
+    var filmIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>';
+
+    /**
+     * Left panel: parent conversations with nested sub-conversations. Parent row = main thread id;
+     * sub rows = sub thread ids. Click parent → parent conversation screen; click sub → SubConversationView.
+     * Active highlight reflects current screen/thread (mainActive when on main view, subActive when on that sub).
+     */
     function updateConversationList() {
         if (!conversationList) return;
         conversationList.innerHTML = '';
-        conversations.forEach(function (conv) {
-            var el = document.createElement('div');
-            el.className = 'conversation-item' + (conv.id === activeConversationId ? ' active' : '');
-            var label = conv.title || 'New conversation';
-            el.textContent = label.length > 36 ? label.slice(0, 36) + '\u2026' : label;
-            el.addEventListener('click', function () { switchConversation(conv.id); });
-            conversationList.appendChild(el);
+        conversations.forEach(function (mainConv) {
+            var group = document.createElement('div');
+            group.className = 'conversation-group';
+
+            var mainActive = mainConv.id === activeConversationId && !activeSubConversationId;
+            var mainEl = document.createElement('div');
+            var mainLabel = mainConv.title || 'New conversation';
+            mainEl.className = 'conversation-item' + (mainActive ? ' active' : '');
+            mainEl.textContent = mainLabel.length > 36 ? mainLabel.slice(0, 36) + '\u2026' : mainLabel;
+            mainEl.setAttribute('title', mainLabel);
+            mainEl.setAttribute('data-thread-type', 'parent');
+            mainEl.setAttribute('data-main-id', mainConv.id);
+            mainEl.addEventListener('click', function () { switchConversation(mainConv.id); });
+            group.appendChild(mainEl);
+
+            var subs = mainConv.subConversations && Array.isArray(mainConv.subConversations)
+                ? mainConv.subConversations.filter(function (s) { return !s.archived; })
+                : [];
+            subs.forEach(function (sub) {
+                var subActive = mainConv.id === activeConversationId && sub.id === activeSubConversationId;
+                var subEl = document.createElement('div');
+                var subLabel = sub.title || 'Re: ' + (sub.contextMovie && sub.contextMovie.title) || 'Sub';
+                subEl.className = 'conversation-item conversation-item-sub' + (subActive ? ' active' : '');
+                subEl.setAttribute('title', subLabel);
+                subEl.setAttribute('data-thread-type', 'sub');
+                subEl.setAttribute('data-main-id', mainConv.id);
+                subEl.setAttribute('data-sub-id', sub.id);
+                subEl.addEventListener('click', function () { switchConversation(mainConv.id, sub.id); });
+
+                var thumbWrap = document.createElement('span');
+                thumbWrap.className = 'conversation-item-sub-thumb';
+                var imgUrl = sub.contextMovie && sub.contextMovie.imageUrl && String(sub.contextMovie.imageUrl).trim();
+                if (imgUrl) {
+                    var thumbImg = document.createElement('img');
+                    thumbImg.src = imgUrl;
+                    thumbImg.alt = '';
+                    thumbImg.loading = 'lazy';
+                    thumbWrap.appendChild(thumbImg);
+                } else {
+                    thumbWrap.classList.add('conversation-item-sub-thumb-icon');
+                    thumbWrap.innerHTML = filmIconSvg;
+                }
+                subEl.appendChild(thumbWrap);
+
+                var labelSpan = document.createElement('span');
+                labelSpan.className = 'conversation-item-sub-label';
+                labelSpan.textContent = subLabel.length > 32 ? subLabel.slice(0, 32) + '\u2026' : subLabel;
+                subEl.appendChild(labelSpan);
+
+                group.appendChild(subEl);
+            });
+
+            conversationList.appendChild(group);
         });
     }
 
@@ -745,12 +1113,14 @@
     }
 
     function appendMessage(role, content, meta) {
-        var conv = getActiveConversation();
-        if (!conv) return;
-        conv.messages.push({ role: role, content: content, meta: meta || null });
-        if (conv.messages.length === 1 && role === 'user') {
-            conv.title = content.length > 40 ? content.slice(0, 40) + '\u2026' : content;
-            updateHeaderTitle();
+        var thread = getActiveThread();
+        if (!thread.messages) return;
+        thread.messages.push({ role: role, content: content, meta: meta || null });
+        if (thread.messages.length === 1 && role === 'user') {
+            var title = content.length > 40 ? content.slice(0, 40) + '\u2026' : content;
+            if (thread.sub) thread.sub.title = title;
+            else if (thread.main) thread.main.title = title;
+            updateHeaderForView();
             updateConversationList();
         }
         renderMessages();
@@ -833,11 +1203,23 @@
         var msgBtn = document.createElement('button');
         msgBtn.type = 'button';
         msgBtn.className = 'media-strip-card-action';
-        msgBtn.setAttribute('data-tooltip', 'Add to conversation');
-        msgBtn.setAttribute('title', 'Add to conversation');
-        msgBtn.setAttribute('aria-label', 'Add to conversation');
+        msgBtn.setAttribute('data-tooltip', 'Add to Conversation');
+        msgBtn.setAttribute('title', 'Add to Conversation');
+        msgBtn.setAttribute('aria-label', 'Add to Conversation');
         msgBtn.innerHTML = messageIconSvg;
-        msgBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
+        msgBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof addSubConversationFromPoster === 'function') {
+                addSubConversationFromPoster({
+                    title: title,
+                    year: item.year,
+                    pageUrl: pageUrl || undefined,
+                    pageId: pageId || undefined,
+                    imageUrl: imgUrl || undefined
+                });
+            }
+        });
         overlay.appendChild(addBtn);
         overlay.appendChild(msgBtn);
         if (isInCollection) {
@@ -856,6 +1238,45 @@
         return card;
     }
 
+    /* Small candidate card for "Did you mean?": poster + label (uses .media-candidates-card CSS). */
+    function createCandidateCard(item, options) {
+        options = options || {};
+        var title = String((item.movie_title || item.title || '')).trim();
+        if (!title) return null;
+        var labelText = title;
+        if (item.year != null) labelText += ' (' + item.year + ')';
+        var imgUrl = (item.primary_image_url && item.primary_image_url.trim()) || (item.imageUrl && String(item.imageUrl).trim()) || '';
+        var href = (item.page_url && item.page_url.trim()) || (item.sourceUrl && String(item.sourceUrl).trim()) || '';
+        var isLink = !!href && options.link !== false;
+
+        var card = isLink ? document.createElement('a') : document.createElement('div');
+        card.className = 'media-candidates-card';
+        if (isLink) {
+            card.href = href;
+            card.target = '_blank';
+            card.rel = 'noopener';
+        }
+
+        if (imgUrl) {
+            var img = document.createElement('img');
+            img.src = imgUrl;
+            img.alt = title;
+            img.loading = 'lazy';
+            card.appendChild(img);
+        } else {
+            var ph = document.createElement('div');
+            ph.className = 'media-candidates-placeholder';
+            ph.textContent = title;
+            card.appendChild(ph);
+        }
+
+        var lbl = document.createElement('span');
+        lbl.className = 'media-candidates-card-label';
+        lbl.textContent = labelText;
+        card.appendChild(lbl);
+        return card;
+    }
+
     /* Attachment item (movie card) -> same shape as createHeroCard expects for reuse. */
     function attachmentItemToHeroShape(item) {
         var title = (item.title != null && String(item.title).trim()) || '';
@@ -866,6 +1287,209 @@
             primary_image_url: (item.imageUrl && String(item.imageUrl).trim()) || '',
             page_url: (item.sourceUrl && String(item.sourceUrl).trim()) || ''
         };
+    }
+
+    var arrowLeftSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    var arrowRightSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+
+    /**
+     * Reusable Poster Carousel Wheel (cover-flow style).
+     * @param {Array<{title: string, year?: number, imageUrl?: string, sourceUrl?: string}>} items - Poster items.
+     * @param {number} activeIndex - Current center index (0-based).
+     * @param {function(number)} onChangeIndex - Called when center changes (newIndex).
+     * @param {{ visibleWindow?: number }} options - visibleWindow = items to show each side of center (default 2).
+     * @returns {HTMLElement} Root container (class: poster-carousel-wheel).
+     */
+    function PosterCarouselWheel(items, activeIndex, onChangeIndex, options) {
+        options = options || {};
+        var visibleWindow = typeof options.visibleWindow === 'number' ? options.visibleWindow : 2;
+
+        var root = document.createElement('div');
+        root.className = 'poster-carousel-wheel';
+        var inner = document.createElement('div');
+        inner.className = 'poster-carousel-wheel-inner';
+        var track = document.createElement('div');
+        track.className = 'poster-carousel-wheel-track';
+
+        var currentIndex = Math.max(0, Math.min(activeIndex, items.length - 1));
+        if (items.length === 0) return root;
+
+        /** Read wheel scale/opacity tokens from CSS (rem/ratio-based; same for all wheel contexts). */
+        function readWheelTokens() {
+            var s = root.isConnected ? window.getComputedStyle(root) : (document.documentElement ? window.getComputedStyle(document.documentElement) : null);
+            if (!s) {
+                return { centerScale: 1, neighborScale: 0.82, farScale: 0.65, centerOpacity: 1, neighborOpacity: 0.88, farOpacity: 0.55 };
+            }
+            var parseNum = function (val, fallback) { var n = parseFloat(String(val).trim()); return isNaN(n) ? fallback : n; };
+            return {
+                centerScale: parseNum(s.getPropertyValue('--carousel-center-scale'), 1),
+                neighborScale: parseNum(s.getPropertyValue('--carousel-neighbor-scale'), 0.82),
+                farScale: parseNum(s.getPropertyValue('--carousel-far-scale'), 0.65),
+                centerOpacity: parseNum(s.getPropertyValue('--carousel-center-opacity'), 1),
+                neighborOpacity: parseNum(s.getPropertyValue('--carousel-neighbor-opacity'), 0.88),
+                farOpacity: parseNum(s.getPropertyValue('--carousel-far-opacity'), 0.55)
+            };
+        }
+
+        function getScaleAndOpacity(distance, tokens) {
+            var d = Math.abs(distance);
+            if (d === 0) return { scale: tokens.centerScale, opacity: tokens.centerOpacity };
+            if (d === 1) return { scale: tokens.neighborScale, opacity: tokens.neighborOpacity };
+            return { scale: tokens.farScale, opacity: tokens.farOpacity };
+        }
+
+        function applyTransforms() {
+            var tokens = readWheelTokens();
+            var n = itemEls.length;
+            for (var i = 0; i < n; i++) {
+                var distance = i - currentIndex;
+                var so = getScaleAndOpacity(distance, tokens);
+                var z = 10 + visibleWindow - Math.abs(distance);
+                itemEls[i].style.setProperty('--carousel-offset', String(distance));
+                itemEls[i].style.setProperty('--carousel-item-scale', String(so.scale));
+                itemEls[i].style.setProperty('--carousel-item-opacity', String(so.opacity));
+                itemEls[i].style.zIndex = z;
+                itemEls[i].setAttribute('aria-current', i === currentIndex ? 'true' : 'false');
+            }
+            leftBtn.disabled = currentIndex <= 0;
+            rightBtn.disabled = currentIndex >= n - 1;
+        }
+
+        var itemEls = [];
+        items.forEach(function (it, idx) {
+            var title = (it.title != null && String(it.title).trim()) || '';
+            if (!title) return;
+            var labelText = title;
+            if (typeof it.year === 'number') labelText += ' (' + it.year + ')';
+            var imgUrl = (it.imageUrl && String(it.imageUrl).trim()) || '';
+            var href = (it.sourceUrl && String(it.sourceUrl).trim()) || '';
+
+            var el = href ? document.createElement('a') : document.createElement('div');
+            el.className = 'poster-carousel-wheel-item';
+            el.setAttribute('data-index', idx);
+            if (href) {
+                el.href = href;
+                el.target = '_blank';
+                el.rel = 'noopener';
+            }
+            var posterWrap = document.createElement('div');
+            posterWrap.className = 'poster-carousel-wheel-poster-wrap';
+            if (imgUrl) {
+                var img = document.createElement('img');
+                img.src = imgUrl;
+                img.alt = title;
+                img.loading = 'lazy';
+                posterWrap.appendChild(img);
+            } else {
+                var ph = document.createElement('div');
+                ph.className = 'poster-carousel-wheel-item-placeholder';
+                ph.textContent = title;
+                posterWrap.appendChild(ph);
+            }
+            var pageUrl = href || '';
+            var pageId = (it.pageId != null && String(it.pageId).trim()) ? String(it.pageId).trim() : undefined;
+            var isInCollection = typeof isPosterInActiveCollection === 'function' && isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
+            var overlay = document.createElement('div');
+            overlay.className = 'poster-carousel-wheel-overlay';
+            var addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'poster-carousel-wheel-action' + (isInCollection ? ' is-added' : '');
+            addBtn.setAttribute('data-tooltip', isInCollection ? 'Already Added' : 'Add to Collection');
+            addBtn.setAttribute('title', isInCollection ? 'Already Added' : 'Add to Collection');
+            addBtn.setAttribute('aria-label', isInCollection ? 'Already Added' : 'Add to Collection');
+            if (isInCollection) addBtn.disabled = true;
+            addBtn.innerHTML = addIconSvg;
+            (function (itemTitle, itemImgUrl, itemPageUrl, itemPageId, itemInCollection) {
+                addBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (itemInCollection) return;
+                    if (typeof addToCollection === 'function') addToCollection(itemTitle, itemImgUrl, itemPageUrl || undefined, itemPageId);
+                });
+            })(title, imgUrl, pageUrl, pageId, isInCollection);
+            var msgBtn = document.createElement('button');
+            msgBtn.type = 'button';
+            msgBtn.className = 'poster-carousel-wheel-action';
+            msgBtn.setAttribute('data-tooltip', 'Add to Conversation');
+            msgBtn.setAttribute('title', 'Add to Conversation');
+            msgBtn.setAttribute('aria-label', 'Add to Conversation');
+            msgBtn.innerHTML = messageIconSvg;
+            (function (itemTitle, itemYear, itemPageUrl, itemPageId, itemImgUrl) {
+                msgBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof addSubConversationFromPoster === 'function') {
+                        addSubConversationFromPoster({
+                            title: itemTitle,
+                            year: itemYear,
+                            pageUrl: itemPageUrl || undefined,
+                            pageId: itemPageId || undefined,
+                            imageUrl: itemImgUrl || undefined
+                        });
+                    }
+                });
+            })(title, typeof it.year === 'number' ? it.year : undefined, pageUrl, pageId, imgUrl);
+            overlay.appendChild(addBtn);
+            overlay.appendChild(msgBtn);
+            posterWrap.appendChild(overlay);
+            el.appendChild(posterWrap);
+            var lbl = document.createElement('span');
+            lbl.className = 'poster-carousel-wheel-item-label';
+            lbl.textContent = labelText;
+            el.appendChild(lbl);
+
+            el.addEventListener('click', function (e) {
+                var i = parseInt(el.getAttribute('data-index'), 10);
+                if (i !== currentIndex) {
+                    e.preventDefault();
+                    currentIndex = i;
+                    applyTransforms();
+                    if (typeof onChangeIndex === 'function') onChangeIndex(currentIndex);
+                }
+            });
+            track.appendChild(el);
+            itemEls.push(el);
+        });
+
+        var leftBtn = document.createElement('button');
+        leftBtn.type = 'button';
+        leftBtn.className = 'poster-carousel-wheel-arrow poster-carousel-wheel-arrow-left';
+        leftBtn.setAttribute('aria-label', 'Previous');
+        leftBtn.innerHTML = arrowLeftSvg;
+        leftBtn.addEventListener('click', function () {
+            if (currentIndex <= 0) return;
+            currentIndex--;
+            applyTransforms();
+            if (typeof onChangeIndex === 'function') onChangeIndex(currentIndex);
+        });
+
+        var rightBtn = document.createElement('button');
+        rightBtn.type = 'button';
+        rightBtn.className = 'poster-carousel-wheel-arrow poster-carousel-wheel-arrow-right';
+        rightBtn.setAttribute('aria-label', 'Next');
+        rightBtn.innerHTML = arrowRightSvg;
+        rightBtn.addEventListener('click', function () {
+            if (currentIndex >= items.length - 1) return;
+            currentIndex++;
+            applyTransforms();
+            if (typeof onChangeIndex === 'function') onChangeIndex(currentIndex);
+        });
+
+        root.appendChild(leftBtn);
+        root.appendChild(rightBtn);
+        inner.appendChild(track);
+        root.appendChild(inner);
+
+        applyTransforms();
+        requestAnimationFrame(function () {
+            if (root.isConnected) {
+                applyTransforms();
+                requestAnimationFrame(function () {
+                    root.classList.add('poster-carousel-wheel--animated');
+                });
+            }
+        });
+        return root;
     }
 
     /* Scene item: imageUrl, caption?, sourceUrl? */
@@ -920,15 +1544,31 @@
             heading.className = 'attachments-section-title';
             heading.textContent = title;
             sectionEl.appendChild(heading);
-            var layout = document.createElement('div');
-            layout.className = 'media-strip-layout';
 
-            if (type === 'scenes') {
+            if (type === 'did_you_mean' || type === 'movie_list') {
+                var carouselItems = items.map(function (it) {
+                    return {
+                        title: (it.title != null && String(it.title).trim()) || '',
+                        year: typeof it.year === 'number' ? it.year : undefined,
+                        imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
+                        sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || ''
+                    };
+                }).filter(function (it) { return it.title; });
+                if (carouselItems.length > 0) {
+                    var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
+                    sectionEl.appendChild(carousel);
+                }
+            } else if (type === 'scenes') {
+                var layout = document.createElement('div');
+                layout.className = 'media-strip-layout';
                 items.forEach(function (it) {
                     var card = createSceneCard(it);
                     if (card) layout.appendChild(card);
                 });
+                sectionEl.appendChild(layout);
             } else {
+                var layout = document.createElement('div');
+                layout.className = 'media-strip-layout';
                 items.forEach(function (it) {
                     var heroShape = attachmentItemToHeroShape(it);
                     if (heroShape) {
@@ -936,8 +1576,8 @@
                         if (card) layout.appendChild(card);
                     }
                 });
+                sectionEl.appendChild(layout);
             }
-            sectionEl.appendChild(layout);
             wrap.appendChild(sectionEl);
         });
         if (wrap.children.length === 0) return null;
@@ -969,10 +1609,18 @@
         return wrap;
     }
 
+    /**
+     * Renders the active thread's messages and attachments. Used by both main conversation
+     * and SubConversationView: thread is determined by getActiveThread() (main or sub).
+     * Same message component, attachment sections (primary_movie, movie_list, did_you_mean,
+     * scenes), Add to Collection / Already Added use isPosterInActiveCollection and
+     * addToCollection (getActiveConversation() for scope); behavior is identical on both screens.
+     */
     function renderMessages() {
         if (!messageList) return;
         messageList.innerHTML = '';
-        var messages = getActiveConversation() ? getActiveConversation().messages : [];
+        var thread = getActiveThread();
+        var messages = thread.messages || [];
         chatColumn.classList.toggle('empty', messages.length === 0);
         messages.forEach(function (msg, i) {
             try {
@@ -1048,11 +1696,16 @@
             }
         });
         if (chatColumn) {
-            var scrollToBottom = function () {
-                chatColumn.scrollTo({ top: chatColumn.scrollHeight, behavior: 'smooth' });
-            };
-            scrollToBottom();
-            requestAnimationFrame(scrollToBottom);
+            if (restoreScrollTop != null) {
+                chatColumn.scrollTop = restoreScrollTop;
+                restoreScrollTop = null;
+            } else {
+                var scrollToBottom = function () {
+                    chatColumn.scrollTo({ top: chatColumn.scrollHeight, behavior: 'smooth' });
+                };
+                scrollToBottom();
+                requestAnimationFrame(scrollToBottom);
+            }
         }
     }
 
@@ -1214,8 +1867,56 @@
         });
     })();
 
+    /**
+     * Migrate flat sub-conversations (parentId + movieAnchor) into nested subConversations[].
+     * Ensures state is consistent and restores activeThread (main + sub) after tab switch.
+     */
+    function migrateConversationsToNested() {
+        var i, j, conv, parent, sub;
+        for (i = 0; i < conversations.length; i++) {
+            conv = conversations[i];
+            if (!conv.subConversations) conv.subConversations = [];
+        }
+        var flatSubs = [];
+        for (i = 0; i < conversations.length; i++) {
+            conv = conversations[i];
+            if (conv.parentId && conv.movieAnchor) flatSubs.push(conv);
+        }
+        if (flatSubs.length === 0) return;
+        for (j = 0; j < flatSubs.length; j++) {
+            sub = flatSubs[j];
+            parent = null;
+            for (i = 0; i < conversations.length; i++) {
+                if (conversations[i].id === sub.parentId) { parent = conversations[i]; break; }
+            }
+            if (!parent) continue;
+            if (!parent.subConversations) parent.subConversations = [];
+            parent.subConversations.push({
+                id: sub.id,
+                title: sub.title || 'Re: ' + (sub.movieAnchor && sub.movieAnchor.title),
+                contextMovie: sub.movieAnchor || {},
+                messages: Array.isArray(sub.messages) ? sub.messages : []
+            });
+        }
+        conversations = conversations.filter(function (c) { return !c.parentId; });
+        if (activeConversationId) {
+            for (j = 0; j < flatSubs.length; j++) {
+                if (flatSubs[j].id === activeConversationId) {
+                    activeSubConversationId = activeConversationId;
+                    activeConversationId = flatSubs[j].parentId;
+                    break;
+                }
+            }
+        }
+    }
+
+    migrateConversationsToNested();
     loadProjects();
     updateHeaderRealAgentIndicator();
     if (conversations.length === 0) addConversation();
-    else updateRightPanelScope();
+    else {
+        updateConversationList();
+        updateHeaderForView();
+        updateRightPanelScope();
+    }
 })();

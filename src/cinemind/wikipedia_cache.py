@@ -21,6 +21,7 @@ CACHE_TTL_SEARCH = int(os.getenv("CINEMIND_WIKI_CACHE_TTL_SEARCH", "3600"))  # 1
 CACHE_TTL_CATEGORIES = int(os.getenv("CINEMIND_WIKI_CACHE_TTL_CATEGORIES", "3600"))  # 1h
 CACHE_TTL_PAGEIMAGE = int(os.getenv("CINEMIND_WIKI_CACHE_TTL_PAGEIMAGE", "86400"))  # 24h
 CACHE_TTL_ENRICH = int(os.getenv("CINEMIND_WIKI_CACHE_TTL_ENRICH", "1800"))  # 30m
+CACHE_TTL_TMDB_POSTER = int(os.getenv("CINEMIND_WIKI_CACHE_TTL_TMDB_POSTER", "86400"))  # 24h
 CACHE_MAX_ENTRIES = int(os.getenv("CINEMIND_WIKI_CACHE_MAX_ENTRIES", "500"))
 
 
@@ -44,6 +45,14 @@ def _normalize_categories_key(titles: list[str]) -> str:
         return ""
     normalized = sorted(_normalize_page_title_key(t) for t in titles if t)
     return "|".join(normalized)
+
+
+def _normalize_tmdb_poster_key(title: str, year: Optional[int]) -> str:
+    """Normalize (title, year) for TMDB poster cache key. Consistent with enrich key style."""
+    t = (title or "").strip().lower()
+    t = " ".join(t.split())
+    y = (str(year) if year is not None else "")
+    return f"{t}|{y}"
 
 
 class TTLCache:
@@ -109,12 +118,14 @@ class WikipediaCache:
         ttl_search: int = CACHE_TTL_SEARCH,
         ttl_categories: int = CACHE_TTL_CATEGORIES,
         ttl_pageimage: int = CACHE_TTL_PAGEIMAGE,
+        ttl_tmdb_poster: int = CACHE_TTL_TMDB_POSTER,
         max_entries: int = CACHE_MAX_ENTRIES,
     ):
         self._cache = TTLCache(max_entries=max_entries)
         self._ttl_search = ttl_search
         self._ttl_categories = ttl_categories
         self._ttl_pageimage = ttl_pageimage
+        self._ttl_tmdb_poster = ttl_tmdb_poster
 
     def get_search(self, query: str) -> Optional[list]:
         """Get cached search results. Returns None if miss or expired."""
@@ -157,6 +168,25 @@ class WikipediaCache:
         key = "img:" + _normalize_page_title_key(page_title)
         self._cache.set(key, url if url else self._NO_IMAGE, self._ttl_pageimage)
 
+    # TMDB poster URL cache (title + year) — reduces repeated TMDB calls on cache hits
+    _NO_POSTER = "__NO_POSTER__"
+
+    def get_tmdb_poster(self, title: str, year: Optional[int]) -> tuple[Optional[str], bool]:
+        """
+        Get cached TMDB poster URL for (title, year).
+        Returns (url_or_none, hit). hit=True and url_or_none=None means we cached no-poster.
+        """
+        key = "tmdb_poster:" + _normalize_tmdb_poster_key(title, year)
+        val = self._cache.get(key)
+        if val is None:
+            return (None, False)
+        return (None if val == self._NO_POSTER else val, True)
+
+    def set_tmdb_poster(self, title: str, year: Optional[int], url: Optional[str]) -> None:
+        """Cache TMDB poster URL (or no-poster sentinel) for (title, year)."""
+        key = "tmdb_poster:" + _normalize_tmdb_poster_key(title, year)
+        self._cache.set(key, url if url else self._NO_POSTER, self._ttl_tmdb_poster)
+
     def get_enrich(self, query_key: str) -> Optional[Any]:
         """Get cached full enrich result. Returns None if miss/expired."""
         key = "enrich:" + query_key
@@ -194,13 +224,15 @@ TTLs (seconds):
   - Search:       3600 (1h)   — search results change slowly
   - Categories:   3600 (1h)   — category metadata is stable
   - Page images:  86400 (24h) — poster images rarely change
-  - Enrich result: 1800 (30m) — full enrichment by query
+  - Enrich result: 1800 (30m) — base enrichment by query (Wikipedia resolution)
+  - TMDB poster:  86400 (24h) — poster URLs by (title, year) to reduce TMDB calls on cache hits
 
 Override via env:
   CINEMIND_WIKI_CACHE_TTL_SEARCH
   CINEMIND_WIKI_CACHE_TTL_CATEGORIES
   CINEMIND_WIKI_CACHE_TTL_PAGEIMAGE
   CINEMIND_WIKI_CACHE_TTL_ENRICH
+  CINEMIND_WIKI_CACHE_TTL_TMDB_POSTER
   CINEMIND_WIKI_CACHE_MAX_ENTRIES (default 500)
 
 Cache key normalization:

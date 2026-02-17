@@ -44,6 +44,7 @@ from tests.playground_projects_store import (
     create as projects_create,
     seed_if_needed as projects_seed_if_needed,
     add_assets as projects_add_assets,
+    remove_asset as projects_remove_asset,
 )
 
 # Create FastAPI app
@@ -199,6 +200,17 @@ async def post_project_assets(project_id: str, body: ProjectAssetsBody):
     payloads = [a if isinstance(a, dict) else {} for a in body.assets]
     added = projects_add_assets(project_id, payloads)
     return {"added": added}
+
+
+@app.delete("/api/projects/{project_id}/assets/{asset_index}")
+async def delete_project_asset(project_id: str, asset_index: int):
+    """Remove one asset from a project by index (0-based)."""
+    if asset_index < 0:
+        raise HTTPException(status_code=400, detail="asset_index must be >= 0")
+    removed = projects_remove_asset(project_id, asset_index)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Project or asset not found")
+    return {"removed": True}
 
 
 # Mount static files after API routes so /query and /health are matched first (avoid 405 on POST /query)

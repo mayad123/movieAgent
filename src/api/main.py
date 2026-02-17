@@ -129,6 +129,15 @@ class HealthResponse(BaseModel):
     agent_mode: Optional[str] = None  # Effective mode (PLAYGROUND | REAL_AGENT)
 
 
+class DiagnosticResponse(BaseModel):
+    """Backend config and TMDB diagnostic; no secrets."""
+    status: str
+    config_loaded: bool
+    tmdb_enabled: bool
+    tmdb_token_present: bool
+    tmdb_config_reachable: Optional[bool] = None  # None = not checked
+
+
 async def _run_real_agent_with_fallback(user_query: str, request_type: Optional[str], use_live_data: bool = True):
     """
     Run real agent with timeout. On timeout or exception: fall back to playground,
@@ -237,6 +246,44 @@ async def health():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail=f"Service unavailable: {e}")
+
+
+@app.get("/health/diagnostic", response_model=DiagnosticResponse)
+async def health_diagnostic():
+    """
+    Config and TMDB diagnostic. Confirms config loads and optionally that TMDB config endpoint is reachable.
+    TMDB enablement is backend config only (ENABLE_TMDB_SCENES + TMDB_READ_ACCESS_TOKEN in .env).
+    """
+    config_loaded = False
+    tmdb_enabled = False
+    tmdb_token_present = False
+    try:
+        from cinemind.config import is_tmdb_enabled, get_tmdb_access_token
+        config_loaded = True
+        tmdb_enabled = is_tmdb_enabled()
+        token = get_tmdb_access_token()
+        tmdb_token_present = bool((token or "").strip())
+    except Exception as e:
+        logger.debug("Diagnostic config load failed: %s", e)
+
+    tmdb_config_reachable: Optional[bool] = None
+    if tmdb_enabled and config_loaded and tmdb_token_present:
+        try:
+            from cinemind.config import get_tmdb_access_token as _get_token
+            from cinemind.tmdb_image_config import fetch_config
+            fetch_config(_get_token(), timeout=3.0)
+            tmdb_config_reachable = True
+        except Exception as e:
+            logger.debug("TMDB config fetch failed: %s", e)
+            tmdb_config_reachable = False
+
+    return {
+        "status": "healthy",
+        "config_loaded": config_loaded,
+        "tmdb_enabled": tmdb_enabled,
+        "tmdb_token_present": tmdb_token_present,
+        "tmdb_config_reachable": tmdb_config_reachable,
+    }
 
 
 @app.post("/search", response_model=MovieResponse)

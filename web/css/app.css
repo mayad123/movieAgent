@@ -13,6 +13,20 @@ body {
 }
 .hidden { display: none !important; }
 
+/* --- Sub-conversation screen: light gray tokens (single surface) --- */
+:root {
+    --sub-surface-bg: #e8e8ec;
+    --sub-surface-elevated: #e8e8ec;
+    --sub-surface-soft: #d8d8de;
+    --sub-text-primary: #0d0d0d;
+    --sub-text-secondary: #4b5563;
+    --sub-border: rgba(0, 0, 0, 0.1);
+    --sub-poster-width: clamp(3rem, 9vw, 5.5rem);
+    --sub-badge-ring: rgba(0, 0, 0, 0.12);
+    --sub-header-min-height: clamp(2.75rem, 8vh, 3.5rem);
+    --sub-content-padding: clamp(0.75rem, 2vw, 1rem);
+}
+
 /*
  * Layout: header, collapsible sidebar, single chat column, fixed composer.
  * Loading: "Retrieving..." row; empty state when no messages.
@@ -74,6 +88,12 @@ body {
     font-size: 12px;
     color: #9ca3af;
 }
+.conversation-group {
+    margin-bottom: 2px;
+}
+.conversation-group:last-child {
+    margin-bottom: 0;
+}
 .conversation-item {
     padding: 8px 14px;
     font-size: 13px;
@@ -85,8 +105,50 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.conversation-item-sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 6px 20px;
+    font-size: 12px;
+    color: #6b7280;
+    min-height: 0;
+}
+.conversation-item-sub .conversation-item-sub-thumb {
+    flex-shrink: 0;
+    width: 20px;
+    height: 30px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.conversation-item-sub .conversation-item-sub-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.conversation-item-sub .conversation-item-sub-thumb-icon {
+    color: #9ca3af;
+}
+.conversation-item-sub .conversation-item-sub-thumb-icon svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+}
+.conversation-item-sub .conversation-item-sub-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .conversation-item:hover { background: #eee; }
 .conversation-item.active { background: #e5e7eb; font-weight: 500; }
+.conversation-item-sub.active { color: #374151; }
 
 .sidebar-agent-toggle-wrap {
     padding: 0.75rem 0.875rem;
@@ -324,14 +386,28 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 14px;
+    justify-content: flex-start;
+    gap: 0;
+}
+.right-panel-collection-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    width: 100%;
 }
 .right-panel-collection-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 144px;
+    flex-shrink: 0;
+    position: relative;
+}
+.right-panel-collection-item-poster-wrap {
+    position: relative;
+    width: 112px;
     flex-shrink: 0;
 }
 .right-panel-collection-item img {
@@ -341,6 +417,38 @@ body {
     border-radius: 6px;
     display: block;
     background: #e5e7eb;
+}
+.right-panel-collection-item-remove {
+    position: absolute;
+    top: 0.375rem;
+    left: 0.375rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.2s ease;
+    z-index: 2;
+}
+.right-panel-collection-item:hover .right-panel-collection-item-remove {
+    opacity: 1;
+}
+.right-panel-collection-item-remove:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+.right-panel-collection-item-remove:focus {
+    outline: 2px solid var(--right-panel-accent);
+    outline-offset: 2px;
+}
+.right-panel-collection-item-remove svg {
+    display: block;
 }
 .right-panel-collection-placeholder {
     width: 112px;
@@ -679,6 +787,19 @@ body {
     min-height: 52px;
     flex-shrink: 0;
 }
+.header-main-view,
+.header-sub-view {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+.header-main-view.hidden,
+.header-sub-view.hidden {
+    display: none;
+}
 .header-title {
     font-size: 15px;
     font-weight: 600;
@@ -688,6 +809,50 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.header-back {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+.header-back:hover {
+    background: #f3f4f6;
+    color: #0d0d0d;
+}
+.header-breadcrumb {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0d0d0d;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.header-sub-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+.header-sub-action {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #374151;
+}
+.header-sub-action:hover {
+    background: #f3f4f6;
+    color: #0d0d0d;
 }
 .mode-badge {
     position: absolute;
@@ -718,17 +883,133 @@ body {
 }
 .header-actions button:hover { color: #0d0d0d; background: #f3f4f6; }
 
+/* --- Sub-conversation screen: one full-height light gray surface; poster below header --- */
+.main.sub-conversation-view {
+    background: var(--sub-surface-bg);
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .main-center {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+}
+.main.sub-conversation-view .header {
+    background: var(--sub-surface-bg);
+    border-bottom-color: var(--sub-border);
+    min-height: var(--sub-header-min-height);
+    padding-right: 0.5rem;
+}
+.main.sub-conversation-view .header-sub-actions {
+    margin-left: auto;
+}
+.main.sub-conversation-view .mode-badge {
+    display: none !important;
+}
+.main.sub-conversation-view .header-back {
+    color: var(--sub-text-secondary);
+}
+.main.sub-conversation-view .header-back:hover {
+    background: var(--sub-surface-soft);
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .header-breadcrumb {
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .header-sub-action {
+    border-color: var(--sub-border);
+    color: var(--sub-text-secondary);
+}
+.main.sub-conversation-view .header-sub-action:hover {
+    background: var(--sub-surface-soft);
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .chat-column {
+    background: transparent;
+    padding: 0.25rem 0.5rem 0 0.25rem;
+    padding-top: var(--sub-content-padding);
+}
+.main.sub-conversation-view .message.assistant .message-bubble {
+    background: #fff;
+    border-color: var(--sub-border);
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .message.user .message-bubble {
+    background: var(--sub-surface-soft);
+    color: var(--sub-text-primary);
+}
+.main.sub-conversation-view .message.assistant .message-avatar { background: #6b7280; color: #fff; }
+.main.sub-conversation-view .message.user .message-avatar { background: #4b5563; color: #fff; }
+.main.sub-conversation-view .empty-state { color: var(--sub-text-secondary); }
+.main.sub-conversation-view .empty-state h2 { color: var(--sub-text-primary); }
+.main.sub-conversation-view .composer-wrap {
+    background: var(--sub-surface-bg);
+    border-top-color: var(--sub-border);
+}
+.main.sub-conversation-view .composer-inner {
+    background: #fff;
+    border-color: var(--sub-border);
+}
+.main.sub-conversation-view .composer-inner:focus-within {
+    border-color: #9ca3af;
+    box-shadow: 0 0 0 1px #9ca3af;
+}
+.main.sub-conversation-view .composer-input { color: var(--sub-text-primary); }
+.main.sub-conversation-view .composer-input::placeholder { color: var(--sub-text-secondary); }
+
+/* Movie context: full poster as small rectangle, below header divider, in-flow, small left margin */
+.sub-conversation-badge {
+    width: var(--sub-poster-width);
+    aspect-ratio: 2 / 3;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    background: var(--sub-surface-soft);
+    border: 1px solid var(--sub-badge-ring);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 1rem 0;
+    flex-shrink: 0;
+}
+.sub-conversation-badge.hidden { display: none !important; }
+.sub-conversation-badge img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+.sub-conversation-badge .sub-conversation-badge-placeholder {
+    width: 100%;
+    height: 100%;
+    min-height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--sub-surface-soft);
+    color: var(--sub-text-secondary);
+    font-size: clamp(0.5rem, 2vw, 0.75rem);
+    text-align: center;
+    padding: 0.25rem;
+}
+
+@media (max-width: 480px) {
+    :root { --sub-poster-width: clamp(2.5rem, 20vw, 4rem); }
+}
+
 /* --- Chat column --- */
 .chat-column {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 40px 16px 0 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     scrollbar-width: thin;
     scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+    position: relative;
+    z-index: 0;
 }
 .chat-column::-webkit-scrollbar {
     width: 1px;
@@ -827,7 +1108,7 @@ body {
 .message-metadata.hidden { display: none; }
 
 /*
- * Poster sizes: hero 3× base, Did you mean 1.5× base.
+ * Poster sizes: hero 3× base, candidates 1.5× base, Did you mean 1.25× base.
  * Single source of truth: --poster-base-width (rem + clamp). No px in poster tokens.
  * Height is derived from width + --poster-aspect-ratio in poster selectors.
  *
@@ -843,9 +1124,10 @@ body {
     --poster-scale: var(--poster-scale-comfortable);
     /* Base poster width: single source of truth, responsive clamp in rem only */
     --poster-base-width: calc(clamp(2rem, 3.5rem, 4.5rem) * var(--poster-scale));
-    /* Hero = 3× base, candidate = 1.5× base */
+    /* Hero = 3× base, candidate = 1.5× base, Did you mean = 1.25× base (smaller, more room for text) */
     --hero-poster-width: calc(var(--poster-base-width) * 3);
     --candidate-poster-width: calc(var(--poster-base-width) * 1.5);
+    --did-you-mean-poster-width: calc(var(--poster-base-width) * 1.25);
     /* Poster corner radius: rem-based responsive */
     --poster-radius: clamp(0.25rem, 0.375rem, 0.5rem);
 }
@@ -890,9 +1172,9 @@ body {
     --media-candidates-scroll-padding-inline-end: 0.625rem;
     --media-candidates-label-font-size: 0.6875rem;
     --media-candidates-label-margin-bottom: 0.375rem;
-    --media-candidates-card-label-font-size: 0.625rem;
+    --media-candidates-card-label-font-size: 0.6875rem;
     --media-candidates-card-label-padding: 0.3125rem 0.25rem 0.375rem;
-    --media-candidates-card-label-max-width: 18ch;
+    --media-candidates-card-label-max-width: 24ch;
     --media-candidates-placeholder-font-size: 0.625rem;
     --media-candidates-placeholder-padding: 0.375rem;
 }
@@ -973,7 +1255,8 @@ body {
     transition: opacity 0.2s ease;
     pointer-events: none;
 }
-.media-strip-card:hover .media-strip-card-overlay {
+.media-strip-card:hover .media-strip-card-overlay,
+.media-strip-card:focus-within .media-strip-card-overlay {
     opacity: 1;
     pointer-events: auto;
 }
@@ -1179,6 +1462,234 @@ body {
     padding: var(--media-candidates-card-label-padding);
     text-align: center;
     color: #374151;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+    max-width: var(--media-candidates-card-label-max-width);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Did you mean: smaller posters so labels fit without being cut off */
+.attachments-section-did-you-mean .media-candidates-card {
+    flex: 0 0 var(--did-you-mean-poster-width);
+    width: var(--did-you-mean-poster-width);
+}
+.attachments-section-did-you-mean .media-candidates-card img {
+    width: var(--did-you-mean-poster-width);
+}
+.attachments-section-did-you-mean .media-candidates-placeholder {
+    width: var(--did-you-mean-poster-width);
+}
+
+/*
+ * Poster Carousel Wheel: sizing and layout tokens (rem, clamp, ratios only).
+ * Shared by "Did you mean?", movie_list attachments, and right-panel collection/project wheels.
+ * Base size comes from --poster-base-width; scale/opacity are unitless ratios.
+ */
+:root {
+    --carousel-panel-bg: rgba(0, 0, 0, 0.82);
+    --carousel-panel-radius: clamp(0.5rem, 0.75rem, 1rem);
+    --carousel-panel-padding-block: clamp(0.75rem, 1rem, 1.25rem);
+    --carousel-panel-padding-inline: clamp(0.75rem, 1rem, 1.25rem);
+    --carousel-track-height: clamp(14rem, 20rem, 28rem);
+    /* Wheel item size: 2× candidate size (3× poster base). */
+    --carousel-item-width: calc(var(--poster-base-width) * 3);
+    /* Spacing between item centers: rem-based, no px. */
+    --carousel-item-gap: clamp(0.5rem, 0.75rem, 1rem);
+    /* Translate step per position: item width + gap (rem). */
+    --carousel-step: calc(var(--carousel-item-width) + var(--carousel-item-gap));
+    /* Scale factors: center = 1, near = neighbor, far = 2+ from center (unitless ratios). */
+    --carousel-center-scale: 1;
+    --carousel-neighbor-scale: 0.82;
+    --carousel-far-scale: 0.65;
+    /* Opacity gradient for side posters (unitless 0–1). */
+    --carousel-center-opacity: 1;
+    --carousel-neighbor-opacity: 0.88;
+    --carousel-far-opacity: 0.55;
+    /* Smooth snap: duration + easing (no transition on first paint; JS adds --animated class). */
+    --carousel-transition-duration: 0.32s;
+    --carousel-transition-easing: cubic-bezier(0.33, 1, 0.68, 1);
+    --carousel-arrow-size: clamp(2rem, 2.5rem, 3rem);
+    --carousel-arrow-color: rgba(255, 255, 255, 0.9);
+    --carousel-arrow-hover: #fff;
+}
+
+.poster-carousel-wheel {
+    width: 100%;
+    background: var(--carousel-panel-bg);
+    border-radius: var(--carousel-panel-radius);
+    padding: var(--carousel-panel-padding-block) var(--carousel-panel-padding-inline);
+    margin-bottom: var(--media-strip-margin-bottom);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.4), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
+    isolation: isolate;
+    z-index: 0;
+}
+
+.poster-carousel-wheel-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--carousel-track-height);
+    position: relative;
+    overflow: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.poster-carousel-wheel-inner::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.poster-carousel-wheel-track {
+    position: relative;
+    width: 100%;
+    height: var(--carousel-track-height);
+}
+
+.poster-carousel-wheel-item {
+    --carousel-offset: 0;
+    --carousel-item-scale: 1;
+    --carousel-item-opacity: 1;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--carousel-item-width);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translate(-50%, -50%) translateX(calc(var(--carousel-step) * var(--carousel-offset))) scale(var(--carousel-item-scale));
+    opacity: var(--carousel-item-opacity);
+    transition: none;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    border-radius: var(--poster-radius);
+    overflow: hidden;
+}
+/* Smooth animation only after first paint; snap to center on arrow or item click. */
+.poster-carousel-wheel--animated .poster-carousel-wheel-item {
+    transition: transform var(--carousel-transition-duration) var(--carousel-transition-easing),
+                opacity var(--carousel-transition-duration) var(--carousel-transition-easing),
+                z-index 0s linear;
+}
+.poster-carousel-wheel-item:hover {
+    box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35), 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+.poster-carousel-wheel-poster-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: inherit;
+}
+.poster-carousel-wheel-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: var(--media-strip-overlay-padding-block) var(--media-strip-overlay-padding-inline);
+    display: flex;
+    align-items: center;
+    gap: var(--media-strip-overlay-gap);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    overflow: visible;
+}
+.poster-carousel-wheel-item:hover .poster-carousel-wheel-overlay,
+.poster-carousel-wheel-item:focus-within .poster-carousel-wheel-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+.poster-carousel-wheel-action {
+    position: relative;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.42);
+    color: rgba(255, 255, 255, 0.95);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+.poster-carousel-wheel-action:hover {
+    background: rgba(0, 0, 0, 0.58);
+    color: #fff;
+}
+.poster-carousel-wheel-action::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + var(--media-strip-tooltip-offset));
+    left: 50%;
+    transform: translateX(-50%);
+    padding: var(--media-strip-tooltip-padding-block) var(--media-strip-tooltip-padding-inline);
+    font-size: var(--media-strip-tooltip-font-size);
+    font-weight: 500;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.78);
+    border-radius: var(--media-strip-tooltip-radius);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 10;
+}
+.poster-carousel-wheel-action:hover::after {
+    opacity: 1;
+}
+/* Carousel: show tooltip below the icon so it stays inside the poster and isn't cut off. */
+.poster-carousel-wheel-overlay .poster-carousel-wheel-action::after {
+    bottom: auto;
+    top: calc(100% + var(--media-strip-tooltip-offset));
+}
+.poster-carousel-wheel-action svg {
+    flex-shrink: 0;
+    display: block;
+    width: 14px;
+    height: 14px;
+}
+.poster-carousel-wheel-action.is-added {
+    opacity: 0.9;
+    background: rgba(0, 0, 0, 0.5);
+}
+.poster-carousel-wheel-action:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.poster-carousel-wheel-item img {
+    width: 100%;
+    aspect-ratio: var(--poster-aspect-ratio);
+    object-fit: cover;
+    display: block;
+}
+.poster-carousel-wheel-item-placeholder {
+    width: 100%;
+    aspect-ratio: var(--poster-aspect-ratio);
+    background: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    padding: 0.375rem;
+}
+.poster-carousel-wheel-item-label {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.2rem 0.3rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1186,10 +1697,85 @@ body {
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
-    word-break: break-word;
-    max-width: var(--media-candidates-card-label-max-width);
-    margin-left: auto;
-    margin-right: auto;
+}
+
+.poster-carousel-wheel-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: var(--carousel-arrow-size);
+    height: var(--carousel-arrow-size);
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--carousel-arrow-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.2s, color 0.2s;
+}
+.poster-carousel-wheel-arrow:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: var(--carousel-arrow-hover);
+}
+.poster-carousel-wheel-arrow:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.poster-carousel-wheel-arrow-left { left: var(--carousel-panel-padding-inline); }
+.poster-carousel-wheel-arrow-right { right: var(--carousel-panel-padding-inline); }
+.poster-carousel-wheel-arrow svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* Right-panel poster wheel: same carousel component, panel-friendly sizing. */
+.right-panel-carousel-wrap {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.right-panel-carousel-wrap .poster-carousel-wheel--panel {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+.right-panel-carousel-wrap .poster-carousel-wheel--panel .poster-carousel-wheel-inner {
+    flex: 1;
+    min-height: 0;
+}
+.right-panel-carousel-wrap .poster-carousel-wheel--panel .poster-carousel-wheel-track {
+    height: 100%;
+    min-height: var(--carousel-track-height);
+}
+/* Single caption below wheel; hide per-item labels in panel. */
+.right-panel-carousel-wrap .poster-carousel-wheel--panel .poster-carousel-wheel-item-label {
+    display: none;
+}
+.poster-carousel-wheel-caption.poster-carousel-wheel-caption--center-only {
+    font-size: clamp(0.6875rem, 0.8rem, 0.875rem);
+    color: var(--right-panel-accent);
+    text-align: center;
+    margin: 0;
+    padding: 0 0.5rem;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    max-width: 24ch;
 }
 
 /* --- Retrieving state --- */
@@ -1207,6 +1793,7 @@ body {
     bottom: 0;
     right: 0;
     left: 260px;
+    z-index: 100;
     background: #fff;
     border-top: 1px solid #e5e5e5;
     padding: 12px 16px;

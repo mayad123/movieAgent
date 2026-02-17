@@ -7,10 +7,17 @@ a rationale string for logging.
 
 Precedence (first match wins):
   1. Ambiguity (resolver or explicit) → did_you_mean
-  2. 2+ distinct movies AND list-like structure → movie_list
-  3. 1 distinct movie AND deep-dive/scene signals → scenes
+  2. 2+ distinct movies → movie_list (guardrail: never choose scenes for multi-movie)
+  3. 1 distinct movie AND deep-dive/scene signals AND sufficient confidence → scenes
   4. 1 distinct movie → primary_movie
   5. Else → none
+
+Guardrail (multi-movie):
+  - If 2+ distinct movie titles are detected → always choose movie_list, never scenes.
+  - This prevents false positives when a recommendation list mentions "iconic scenes"
+    or similar in a blurb; scene detection is applied only when exactly one distinct
+    title is present with sufficient confidence.
+  - did_you_mean is unchanged (ambiguity takes precedence over movie count).
 
 List-like: has_bullets | has_numbered_list | has_bold_titles | has_title_year_pattern.
 Deep-dive signals: presence of deep_dive_indicators or scene_indicators in parsed response.
@@ -77,6 +84,8 @@ def _is_list_like(parsed: ResponseParseResult) -> bool:
 
 # Threshold for "the film" / "the movie" references to trigger scenes (single-movie deep-dive).
 _SCENES_FILM_MOVIE_REF_THRESHOLD = 2
+# Minimum confidence for the single extracted movie to allow scenes intent (avoid weak extractions).
+_SCENES_MIN_SINGLE_MOVIE_CONFIDENCE = 0.6
 
 
 def _should_trigger_scenes(parsed: ResponseParseResult) -> bool:
@@ -137,26 +146,40 @@ def classify_attachment_intent(
             rationale=rationale,
         )
 
-    # --- Precedence 2: 2+ movies AND list-like → movie_list ---
-    if n >= 2 and list_like:
+    # --- Precedence 2: Guardrail — 2+ distinct movies → always movie_list (never scenes) ---
+    if n >= 2:
         titles = [m.title for m in movies]
-        rationale = f"response has {n} movies and list-like structure → movie_list"
-        logger.debug("Attachment intent: movie_list, titles=%s", titles)
+        rationale = f"guardrail: {n} distinct movies → movie_list (never scenes)"
+        logger.info(
+            "Attachment intent guardrail: multi-movie → movie_list (n=%d, list_like=%s, titles=%s)",
+            n,
+            list_like,
+            titles,
+        )
         return AttachmentIntentResult(
             intent=INTENT_MOVIE_LIST,
             titles=titles,
             rationale=rationale,
         )
 
-    # --- Precedence 3: 1 movie AND scene-like signals (phrase or structure threshold) → scenes ---
+    # --- Precedence 3: 1 movie AND scene-like signals AND sufficient confidence → scenes ---
     if n == 1 and trigger_scenes:
-        titles = [movies[0].title]
-        rationale = "1 movie and scene/deep-dive signals or structure → scenes"
-        logger.debug("Attachment intent: scenes, titles=%s", titles)
-        return AttachmentIntentResult(
-            intent=INTENT_SCENES,
-            titles=titles,
-            rationale=rationale,
+        single = movies[0]
+        if single.confidence >= _SCENES_MIN_SINGLE_MOVIE_CONFIDENCE:
+            titles = [single.title]
+            rationale = "1 movie and scene/deep-dive signals or structure → scenes"
+            logger.debug("Attachment intent: scenes, titles=%s", titles)
+            return AttachmentIntentResult(
+                intent=INTENT_SCENES,
+                titles=titles,
+                rationale=rationale,
+            )
+        # Single movie but low confidence: do not choose scenes (avoid false positives).
+        logger.info(
+            "Attachment intent guardrail: skipping scenes (single movie confidence %.2f < %.2f), title=%s",
+            single.confidence,
+            _SCENES_MIN_SINGLE_MOVIE_CONFIDENCE,
+            single.title,
         )
 
     # --- Precedence 4: 1 movie → primary_movie ---

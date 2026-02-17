@@ -29,11 +29,24 @@
         <main class="main">
             <div class="main-center">
                 <header class="header">
-                    <h1 class="header-title" id="conversationTitle">New conversation</h1>
+                    <div class="header-main-view" id="headerMainView">
+                        <h1 class="header-title" id="conversationTitle">New conversation</h1>
+                    </div>
+                    <div class="header-sub-view hidden" id="headerSubView" role="region" aria-label="Sub-conversation">
+                        <button type="button" class="header-back" id="headerBackBtn" aria-label="Back to conversation">← Back</button>
+                        <div class="header-breadcrumb" id="headerBreadcrumb"></div>
+                        <div class="header-sub-actions" id="headerSubActions">
+                            <button type="button" class="header-sub-action" id="headerSubRenameBtn" aria-label="Rename sub-conversation" title="Rename">Rename</button>
+                            <button type="button" class="header-sub-action" id="headerSubCloseBtn" aria-label="Close and hide from list" title="Close (hide from list)">Close</button>
+                        </div>
+                    </div>
                     <span class="mode-badge" id="modeBadge">Offline</span>
                 </header>
                 <div class="chat-column empty" id="chatColumn">
                     <div class="chat-inner">
+                        <div class="sub-conversation-badge hidden" id="subConversationMovieBadge" aria-hidden="true" role="img" aria-label="Movie context">
+                            <span class="sub-conversation-badge-placeholder">🎬</span>
+                        </div>
                         <div class="empty-state" id="emptyState">
                             <h2>CineMind</h2>
                             <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>

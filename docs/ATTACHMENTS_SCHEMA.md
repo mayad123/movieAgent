@@ -72,19 +72,23 @@ Example:
 
 ### Scene item (for `scenes`)
 
-| Field       | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `imageUrl` | string | **Yes**  | Scene/still image URL. |
-| `caption`  | string | No       | Short description. |
-| `sourceUrl`| string | No       | Link to source or clip. |
+| Field        | Type   | Required | Description |
+|-------------|--------|----------|-------------|
+| `imageUrl`  | string | **Yes**  | Scene/still image URL. |
+| `caption`   | string | No       | Short description. |
+| `sourceUrl` | string | No       | Link to source or clip. |
+| `source`    | string | No       | Attribution provider key (e.g. `"TMDB"`). |
+| `sourceLabel` | string | No     | Attribution label for UI (e.g. `"The Movie Database"`). |
 
 Example:
 
 ```json
 {
-  "imageUrl": "https://example.com/scene1.jpg",
-  "caption": "Opening shot",
-  "sourceUrl": "https://example.com/clip"
+  "imageUrl": "https://image.tmdb.org/t/p/w780/abc.jpg",
+  "caption": "Backdrop (42 votes)",
+  "sourceUrl": "https://www.themoviedb.org/movie/27205",
+  "source": "TMDB",
+  "sourceLabel": "The Movie Database"
 }
 ```
 

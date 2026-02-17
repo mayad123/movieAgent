@@ -87,21 +87,21 @@ def test_resolve_single_result_resolved(mock_search):
     assert out.resolved_entity is not None
     assert out.resolved_entity.page_title == "The Matrix (film)"
     assert out.resolved_entity.display_title == "The Matrix (film)"
-    assert out.candidates == []
+    # Resolved single result keeps one candidate for did_you_mean / poster policy
+    assert len(out.candidates) >= 1 and out.candidates[0]["pageTitle"] == "The Matrix (film)"
 
 
 @patch("cinemind.wikipedia_entity_resolver._search_wikipedia")
 def test_resolve_multiple_results_ambiguous(mock_search):
+    # Two film pages with same score (no year) so top two are close → ambiguous / did_you_mean
     mock_search.return_value = [
         {"title": "Inception (film)"},
-        {"title": "Inception (soundtrack)"},
-        {"title": "Inception (2010 film)"},
+        {"title": "Inception (movie)"},
     ]
     with patch("cinemind.wikipedia_entity_resolver._get_categories_batch") as mock_cat:
         mock_cat.return_value = {
             "Inception (film)": [{"title": "Category:Films"}],
-            "Inception (soundtrack)": [],
-            "Inception (2010 film)": [{"title": "Category:American films"}],
+            "Inception (movie)": [{"title": "Category:American films"}],
         }
         resolver = WikipediaEntityResolver()
         out = resolver.resolve("Inception")
