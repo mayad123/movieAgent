@@ -5,7 +5,7 @@
 ### View the Multi-Hop Test Result (from our test run)
 
 ```bash
-python scripts/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc224a8e98
+python scripts/observability/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc224a8e98
 ```
 
 ## Finding Request IDs
@@ -15,13 +15,13 @@ python scripts/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc22
 To see the most recent requests and find a request ID:
 
 ```bash
-python scripts/view_observability.py
+python scripts/observability/view_observability.py
 ```
 
 Or with a custom limit:
 
 ```bash
-python scripts/view_observability.py --limit 20
+python scripts/observability/view_observability.py --limit 20
 ```
 
 **Output shows:**
@@ -35,7 +35,7 @@ python scripts/view_observability.py --limit 20
 Once you have a request ID, view full details:
 
 ```bash
-python scripts/view_observability.py --request-id <request-id>
+python scripts/observability/view_observability.py --request-id <request-id>
 ```
 
 **Shows:**
@@ -58,7 +58,7 @@ python scripts/view_observability.py --request-id <request-id>
 
 ```bash
 # View the specific test result
-python scripts/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc224a8e98
+python scripts/observability/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc224a8e98
 ```
 
 **Expected Output:**
@@ -77,26 +77,26 @@ python scripts/view_observability.py --request-id 0abf162b-5e24-43a4-93a8-aabc22
 
 ```bash
 # Last 7 days
-python scripts/view_observability.py --stats
+python scripts/observability/view_observability.py --stats
 
 # Last 30 days
-python scripts/view_observability.py --stats --days 30
+python scripts/observability/view_observability.py --stats --days 30
 
 # Filter by request type
-python scripts/view_observability.py --stats --type info
+python scripts/observability/view_observability.py --stats --type info
 
 # Filter by outcome
-python scripts/view_observability.py --stats --outcome success
+python scripts/observability/view_observability.py --stats --outcome success
 ```
 
 ### View Tag Distribution
 
 ```bash
 # Distribution of request types and outcomes
-python scripts/view_observability.py --tags
+python scripts/observability/view_observability.py --tags
 
 # For specific time period
-python scripts/view_observability.py --tags --days 30
+python scripts/observability/view_observability.py --tags --days 30
 ```
 
 ### Custom Database Location
@@ -104,7 +104,7 @@ python scripts/view_observability.py --tags --days 30
 If your database is in a different location:
 
 ```bash
-python scripts/view_observability.py --db "path/to/cinemind.db" --request-id <id>
+python scripts/observability/view_observability.py --db "path/to/cinemind.db" --request-id <id>
 ```
 
 ## Understanding Classification Metadata

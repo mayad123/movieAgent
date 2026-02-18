@@ -74,6 +74,27 @@
                 </div>
             </div>
         </main>
+        <aside class="where-to-watch-drawer" id="whereToWatchDrawer" aria-label="Where to watch" aria-hidden="true">
+            <div class="where-to-watch-drawer-header">
+                <h2 class="where-to-watch-drawer-title" id="whereToWatchDrawerTitle">Where to watch</h2>
+                <button type="button" class="where-to-watch-drawer-close" id="whereToWatchDrawerClose" aria-label="Close">×</button>
+            </div>
+            <div class="where-to-watch-drawer-content" id="whereToWatchDrawerContent">
+                <div class="where-to-watch-drawer-loading hidden" id="whereToWatchDrawerLoading">
+                    <div class="where-to-watch-skeleton where-to-watch-skeleton--line"></div>
+                    <div class="where-to-watch-skeleton where-to-watch-skeleton--line"></div>
+                    <div class="where-to-watch-skeleton where-to-watch-skeleton--line"></div>
+                    <div class="where-to-watch-skeleton where-to-watch-skeleton--line short"></div>
+                </div>
+                <div class="where-to-watch-drawer-results hidden" id="whereToWatchDrawerResults"></div>
+                <div class="where-to-watch-drawer-empty hidden" id="whereToWatchDrawerEmpty">
+                    <p class="where-to-watch-drawer-empty-text">No results for your region.</p>
+                </div>
+                <div class="where-to-watch-drawer-error hidden" id="whereToWatchDrawerError">
+                    <p class="where-to-watch-drawer-error-text" id="whereToWatchDrawerErrorText"></p>
+                </div>
+            </div>
+        </aside>
         <aside class="right-panel collapsed" id="rightPanel" aria-label="Right panel" tabindex="0">
             <div class="right-panel-header">
                 <div class="right-panel-header-row">

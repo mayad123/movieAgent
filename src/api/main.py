@@ -2,13 +2,11 @@
 REST API wrapper for CineMind agent.
 For operationalization and deployment.
 """
-import asyncio
 import logging
 import os
 from typing import Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 import uvicorn
 
 try:
@@ -21,11 +19,12 @@ try:
 
     from cinemind.agent import CineMind
     from cinemind.agent_mode import AgentMode, get_configured_mode, resolve_effective_mode
-    from cinemind.config import REAL_AGENT_TIMEOUT_SECONDS
+    from config import REAL_AGENT_TIMEOUT_SECONDS, is_watchmode_configured
     from cinemind.database import Database
     from cinemind.observability import Observability
-    from cinemind.playground import run_playground_query
     from cinemind.tagging import RequestTagger, OUTCOMES
+    from workflows import run_real_agent_with_fallback as run_real_agent_workflow, run_playground
+    from schemas import MovieQuery, MovieResponse, QueryRequest, HealthResponse, DiagnosticResponse
 except ImportError as e:
     raise ImportError(
         f"CineMind module not found. Make sure all dependencies are installed: {e}"
@@ -91,81 +90,6 @@ def get_observability() -> Observability:
     return _observability
 
 
-# Request/Response Models
-class MovieQuery(BaseModel):
-    query: str = Field(..., description="Movie-related question or search query")
-    use_live_data: bool = Field(True, description="Whether to perform real-time searches")
-    stream: bool = Field(False, description="Whether to stream the response")
-    request_type: Optional[str] = Field(None, description="Request type tag (info/recs/comparison/spoiler/release-date/fact-check)")
-    outcome: Optional[str] = Field(None, description="Outcome tag (success/unclear/hallucination/user-corrected)")
-    requested_agent_mode: Optional[str] = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT (backend may override)")
-
-
-class MovieResponse(BaseModel):
-    agent: str
-    version: str
-    query: str
-    response: str
-    sources: list
-    timestamp: str
-    live_data_used: bool
-    request_id: Optional[str] = None
-    token_usage: Optional[dict] = None
-    cost_usd: Optional[float] = None
-    request_type: Optional[str] = None
-    outcome: Optional[str] = None
-    agent_mode: Optional[str] = None  # PLAYGROUND | REAL_AGENT (which pipeline ran)
-    actualAgentMode: Optional[str] = None
-    requestedAgentMode: Optional[str] = None
-    modeFallback: Optional[bool] = None
-    toolsUsed: Optional[list] = None
-    fallback_reason: Optional[str] = None
-
-
-class HealthResponse(BaseModel):
-    status: str
-    agent: str
-    version: str
-    agent_mode: Optional[str] = None  # Effective mode (PLAYGROUND | REAL_AGENT)
-
-
-class DiagnosticResponse(BaseModel):
-    """Backend config and TMDB diagnostic; no secrets."""
-    status: str
-    config_loaded: bool
-    tmdb_enabled: bool
-    tmdb_token_present: bool
-    tmdb_config_reachable: Optional[bool] = None  # None = not checked
-
-
-async def _run_real_agent_with_fallback(user_query: str, request_type: Optional[str], use_live_data: bool = True):
-    """
-    Run real agent with timeout. On timeout or exception: fall back to playground,
-    return result with modeFallback=True and clear error messaging. No silent crash.
-    """
-    agent = get_agent()
-    try:
-        result = await asyncio.wait_for(
-            agent.search_and_analyze(
-                user_query,
-                use_live_data=use_live_data,
-                request_type=request_type,
-            ),
-            timeout=REAL_AGENT_TIMEOUT_SECONDS,
-        )
-        return result, None
-    except asyncio.TimeoutError:
-        logger.error(
-            "Real agent timed out after %.0fs (query: %s...). Falling back to PLAYGROUND.",
-            REAL_AGENT_TIMEOUT_SECONDS,
-            (user_query or "")[:80],
-        )
-        return None, "Request timed out; switched to Playground mode."
-    except Exception as e:
-        logger.exception("Real agent failed (query: %s...). Falling back to PLAYGROUND.", (user_query or "")[:80])
-        return None, str(e) or "Real agent error; switched to Playground mode."
-
-
 def _inject_mode_metadata(
     result: dict,
     actual_agent_mode: str,
@@ -203,13 +127,6 @@ def _effective_mode(requested: Optional[str] = None) -> str:
         except ValueError:
             pass
     return resolve_effective_mode(get_configured_mode()).value
-
-
-class QueryRequest(BaseModel):
-    """Request body for /query (UI contract: same as playground server)."""
-    user_query: str = Field(..., description="User message")
-    request_type: Optional[str] = Field(None, description="Optional request type")
-    requested_agent_mode: Optional[str] = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT")
 
 
 # API Endpoints
@@ -258,7 +175,7 @@ async def health_diagnostic():
     tmdb_enabled = False
     tmdb_token_present = False
     try:
-        from cinemind.config import is_tmdb_enabled, get_tmdb_access_token
+        from config import is_tmdb_enabled, get_tmdb_access_token
         config_loaded = True
         tmdb_enabled = is_tmdb_enabled()
         token = get_tmdb_access_token()
@@ -269,7 +186,7 @@ async def health_diagnostic():
     tmdb_config_reachable: Optional[bool] = None
     if tmdb_enabled and config_loaded and tmdb_token_present:
         try:
-            from cinemind.config import get_tmdb_access_token as _get_token
+            from config import get_tmdb_access_token as _get_token
             from cinemind.tmdb_image_config import fetch_config
             fetch_config(_get_token(), timeout=3.0)
             tmdb_config_reachable = True
@@ -286,6 +203,102 @@ async def health_diagnostic():
     }
 
 
+def _watchmode_500_missing_key():
+    """Structured 500 for Watchmode routes when API key is not configured."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "missing_key",
+            "message": "Where to Watch is not configured. Set WATCHMODE_API_KEY in the server environment (e.g. .env or secrets manager). Get an API key from https://watchmode.com.",
+        },
+    )
+
+
+def _watchmode_error_response(status_code: int, error: str, message: str):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=status_code, content={"error": error, "message": message})
+
+
+@app.get("/api/watch/where-to-watch")
+async def where_to_watch_by_tmdb(
+    tmdbId: Optional[str] = Query(None, alias="tmdbId", description="TMDB movie or TV id (optional if title provided)"),
+    mediaType: str = Query("movie", alias="mediaType", description="movie or tv"),
+    country: str = Query("US", description="Country code (e.g. US, GB)"),
+    title: Optional[str] = Query(None, description="Movie title (used when tmdbId missing; also display name)"),
+    year: Optional[str] = Query(None, description="Release year (optional, improves title lookup)"),
+):
+    """
+    Where to Watch: by TMDB id or by title. Returns availability by access type (subscription/free/rent/buy/tve).
+    Provide either tmdbId or title; when only title is provided, Watchmode autocomplete-search is used.
+    """
+    from fastapi.responses import JSONResponse
+    if not is_watchmode_configured():
+        logger.warning("Where-to-watch called but WATCHMODE_API_KEY is not set.")
+        return _watchmode_500_missing_key()
+    mt = (mediaType or "movie").strip().lower()
+    if mt not in ("movie", "tv"):
+        return _watchmode_error_response(400, "invalid_media_type", "mediaType must be movie or tv")
+    title_name = (title or "").strip() or None
+    year_val = None
+    if year and str(year).strip().isdigit():
+        try:
+            year_val = int(year)
+        except (TypeError, ValueError):
+            pass
+    use_tmdb = bool((tmdbId or "").strip())
+    if not use_tmdb and not title_name:
+        return _watchmode_error_response(400, "missing_params", "Provide tmdbId or title to find where to watch.")
+
+    from integrations.watchmode import get_watchmode_client
+    from integrations.where_to_watch_normalizer import normalize_where_to_watch_response
+
+    client = get_watchmode_client()
+    if not client:
+        return _watchmode_500_missing_key()
+    if use_tmdb:
+        err, data = await client.get_availability((tmdbId or "").strip(), mt, (country or "US").strip())
+    else:
+        err, data = await client.get_availability_by_title(title_name, year_val, mt, (country or "US").strip())
+    if err:
+        if "not found" in err.lower() or "title not found" in err.lower():
+            return _watchmode_error_response(404, "not_found", err)
+        if "rate limit" in err.lower():
+            return _watchmode_error_response(429, "rate_limit_exceeded", err)
+        return _watchmode_error_response(500, "service_error", err)
+    payload = normalize_where_to_watch_response(
+        data or {"movie": {}, "region": country or "US", "groups": []},
+        title_id=(tmdbId or "").strip() or None,
+        title_name=title_name,
+        year=year_val,
+        media_type=mt,
+    )
+    return JSONResponse(status_code=200, content=payload)
+
+
+@app.get("/api/where-to-watch")
+async def where_to_watch(
+    title: str = Query(..., description="Movie title"),
+    year: Optional[int] = Query(None),
+    pageUrl: Optional[str] = Query(None, alias="pageUrl"),
+    pageId: Optional[str] = Query(None, alias="pageId"),
+):
+    """
+    Where to Watch (legacy): title-based. Prefer GET /api/watch/where-to-watch?tmdbId=&mediaType=&country= for TMDB-based lookup.
+    """
+    if not is_watchmode_configured():
+        logger.warning("Where-to-watch called but WATCHMODE_API_KEY is not set.")
+        return _watchmode_500_missing_key()
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=501,
+        content={
+            "error": "not_implemented",
+            "message": "Use GET /api/watch/where-to-watch?tmdbId=<id>&mediaType=movie|tv&country=US for availability.",
+        },
+    )
+
+
 @app.post("/search", response_model=MovieResponse)
 async def search_movies(query: MovieQuery):
     """
@@ -300,16 +313,17 @@ async def search_movies(query: MovieQuery):
         logger.info("Executing request in mode: %s (query: %s...)", mode, query.query[:80])
 
         if mode == AgentMode.PLAYGROUND.value:
-            result = await run_playground_query(
+            result = await run_playground(
                 user_query=query.query,
                 request_type=query.request_type,
             )
         else:
-            result, fallback_reason = await _run_real_agent_with_fallback(
-                query.query, query.request_type, query.use_live_data
+            result, fallback_reason = await run_real_agent_workflow(
+                query.query, query.request_type, query.use_live_data,
+                REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
             )
             if fallback_reason is not None:
-                result = await run_playground_query(
+                result = await run_playground(
                     user_query=query.query,
                     request_type=query.request_type,
                 )
@@ -350,16 +364,17 @@ async def query(req: QueryRequest):
         logger.info("Executing /query in mode: %s (query: %s...)", mode, req.user_query[:80])
 
         if mode == AgentMode.PLAYGROUND.value:
-            result = await run_playground_query(
+            result = await run_playground(
                 user_query=req.user_query,
                 request_type=req.request_type,
             )
         else:
-            result, fallback_reason = await _run_real_agent_with_fallback(
-                req.user_query, req.request_type, use_live_data=True
+            result, fallback_reason = await run_real_agent_workflow(
+                req.user_query, req.request_type, True,
+                REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
             )
             if fallback_reason is not None:
-                result = await run_playground_query(
+                result = await run_playground(
                     user_query=req.user_query,
                     request_type=req.request_type,
                 )
@@ -403,11 +418,13 @@ async def search_movies_get(query: str, use_live_data: bool = True):
         logger.info("Executing request in mode: %s (query: %s...)", mode, query[:80])
 
         if mode == AgentMode.PLAYGROUND.value:
-            result = await run_playground_query(user_query=query, request_type=None)
+            result = await run_playground(user_query=query, request_type=None)
         else:
-            result, fallback_reason = await _run_real_agent_with_fallback(query, None, use_live_data)
+            result, fallback_reason = await run_real_agent_workflow(
+                query, None, use_live_data, REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
+            )
             if fallback_reason is not None:
-                result = await run_playground_query(user_query=query, request_type=None)
+                result = await run_playground(user_query=query, request_type=None)
                 result["agent_mode"] = AgentMode.PLAYGROUND.value
                 result["modeFallback"] = True
                 result["fallback_reason"] = fallback_reason
@@ -440,7 +457,7 @@ async def search_movies_stream(query: MovieQuery):
     async def generate():
         try:
             if mode == AgentMode.PLAYGROUND.value:
-                result = await run_playground_query(
+                result = await run_playground(
                     user_query=query.query,
                     request_type=query.request_type,
                 )
@@ -464,7 +481,7 @@ async def search_movies_stream(query: MovieQuery):
                     yield f"data: {json.dumps(meta)}\n\n"
                 except Exception as e:
                     logger.exception("Real agent stream failed; falling back to PLAYGROUND.")
-                    fallback = await run_playground_query(
+                    fallback = await run_playground(
                         user_query=query.query,
                         request_type=query.request_type,
                     )

@@ -75,6 +75,272 @@
     var sidebar = document.getElementById('sidebar');
     var sidebarToggle = document.getElementById('sidebarToggle');
     var rightPanel = document.getElementById('rightPanel');
+    var whereToWatchDrawerEl = document.getElementById('whereToWatchDrawer');
+    var whereToWatchDrawerTitle = document.getElementById('whereToWatchDrawerTitle');
+    var whereToWatchDrawerClose = document.getElementById('whereToWatchDrawerClose');
+    var whereToWatchDrawerContent = document.getElementById('whereToWatchDrawerContent');
+    var whereToWatchDrawerLoading = document.getElementById('whereToWatchDrawerLoading');
+    var whereToWatchDrawerResults = document.getElementById('whereToWatchDrawerResults');
+    var whereToWatchDrawerEmpty = document.getElementById('whereToWatchDrawerEmpty');
+    var whereToWatchDrawerError = document.getElementById('whereToWatchDrawerError');
+    var whereToWatchDrawerErrorText = document.getElementById('whereToWatchDrawerErrorText');
+
+    var whereToWatchDrawerState = {
+        open: false,
+        movie: null,
+        status: 'idle',
+        results: null,
+        error: null
+    };
+
+    /**
+     * Normalize Where to Watch error message: dedupe repeated sentences and use canonical phrasing.
+     */
+    function normalizeWhereToWatchErrorMessage(msg) {
+        if (!msg || typeof msg !== 'string') return msg || '';
+        var s = msg.trim();
+        if (!s) return s;
+        var canonical = 'Title not found. Try a different spelling or add the year.';
+        if (s.indexOf(canonical) !== -1) return canonical;
+        if (s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) return s.slice(0, s.length / 2).trim();
+        var parts = s.split(/\s*\.\s+/).filter(Boolean);
+        var seen = {};
+        var out = [];
+        for (var i = 0; i < parts.length; i++) {
+            var p = (parts[i] || '').trim();
+            if (p && !seen[p]) { seen[p] = true; out.push(p); }
+        }
+        return out.length ? out.join('. ') + (s.slice(-1) === '.' ? '' : '') : s;
+    }
+
+    /**
+     * Call GET /api/watch/where-to-watch and pass normalized result to callback.
+     * movie: { title, year?, pageUrl?, pageId?, tmdbId?, mediaType? }. Uses tmdbId when present; otherwise title+year (backend does Watchmode name lookup).
+     */
+    function fetchWhereToWatch(movie, callback) {
+        var tmdbId = (movie && (movie.tmdbId != null ? String(movie.tmdbId).trim() : (movie.pageId != null ? String(movie.pageId).trim() : ''))) || '';
+        if (!tmdbId && movie && movie.pageUrl && typeof movie.pageUrl === 'string') {
+            var m = /themoviedb\.org\/movie\/(\d+)/i.exec(movie.pageUrl);
+            if (m) tmdbId = m[1];
+        }
+        var title = (movie && movie.title && String(movie.title).trim()) || '';
+        if (!tmdbId && !title) {
+            callback(new Error('Movie title or ID is required to find where to watch.'));
+            return;
+        }
+        var mediaType = (movie.mediaType && String(movie.mediaType).trim()) || 'movie';
+        var country = (movie.country && String(movie.country).trim()) || 'US';
+        var params = new URLSearchParams({ mediaType: mediaType, country: country });
+        if (tmdbId) params.set('tmdbId', tmdbId);
+        if (title) params.set('title', title);
+        if (movie.year != null && movie.year !== '') params.set('year', String(movie.year));
+        var url = API_BASE + '/api/watch/where-to-watch?' + params.toString();
+        fetch(url).then(function (res) {
+            if (!res.ok) {
+                return res.json().then(function (body) {
+                    callback(new Error(body.message || body.error || res.statusText));
+                }, function () {
+                    callback(new Error(res.statusText || 'Request failed'));
+                });
+            }
+            return res.json().then(function (data) {
+                callback(null, data);
+            }, function () {
+                callback(new Error('Invalid response'));
+            });
+        }).catch(function (err) {
+            callback(err && err.message ? err : new Error(String(err)));
+        });
+    }
+
+    function closeWhereToWatchDrawer() {
+        whereToWatchDrawerState.open = false;
+        whereToWatchDrawerState.movie = null;
+        whereToWatchDrawerState.status = 'idle';
+        whereToWatchDrawerState.results = null;
+        whereToWatchDrawerState.error = null;
+        if (whereToWatchDrawerEl) {
+            whereToWatchDrawerEl.classList.remove('open');
+            whereToWatchDrawerEl.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function renderWhereToWatchDrawerContent() {
+        var s = whereToWatchDrawerState;
+        if (!whereToWatchDrawerLoading || !whereToWatchDrawerResults || !whereToWatchDrawerEmpty || !whereToWatchDrawerError || !whereToWatchDrawerErrorText) return;
+        whereToWatchDrawerLoading.classList.add('hidden');
+        whereToWatchDrawerResults.classList.add('hidden');
+        whereToWatchDrawerEmpty.classList.add('hidden');
+        whereToWatchDrawerError.classList.add('hidden');
+        if (s.status === 'loading') {
+            whereToWatchDrawerLoading.classList.remove('hidden');
+            return;
+        }
+        if (s.status === 'error') {
+            whereToWatchDrawerError.classList.remove('hidden');
+            whereToWatchDrawerErrorText.textContent = s.error || 'Something went wrong.';
+            return;
+        }
+        var hasOffers = s.results && Array.isArray(s.results.offers) && s.results.offers.length > 0;
+        var hasGroups = s.results && Array.isArray(s.results.groups) && s.results.groups.length > 0;
+        if (s.status === 'empty' || (s.status === 'success' && !hasOffers && !hasGroups)) {
+            whereToWatchDrawerEmpty.classList.remove('hidden');
+            return;
+        }
+        if (s.status === 'success' && s.results && (hasOffers || hasGroups)) {
+            whereToWatchDrawerResults.classList.remove('hidden');
+            whereToWatchDrawerResults.innerHTML = '';
+            if (hasOffers) {
+                var accessOrder = ['subscription', 'free', 'rent', 'buy', 'tve', 'unknown'];
+                var byType = {};
+                s.results.offers.forEach(function (offer) {
+                    var at = (offer.accessType || 'unknown').toLowerCase();
+                    if (!byType[at]) byType[at] = [];
+                    byType[at].push(offer);
+                });
+                accessOrder.forEach(function (at) {
+                    if (!byType[at] || byType[at].length === 0) return;
+                    var groupTitle = document.createElement('div');
+                    groupTitle.className = 'where-to-watch-group-title';
+                    groupTitle.textContent = at.charAt(0).toUpperCase() + at.slice(1);
+                    whereToWatchDrawerResults.appendChild(groupTitle);
+                    var list = document.createElement('ul');
+                    list.className = 'where-to-watch-offer-list';
+                    byType[at].forEach(function (offer) {
+                        var li = document.createElement('li');
+                        li.className = 'where-to-watch-offer';
+                        var info = document.createElement('div');
+                        info.className = 'where-to-watch-offer-info';
+                        var provider = document.createElement('div');
+                        provider.className = 'where-to-watch-offer-provider';
+                        provider.textContent = (offer.provider && offer.provider.name) || 'Provider';
+                        info.appendChild(provider);
+                        if (offer.quality && String(offer.quality).trim()) {
+                            var quality = document.createElement('span');
+                            quality.className = 'where-to-watch-offer-quality';
+                            quality.textContent = String(offer.quality).trim();
+                            info.appendChild(quality);
+                        }
+                        if (offer.price && typeof offer.price.amount === 'number') {
+                            var price = document.createElement('div');
+                            price.className = 'where-to-watch-offer-price';
+                            price.textContent = (offer.price.currency || 'USD') + ' ' + Number(offer.price.amount);
+                            info.appendChild(price);
+                        }
+                        li.appendChild(info);
+                        var url = (offer.webUrl && offer.webUrl.trim()) || (offer.iosUrl && offer.iosUrl.trim()) || (offer.androidUrl && offer.androidUrl.trim());
+                        if (url) {
+                            var openLink = document.createElement('a');
+                            openLink.className = 'where-to-watch-offer-open';
+                            openLink.href = url;
+                            openLink.target = '_blank';
+                            openLink.rel = 'noopener';
+                            openLink.textContent = 'Open';
+                            li.appendChild(openLink);
+                        }
+                        list.appendChild(li);
+                    });
+                    whereToWatchDrawerResults.appendChild(list);
+                });
+            } else {
+                s.results.groups.forEach(function (group) {
+                    var groupTitle = document.createElement('div');
+                    groupTitle.className = 'where-to-watch-group-title';
+                    groupTitle.textContent = group.label || group.accessType || 'Watch';
+                    whereToWatchDrawerResults.appendChild(groupTitle);
+                    var list = document.createElement('ul');
+                    list.className = 'where-to-watch-offer-list';
+                    (group.offers || []).forEach(function (offer) {
+                        var li = document.createElement('li');
+                        li.className = 'where-to-watch-offer';
+                        var info = document.createElement('div');
+                        info.className = 'where-to-watch-offer-info';
+                        var provider = document.createElement('div');
+                        provider.className = 'where-to-watch-offer-provider';
+                        provider.textContent = offer.providerName || (offer.provider && offer.provider.name) || 'Provider';
+                        info.appendChild(provider);
+                        if (offer.price && typeof offer.price.amount === 'number') {
+                            var price = document.createElement('div');
+                            price.className = 'where-to-watch-offer-price';
+                            price.textContent = (offer.price.currency || 'USD') + ' ' + Number(offer.price.amount);
+                            info.appendChild(price);
+                        }
+                        li.appendChild(info);
+                        var url = offer.webUrl || offer.deeplink;
+                        if (url) {
+                            var openLink = document.createElement('a');
+                            openLink.className = 'where-to-watch-offer-open';
+                            openLink.href = url;
+                            openLink.target = '_blank';
+                            openLink.rel = 'noopener';
+                            openLink.textContent = 'Open';
+                            li.appendChild(openLink);
+                        }
+                        list.appendChild(li);
+                    });
+                    whereToWatchDrawerResults.appendChild(list);
+                });
+            }
+        }
+    }
+
+    function openWhereToWatchDrawer(movie) {
+        if (!movie || !movie.title) return;
+        whereToWatchDrawerState.open = true;
+        whereToWatchDrawerState.movie = movie;
+        whereToWatchDrawerState.status = 'loading';
+        whereToWatchDrawerState.results = null;
+        whereToWatchDrawerState.error = null;
+        if (whereToWatchDrawerEl) {
+            whereToWatchDrawerEl.classList.add('open');
+            whereToWatchDrawerEl.setAttribute('aria-hidden', 'false');
+        }
+        if (whereToWatchDrawerTitle) {
+            whereToWatchDrawerTitle.textContent = 'Where to watch: ' + (movie.title + (movie.year != null ? ' (' + movie.year + ')' : ''));
+        }
+        renderWhereToWatchDrawerContent();
+        if (typeof fetchWhereToWatch === 'function') {
+            fetchWhereToWatch(movie, function (err, data) {
+                if (err) {
+                    whereToWatchDrawerState.status = 'error';
+                    whereToWatchDrawerState.error = normalizeWhereToWatchErrorMessage(err.message || String(err));
+                } else if (!data) {
+                    whereToWatchDrawerState.status = 'empty';
+                    whereToWatchDrawerState.results = null;
+                } else {
+                    var hasOffers = Array.isArray(data.offers) && data.offers.length > 0;
+                    var hasGroups = Array.isArray(data.groups) && data.groups.length > 0;
+                    if (hasOffers || hasGroups) {
+                        whereToWatchDrawerState.status = 'success';
+                        whereToWatchDrawerState.results = data;
+                    } else {
+                        whereToWatchDrawerState.status = 'empty';
+                        whereToWatchDrawerState.results = data;
+                    }
+                }
+                renderWhereToWatchDrawerContent();
+            });
+        } else {
+            setTimeout(function () {
+                whereToWatchDrawerState.status = 'empty';
+                renderWhereToWatchDrawerContent();
+            }, 600);
+        }
+    }
+
+    function onWhereToWatch(movie) {
+        openWhereToWatchDrawer(movie);
+    }
+
+    if (whereToWatchDrawerClose) {
+        whereToWatchDrawerClose.addEventListener('click', function () { closeWhereToWatchDrawer(); });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && whereToWatchDrawerState.open) {
+            closeWhereToWatchDrawer();
+        }
+    });
+
     var rightPanelToggle = document.getElementById('rightPanelToggle');
     var conversationList = document.getElementById('conversationList');
     var conversationTitle = document.getElementById('conversationTitle');
@@ -1134,6 +1400,7 @@
 
     var addIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
     var messageIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+    var whereToWatchIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 
     /* One hero-sized card: poster + overlay (add / add to conversation) + label. */
     function createHeroCard(item, options) {
@@ -1179,6 +1446,30 @@
             poster.classList.add('media-strip-placeholder');
             poster.innerHTML = '<span class="media-strip-placeholder-title">' + escapeHtml(title) + '</span><span class="media-strip-placeholder-caption">No image</span>';
         }
+
+        var topRightOverlay = document.createElement('div');
+        topRightOverlay.className = 'media-strip-card-overlay media-strip-card-overlay--top-right';
+        var whereToWatchBtn = document.createElement('button');
+        whereToWatchBtn.type = 'button';
+        whereToWatchBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
+        whereToWatchBtn.setAttribute('data-tooltip', 'Where to watch');
+        whereToWatchBtn.setAttribute('title', 'Where to watch');
+        whereToWatchBtn.setAttribute('aria-label', 'Where to watch');
+        whereToWatchBtn.innerHTML = whereToWatchIconSvg;
+        whereToWatchBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onWhereToWatch({
+                title: title,
+                year: item.year,
+                pageUrl: href || undefined,
+                pageId: pageIdFromUrl(href || '') || undefined,
+                tmdbId: item.tmdbId || item.tmdb_id || undefined,
+                mediaType: item.mediaType || item.media_type || undefined
+            });
+        });
+        topRightOverlay.appendChild(whereToWatchBtn);
+        poster.appendChild(topRightOverlay);
 
         var overlay = document.createElement('div');
         overlay.className = 'media-strip-card-overlay';
@@ -1285,7 +1576,9 @@
             movie_title: title,
             year: typeof item.year === 'number' ? item.year : undefined,
             primary_image_url: (item.imageUrl && String(item.imageUrl).trim()) || '',
-            page_url: (item.sourceUrl && String(item.sourceUrl).trim()) || ''
+            page_url: (item.sourceUrl && String(item.sourceUrl).trim()) || '',
+            tmdbId: item.tmdbId || item.tmdb_id || undefined,
+            mediaType: item.mediaType || item.media_type || undefined
         };
     }
 
@@ -1389,6 +1682,30 @@
             var pageUrl = href || '';
             var pageId = (it.pageId != null && String(it.pageId).trim()) ? String(it.pageId).trim() : undefined;
             var isInCollection = typeof isPosterInActiveCollection === 'function' && isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
+            var topRightOverlayCarousel = document.createElement('div');
+            topRightOverlayCarousel.className = 'poster-carousel-wheel-overlay poster-carousel-wheel-overlay--top-right';
+            var whereToWatchEl = document.createElement('button');
+            whereToWatchEl.type = 'button';
+            whereToWatchEl.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
+            whereToWatchEl.setAttribute('data-tooltip', 'Where to watch');
+            whereToWatchEl.setAttribute('title', 'Where to watch');
+            whereToWatchEl.setAttribute('aria-label', 'Where to watch');
+            whereToWatchEl.innerHTML = whereToWatchIconSvg;
+            whereToWatchEl.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                onWhereToWatch({
+                    title: title,
+                    year: typeof it.year === 'number' ? it.year : undefined,
+                    pageUrl: href || undefined,
+                    pageId: pageId || undefined,
+                    tmdbId: it.tmdbId || it.tmdb_id || undefined,
+                    mediaType: it.mediaType || it.media_type || undefined
+                });
+            });
+            topRightOverlayCarousel.appendChild(whereToWatchEl);
+            posterWrap.appendChild(topRightOverlayCarousel);
+
             var overlay = document.createElement('div');
             overlay.className = 'poster-carousel-wheel-overlay';
             var addBtn = document.createElement('button');
@@ -1545,28 +1862,23 @@
             heading.textContent = title;
             sectionEl.appendChild(heading);
 
-            if (type === 'did_you_mean' || type === 'movie_list') {
+            if (type === 'primary_movie') {
                 var carouselItems = items.map(function (it) {
                     return {
                         title: (it.title != null && String(it.title).trim()) || '',
                         year: typeof it.year === 'number' ? it.year : undefined,
                         imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
-                        sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || ''
+                        sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || '',
+                        tmdbId: it.tmdbId || it.tmdb_id || undefined,
+                        mediaType: it.mediaType || it.media_type || undefined,
+                        pageId: it.pageId || it.page_id || undefined
                     };
                 }).filter(function (it) { return it.title; });
                 if (carouselItems.length > 0) {
                     var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
                     sectionEl.appendChild(carousel);
                 }
-            } else if (type === 'scenes') {
-                var layout = document.createElement('div');
-                layout.className = 'media-strip-layout';
-                items.forEach(function (it) {
-                    var card = createSceneCard(it);
-                    if (card) layout.appendChild(card);
-                });
-                sectionEl.appendChild(layout);
-            } else {
+            } else if (type === 'did_you_mean' || type === 'movie_list') {
                 var layout = document.createElement('div');
                 layout.className = 'media-strip-layout';
                 items.forEach(function (it) {
@@ -1577,6 +1889,29 @@
                     }
                 });
                 sectionEl.appendChild(layout);
+            } else if (type === 'scenes') {
+                var layout = document.createElement('div');
+                layout.className = 'media-strip-layout';
+                items.forEach(function (it) {
+                    var card = createSceneCard(it);
+                    if (card) layout.appendChild(card);
+                });
+                sectionEl.appendChild(layout);
+            } else {
+                var carouselItemsOther = items.map(function (it) {
+                    var heroShape = attachmentItemToHeroShape(it);
+                    if (!heroShape) return null;
+                    return {
+                        title: heroShape.movie_title || '',
+                        year: heroShape.year,
+                        imageUrl: heroShape.primary_image_url || '',
+                        sourceUrl: heroShape.page_url || ''
+                    };
+                }).filter(function (it) { return it && it.title; });
+                if (carouselItemsOther.length > 0) {
+                    var carouselOther = PosterCarouselWheel(carouselItemsOther, 0, function () {}, { visibleWindow: 2 });
+                    sectionEl.appendChild(carouselOther);
+                }
             }
             wrap.appendChild(sectionEl);
         });

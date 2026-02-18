@@ -138,12 +138,11 @@ def _apply_tmdb_poster(
     tmdb_poster_cache: Optional[WikipediaCache] = None,
 ) -> dict[str, Any]:
     """
-    Attempt TMDB poster lookup and set media_strip["primary_image_url"] only when policy says fallback is needed.
-    Policy: favor Wikipedia when it is confidently a film AND has an image; otherwise fall back to TMDB.
+    Always run TMDB lookup when enabled; use TMDB in conjunction with Wikipedia, favoring TMDB when it has results.
 
     - Runs only when tmdb_enabled (config.is_tmdb_enabled()).
-    - If wiki_film_confidence >= threshold and media_strip already has primary_image_url → no-op (keep Wikipedia).
-    - Else: resolve_movie(title, year), build URL via tmdb_image_config.build_image_url; set primary_image_url when found.
+    - Calls resolve_movie(title, year) for every search; sets media_strip["tmdb_id"] when resolved (for Where to Watch).
+    - Poster: when TMDB returns a poster (resolved + poster_path or cache), use it (favor TMDB). Otherwise keep Wikipedia poster.
     Uses tmdb_poster_cache when provided to avoid repeated TMDB calls.
 
     Returns a small result dict: applied (bool), provider ("tmdb"|"wikipedia"|None) for debug.
@@ -153,13 +152,9 @@ def _apply_tmdb_poster(
     result: dict[str, Any] = {"applied": False, "provider": "wikipedia" if had_wikipedia else None, "tmdb_attempted": False}
 
     try:
-        from .config import is_tmdb_enabled, get_tmdb_access_token
+        from config import is_tmdb_enabled, get_tmdb_access_token
         if not is_tmdb_enabled():
             logger.info("tmdb_attempted=false reason=tmdb_not_enabled (backend config)")
-            return result
-        # Policy: keep Wikipedia when confident film page and it has a poster
-        if wiki_film_confidence >= FILM_CONFIDENCE_THRESHOLD and had_wikipedia:
-            logger.info("tmdb_attempted=false reason=policy_keep_wikipedia confidence=%.2f", wiki_film_confidence)
             return result
         token = get_tmdb_access_token()
         if not token:
@@ -167,9 +162,16 @@ def _apply_tmdb_poster(
             return result
 
         result["tmdb_attempted"] = True
-        logger.info("tmdb_attempted=true title=%r year=%s", (title or "")[:60], year)
+        logger.info("tmdb_attempted=true title=%r year=%s (TMDB used for all searches; favor TMDB when available)", (title or "")[:60], year)
 
-        url: Optional[str] = None
+        from .tmdb_resolver import resolve_movie
+        from .tmdb_image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
+        tr = resolve_movie(title, year=year, access_token=token)
+        # Always set tmdb_id when resolved so Where to Watch has an id
+        if tr.status == "resolved" and tr.movie_id is not None:
+            media_strip["tmdb_id"] = tr.movie_id
+
+        # Favor TMDB: when we have a TMDB poster (cache or from resolve), use it; else keep Wikipedia
         if tmdb_poster_cache is not None:
             cached_url, cache_hit = tmdb_poster_cache.get_tmdb_poster(title, year)
             if cache_hit:
@@ -179,9 +181,6 @@ def _apply_tmdb_poster(
                     result["provider"] = "tmdb"
                 return result
 
-        from .tmdb_resolver import resolve_movie
-        from .tmdb_image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
-        tr = resolve_movie(title, year=year, access_token=token)
         path = (tr.poster_path or "").strip()
         if path:
             cfg = get_config(token)
@@ -195,7 +194,6 @@ def _apply_tmdb_poster(
         else:
             if tmdb_poster_cache is not None:
                 tmdb_poster_cache.set_tmdb_poster(title, year, None)
-        if not result["applied"]:
             result["provider"] = "wikipedia" if had_wikipedia else None
     except Exception as e:
         logger.debug("_apply_tmdb_poster failed for title=%r: %s", (title or "")[:60], e)
@@ -214,8 +212,8 @@ def _apply_poster_source_policy(
     tmdb_poster_cache: Optional[WikipediaCache] = None,
 ) -> dict[str, Any]:
     """
-    Centralized poster-source policy: prefer Wikipedia when it is clearly the film and has an image;
-    otherwise use TMDB fallback. Does not force override; mutates media_strip only when policy chooses TMDB.
+    Centralized poster-source policy: use TMDB for all searches in conjunction with Wikipedia;
+    favor TMDB when it has a poster (otherwise keep Wikipedia). Always calls TMDB so tmdb_id is set for Where to Watch.
     When tmdb_poster_cache is provided, TMDB poster URLs are cached by (title, year) to reduce repeated calls.
     Does not log secrets.
 
@@ -240,17 +238,7 @@ def _apply_poster_source_policy(
         POSTER_DEBUG_OVERRIDE_SUCCEEDED: False,
     }
 
-    # Policy: favor Wikipedia when confidently film AND has image; else fall back to TMDB
-    if film_confidence >= FILM_CONFIDENCE_THRESHOLD and had_wikipedia:
-        logger.info("tmdb_attempted=false reason=policy_keep_wikipedia confidence=%.2f", film_confidence)
-        logger.debug(
-            "Poster source policy: using Wikipedia (confidence=%.2f, page=%r)",
-            film_confidence,
-            (wiki_title or "")[:50],
-        )
-        return debug
-
-    # Fallback: call _apply_tmdb_poster (only when policy says so; no forced override)
+    # Always call TMDB (for tmdb_id and poster); favor TMDB poster when available, else keep Wikipedia
     tmdb_result = _apply_tmdb_poster(
         media_strip,
         title,
@@ -614,7 +602,7 @@ def enrich(
 
 
 def _movie_card_item(card: dict[str, Any]) -> dict[str, Any]:
-    """Build stable movie-card item for attachments (title, year?, imageUrl?, sourceUrl?, id?)."""
+    """Build stable movie-card item for attachments (title, year?, imageUrl?, sourceUrl?, id?, tmdbId?)."""
     title = (card.get("movie_title") or card.get("displayTitle") or "").strip()
     item: dict[str, Any] = {"title": title or "Untitled"}
     if card.get("year") is not None:
@@ -625,6 +613,10 @@ def _movie_card_item(card: dict[str, Any]) -> dict[str, Any]:
         url = (card.get("page_url") or "").strip()
         item["sourceUrl"] = url
         item["id"] = url
+    if card.get("tmdb_id") is not None:
+        item["tmdbId"] = str(card["tmdb_id"])
+    elif (card.get("tmdbId") or "").strip():
+        item["tmdbId"] = (card.get("tmdbId") or "").strip()
     return item
 
 

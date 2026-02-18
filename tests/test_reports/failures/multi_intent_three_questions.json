@@ -77,10 +77,18 @@
     "corrected_text": null,
     "requires_reprompt": false
   },
+  "kaggle": {
+    "attempted": true,
+    "used": true,
+    "item_count_before_formatter": 1,
+    "item_count_after_formatter": 1,
+    "fallback_reason": null,
+    "warnings": []
+  },
   "failures": [
     "Prompt must contain 'director' but doesn't",
     "Prompt must contain 'cast' but doesn't"
   ],
-  "timing_ms": 0.9884834289550781,
-  "timestamp": "2025-12-30T12:26:01"
+  "timing_ms": 0.1239776611328125,
+  "timestamp": "2026-02-17T21:31:23"
 }

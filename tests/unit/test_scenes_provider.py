@@ -110,19 +110,19 @@ class TestScenesProviderTMDB:
 
 class TestGetScenesProvider:
     def test_fallback_when_tmdb_disabled(self):
-        with patch("cinemind.config.ENABLE_TMDB_SCENES", False):
-            with patch("cinemind.config.TMDB_READ_ACCESS_TOKEN", "token"):
+        with patch("config.ENABLE_TMDB_SCENES", False):
+            with patch("config.TMDB_READ_ACCESS_TOKEN", "token"):
                 p = get_scenes_provider()
         assert isinstance(p, ScenesProviderEmpty)
 
     def test_fallback_when_tmdb_token_empty(self):
-        with patch("cinemind.config.ENABLE_TMDB_SCENES", True):
-            with patch("cinemind.config.TMDB_READ_ACCESS_TOKEN", ""):
+        with patch("config.ENABLE_TMDB_SCENES", True):
+            with patch("config.TMDB_READ_ACCESS_TOKEN", ""):
                 p = get_scenes_provider()
         assert isinstance(p, ScenesProviderEmpty)
 
     def test_tmdb_provider_when_enabled_and_configured(self):
-        with patch("cinemind.config.ENABLE_TMDB_SCENES", True):
-            with patch("cinemind.config.TMDB_READ_ACCESS_TOKEN", "secret-token"):
+        with patch("config.ENABLE_TMDB_SCENES", True):
+            with patch("config.TMDB_READ_ACCESS_TOKEN", "secret-token"):
                 p = get_scenes_provider()
         assert isinstance(p, ScenesProviderTMDB)

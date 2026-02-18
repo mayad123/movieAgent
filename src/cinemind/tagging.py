@@ -144,7 +144,7 @@ class HybridClassifier:
         Returns structured JSON with type, entities, freshness_signal, confidence.
         """
         try:
-            from .config import OPENAI_MODEL
+            from config import OPENAI_MODEL
             
             classification_prompt = f"""Classify this movie-related query and extract information.
 

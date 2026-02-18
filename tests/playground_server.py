@@ -26,8 +26,9 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -163,6 +164,62 @@ async def execute_query(request: QueryRequest) -> Dict[str, Any]:
         )
 
 
+# --- Where to Watch (same contract as main API; requires WATCHMODE_API_KEY in .env) ---
+def _playground_watchmode_500():
+    return JSONResponse(status_code=500, content={"error": "missing_key", "message": "Where to Watch requires WATCHMODE_API_KEY in .env."})
+
+
+@app.get("/api/watch/where-to-watch")
+async def where_to_watch(
+    tmdbId: Optional[str] = Query(None, alias="tmdbId"),
+    mediaType: str = Query("movie", alias="mediaType"),
+    country: str = Query("US"),
+    title: Optional[str] = Query(None),
+    year: Optional[str] = Query(None),
+):
+    """Where to Watch: by tmdbId or by title. Same contract as main API; uses Watchmode."""
+    from config import is_watchmode_configured
+    if not is_watchmode_configured():
+        return _playground_watchmode_500()
+    from integrations.watchmode import get_watchmode_client
+    from integrations.where_to_watch_normalizer import normalize_where_to_watch_response
+
+    client = get_watchmode_client()
+    if not client:
+        return _playground_watchmode_500()
+    mt = (mediaType or "movie").strip().lower()
+    if mt not in ("movie", "tv"):
+        return JSONResponse(status_code=400, content={"error": "invalid_media_type", "message": "mediaType must be movie or tv"})
+    title_name = (title or "").strip() or None
+    year_val = None
+    if year and str(year).strip().isdigit():
+        try:
+            year_val = int(year)
+        except (TypeError, ValueError):
+            pass
+    use_tmdb = bool((tmdbId or "").strip())
+    if not use_tmdb and not title_name:
+        return JSONResponse(status_code=400, content={"error": "missing_params", "message": "Provide tmdbId or title."})
+    if use_tmdb:
+        err, data = await client.get_availability((tmdbId or "").strip(), mt, (country or "US").strip())
+    else:
+        err, data = await client.get_availability_by_title(title_name, year_val, mt, (country or "US").strip())
+    if err:
+        if "not found" in err.lower() or "title not found" in err.lower():
+            return JSONResponse(status_code=404, content={"error": "not_found", "message": err})
+        if "rate limit" in err.lower():
+            return JSONResponse(status_code=429, content={"error": "rate_limit_exceeded", "message": err})
+        return JSONResponse(status_code=500, content={"error": "service_error", "message": err})
+    payload = normalize_where_to_watch_response(
+        data or {"movie": {}, "region": country or "US", "groups": []},
+        title_id=(tmdbId or "").strip() or None,
+        title_name=title_name,
+        year=year_val,
+        media_type=mt,
+    )
+    return JSONResponse(status_code=200, content=payload)
+
+
 # --- Projects API (playground persistence; replace backend for auth/hosting) ---
 projects_seed_if_needed()
 
@@ -220,15 +277,18 @@ if web_dir.is_dir():
 
 def main():
     """Run the server using uvicorn."""
+    import os
     import uvicorn
-    
+
+    port = int(os.getenv("PORT", "8000"))
+
     print("=" * 60)
     print("CineMind Offline Playground Server")
     print("=" * 60)
-    print("Server: http://localhost:8000")
-    print("UI:     http://localhost:8000/  (index.html from web/)")
-    print("Health: http://localhost:8000/health")
-    print("Docs:   http://localhost:8000/docs")
+    print(f"Server: http://localhost:{port}")
+    print(f"UI:     http://localhost:{port}/  (index.html from web/)")
+    print(f"Health: http://localhost:{port}/health")
+    print(f"Docs:   http://localhost:{port}/docs")
     print("=" * 60)
     print("\nThis server is OFFLINE ONLY (always PLAYGROUND):")
     print("  - No OpenAI API calls (uses FakeLLM); logs will not appear in OpenAI dashboard")
@@ -240,11 +300,11 @@ def main():
     print("=" * 60)
     print()
     
-    # Run server
+    # Run server (use PORT env var if 8000 is already in use)
     uvicorn.run(
         "tests.playground_server:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=False  # Disable reload for stability
     )
 

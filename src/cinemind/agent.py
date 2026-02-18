@@ -21,7 +21,7 @@ try:
 except ImportError:
     AsyncOpenAI = None
 
-from .config import (
+from config import (
     SYSTEM_PROMPT,
     AGENT_NAME,
     AGENT_VERSION,
@@ -175,7 +175,7 @@ class CineMind:
         
         if self.cache and use_live_data:  # Only check cache if we would normally use live data
             try:
-                from .config import PROMPT_VERSION
+                from config import PROMPT_VERSION
                 
                 # Try cache lookup with minimal classification (rule-based only, no LLM)
                 # We need a quick classification to know what to look for in cache
@@ -280,7 +280,7 @@ class CineMind:
                     track_ctx = None
                 
                 # Get configuration versions
-                from .config import PROMPT_VERSION, AGENT_VERSION
+                from config import PROMPT_VERSION, AGENT_VERSION
                 
                 result = {
                     "agent": self.agent_name,
@@ -1177,7 +1177,7 @@ class CineMind:
                     tracker.log_metric("outcome", 1.0, {"outcome": outcome})
                 
                 # Get configuration versions
-                from .config import PROMPT_VERSION, AGENT_VERSION
+                from config import PROMPT_VERSION, AGENT_VERSION
                 
                 result = {
                     "agent": self.agent_name,

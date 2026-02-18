@@ -927,7 +927,7 @@ class IntentExtractor:
             StructuredIntent
         """
         try:
-            from .config import OPENAI_MODEL
+            from config import OPENAI_MODEL
             
             extraction_prompt = f"""Extract structured intent from this movie query.
 

@@ -25,7 +25,7 @@
   - Much faster execution
 
 ### ✅ 4. Enhanced Analysis Tools
-- **Location**: `scripts/analyze_test_results.py`
+- **Location**: `scripts/analysis/analyze_test_results.py`
 - **Features**:
   - Pass rate analysis
   - Test history tracking
@@ -57,16 +57,16 @@ python tests/test_runner.py --suite simple
 
 ```bash
 # View pass rates and statistics
-python scripts/analyze_test_results.py --pass-rates
+python scripts/analysis/analyze_test_results.py --pass-rates
 
 # View history of specific test
-python scripts/analyze_test_results.py --test simple_fact_director
+python scripts/analysis/analyze_test_results.py --test simple_fact_director
 
 # Find flaky tests
-python scripts/analyze_test_results.py --flaky
+python scripts/analysis/analyze_test_results.py --flaky
 
 # Compare prompt versions
-python scripts/analyze_test_results.py --compare-versions v1 v4 v5
+python scripts/analysis/analyze_test_results.py --compare-versions v1 v4 v5
 ```
 
 ### Adding New Test Cases
@@ -109,7 +109,8 @@ src/cinemind/
 └── ...
 
 scripts/
-└── analyze_test_results.py  # Analysis tools (new)
+└── analysis/
+    └── analyze_test_results.py  # Test results analysis
 
 docs/
 ├── TESTING_INFRASTRUCTURE.md  # Detailed guide

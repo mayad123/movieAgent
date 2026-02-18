@@ -8,21 +8,21 @@ Use the export script to generate CSV files:
 
 ```bash
 # Export all data (database + test results)
-python scripts/export_to_csv.py
+python scripts/export/export_to_csv.py
 
 # Export specific tables/data
-python scripts/export_to_csv.py --table requests
-python scripts/export_to_csv.py --table responses
-python scripts/export_to_csv.py --table metrics
-python scripts/export_to_csv.py --table search_operations
-python scripts/export_to_csv.py --table test_results
-python scripts/export_to_csv.py --table prompt_comparison
+python scripts/export/export_to_csv.py --table requests
+python scripts/export/export_to_csv.py --table responses
+python scripts/export/export_to_csv.py --table metrics
+python scripts/export/export_to_csv.py --table search_operations
+python scripts/export/export_to_csv.py --table test_results
+python scripts/export/export_to_csv.py --table prompt_comparison
 
 # Custom output directory
-python scripts/export_to_csv.py --output-dir my_exports
+python scripts/export/export_to_csv.py --output-dir my_exports
 
 # Custom database file
-python scripts/export_to_csv.py --db my_database.db
+python scripts/export/export_to_csv.py --db my_database.db
 ```
 
 ## Available CSV Files

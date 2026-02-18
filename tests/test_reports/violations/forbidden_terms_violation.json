@@ -27,5 +27,12 @@
   "offending_text": "The Matrix was directed by the Wachowskis according to Tier A Kaggle dataset.",
   "fixed_text": "The Matrix was directed by the Wachowskis according to structured data data source.",
   "repair_instruction": null,
-  "timestamp": "2025-12-30T12:26:01"
+  "kaggle": {
+    "attempted": true,
+    "used": true,
+    "item_count": 1,
+    "fallback_reason": null,
+    "warnings": []
+  },
+  "timestamp": "2026-02-17T21:31:23"
 }

@@ -1256,9 +1256,28 @@ body {
     pointer-events: none;
 }
 .media-strip-card:hover .media-strip-card-overlay,
-.media-strip-card:focus-within .media-strip-card-overlay {
+.media-strip-card:focus-within .media-strip-card-overlay,
+.media-strip-card:hover .media-strip-card-overlay--top-right,
+.media-strip-card:focus-within .media-strip-card-overlay--top-right {
     opacity: 1;
     pointer-events: auto;
+}
+/* Top-right "Where to watch" icon: same style as bottom actions, tooltip below so it isn't cut off */
+.media-strip-card-overlay--top-right {
+    bottom: auto;
+    top: 0;
+    left: auto;
+    right: 0;
+    background: linear-gradient(to bottom right, rgba(0, 0, 0, 0.45), transparent);
+    padding: var(--media-strip-overlay-padding-block) var(--media-strip-overlay-padding-inline);
+    display: flex;
+    justify-content: flex-end;
+    z-index: 2;
+}
+.media-strip-card-action--tooltip-below::after {
+    bottom: auto;
+    top: calc(100% + var(--media-strip-tooltip-offset));
+    z-index: 20;
 }
 .media-strip-card-action {
     position: relative;
@@ -1297,7 +1316,12 @@ body {
     transition: opacity 0.15s ease;
     z-index: 10;
 }
-.media-strip-card-action:hover::after {
+.media-strip-card-action:hover::after,
+.media-strip-card-action:focus::after {
+    opacity: 1;
+}
+.media-strip-card-action--tooltip-below:hover::after,
+.media-strip-card-action--tooltip-below:focus::after {
     opacity: 1;
 }
 .media-strip-card-action svg {
@@ -1475,7 +1499,22 @@ body {
     margin-right: auto;
 }
 
-/* Did you mean: smaller posters so labels fit without being cut off */
+/* Did you mean / movie_list: small hero strip (same card as main hero, smaller size for consistency) */
+.attachments-section-did-you-mean,
+.attachments-section-movie-list {
+    --hero-poster-width: var(--did-you-mean-poster-width);
+}
+.attachments-section-did-you-mean .media-strip-layout,
+.attachments-section-movie-list .media-strip-layout {
+    gap: var(--media-candidates-gap);
+    padding-inline: var(--media-candidates-padding-inline-start) var(--media-candidates-padding-inline-end);
+}
+.attachments-section-did-you-mean .media-strip-card-label,
+.attachments-section-movie-list .media-strip-card-label {
+    font-size: var(--media-candidates-card-label-font-size);
+    max-width: var(--media-candidates-card-label-max-width);
+}
+/* Legacy: smaller candidates cards if ever used in these sections */
 .attachments-section-did-you-mean .media-candidates-card {
     flex: 0 0 var(--did-you-mean-poster-width);
     width: var(--did-you-mean-poster-width);
@@ -1603,9 +1642,31 @@ body {
     overflow: visible;
 }
 .poster-carousel-wheel-item:hover .poster-carousel-wheel-overlay,
-.poster-carousel-wheel-item:focus-within .poster-carousel-wheel-overlay {
+.poster-carousel-wheel-item:focus-within .poster-carousel-wheel-overlay,
+.poster-carousel-wheel-item:hover .poster-carousel-wheel-overlay--top-right,
+.poster-carousel-wheel-item:focus-within .poster-carousel-wheel-overlay--top-right {
     opacity: 1;
     pointer-events: auto;
+}
+/* Top-right "Where to watch" on carousel posters */
+.poster-carousel-wheel-overlay--top-right {
+    bottom: auto;
+    top: 0;
+    left: auto;
+    right: 0;
+    background: linear-gradient(to bottom right, rgba(0, 0, 0, 0.45), transparent);
+    padding: var(--media-strip-overlay-padding-block) var(--media-strip-overlay-padding-inline);
+    justify-content: flex-end;
+    z-index: 2;
+}
+.poster-carousel-wheel-action--tooltip-below::after {
+    bottom: auto;
+    top: calc(100% + var(--media-strip-tooltip-offset));
+    z-index: 20;
+}
+.poster-carousel-wheel-action--tooltip-below:hover::after,
+.poster-carousel-wheel-action--tooltip-below:focus::after {
+    opacity: 1;
 }
 .poster-carousel-wheel-action {
     position: relative;
@@ -1919,3 +1980,135 @@ body {
 .real-agent-modal-confirm:hover {
     background: #333;
 }
+
+/* --- Where to Watch drawer (right slide-out, between main and right panel) --- */
+.where-to-watch-drawer {
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    background: #f7f7f8;
+    border-left: 1px solid #e5e5e5;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.25s ease, min-width 0.25s ease;
+    z-index: 5;
+}
+.where-to-watch-drawer.open {
+    width: 320px;
+    min-width: 320px;
+    overflow: visible;
+}
+.where-to-watch-drawer-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e5e5;
+    min-height: 52px;
+}
+.where-to-watch-drawer-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0d0d0d;
+    margin: 0;
+}
+.where-to-watch-drawer-close {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+}
+.where-to-watch-drawer-close:hover {
+    color: #0d0d0d;
+    background: #e5e7eb;
+}
+.where-to-watch-drawer-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 1rem;
+}
+/* Loading skeleton */
+.where-to-watch-skeleton {
+    height: 1rem;
+    background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+    background-size: 200% 100%;
+    animation: where-to-watch-shimmer 1s ease-in-out infinite;
+    border-radius: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+.where-to-watch-skeleton.short { width: 60%; }
+.where-to-watch-skeleton--line { width: 100%; }
+@keyframes where-to-watch-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+/* Results: groups by access type */
+.where-to-watch-drawer-results {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+.where-to-watch-group-title {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+.where-to-watch-offer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.where-to-watch-offer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+.where-to-watch-offer:last-child { border-bottom: none; }
+.where-to-watch-offer-info {
+    min-width: 0;
+}
+.where-to-watch-offer-provider {
+    font-weight: 500;
+    color: #0d0d0d;
+}
+.where-to-watch-offer-price {
+    font-size: 0.8125rem;
+    color: #4b5563;
+}
+.where-to-watch-offer-open {
+    flex-shrink: 0;
+    font-size: 0.8125rem;
+    color: #2563eb;
+    text-decoration: none;
+}
+.where-to-watch-offer-open:hover { text-decoration: underline; }
+/* Empty & error states */
+.where-to-watch-drawer-empty,
+.where-to-watch-drawer-error {
+    padding: 1rem 0;
+}
+.where-to-watch-drawer-empty-text,
+.where-to-watch-drawer-error-text {
+    font-size: 0.9375rem;
+    color: #4b5563;
+    margin: 0;
+}
+.where-to-watch-drawer-error-text { color: #b91c1c; }

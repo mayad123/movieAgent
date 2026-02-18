@@ -23,9 +23,11 @@ Movie Agent/
 │   ├── evaluator.py
 │   ├── test_runner.py
 │   └── ...
-├── scripts/                # Utility scripts
-│   ├── view_observability.py
-│   └── migrate_tags.py
+├── scripts/                # Utility scripts (by domain)
+│   ├── db/                 # Database migrations
+│   ├── observability/     # View observability data
+│   ├── export/            # Export to CSV
+│   └── analysis/          # Test results analysis
 ├── docs/                   # Documentation
 │   ├── README.md
 │   ├── QUICKSTART.md

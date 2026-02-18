@@ -211,7 +211,7 @@ cursor.execute("""
 If you have an existing database, run the migration script:
 
 ```bash
-python migrate_tags.py
+python scripts/db/migrate_tags.py
 ```
 
 This adds the `request_type` and `outcome` columns to existing databases.

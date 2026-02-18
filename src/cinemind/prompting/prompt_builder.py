@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..request_plan import RequestPlan, ResponseFormat
-from ..config import PROMPT_VERSION
+from config import PROMPT_VERSION
 from .templates import get_template, ResponseTemplate
 from .evidence_formatter import EvidenceFormatter
 

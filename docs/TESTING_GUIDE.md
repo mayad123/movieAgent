@@ -316,7 +316,7 @@ git commit -m "Add test cases for recommendation queries"
 
 Use observability data to improve tests:
 
-1. **Find Common Queries**: Use `view_observability.py` to see frequent queries
+1. **Find Common Queries**: Use `scripts/observability/view_observability.py` to see frequent queries
 2. **Identify Issues**: Look for failed requests or unclear responses
 3. **Create Tests**: Add test cases for issues found
 4. **Verify Fixes**: Run tests to ensure issues are resolved

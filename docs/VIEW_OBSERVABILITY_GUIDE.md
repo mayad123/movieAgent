@@ -1,4 +1,4 @@
-# How to Use view_observability.py
+# How to Use scripts/observability/view_observability.py
 
 A guide to viewing and analyzing your CineMind observability data.
 
@@ -9,7 +9,7 @@ A guide to viewing and analyzing your CineMind observability data.
 Shows the most recent 10 requests:
 
 ```bash
-python view_observability.py
+python scripts/observability/view_observability.py
 ```
 
 **Output shows:**
@@ -20,7 +20,7 @@ python view_observability.py
 
 **Customize limit:**
 ```bash
-python view_observability.py --limit 20
+python scripts/observability/view_observability.py --limit 20
 ```
 
 ### 2. View Detailed Request Information
@@ -28,12 +28,12 @@ python view_observability.py --limit 20
 Get complete details for a specific request:
 
 ```bash
-python view_observability.py --request-id <request-id>
+python scripts/observability/view_observability.py --request-id <request-id>
 ```
 
 **Example:**
 ```bash
-python view_observability.py --request-id efd11844-483a-49c4-8568-8491a646452b
+python scripts/observability/view_observability.py --request-id efd11844-483a-49c4-8568-8491a646452b
 ```
 
 **Shows:**
@@ -50,7 +50,7 @@ python view_observability.py --request-id efd11844-483a-49c4-8568-8491a646452b
 Get aggregated statistics:
 
 ```bash
-python view_observability.py --stats
+python scripts/observability/view_observability.py --stats
 ```
 
 **Shows:**
@@ -61,22 +61,22 @@ python view_observability.py --stats
 
 **Filter by time period:**
 ```bash
-python view_observability.py --stats --days 30
+python scripts/observability/view_observability.py --stats --days 30
 ```
 
 **Filter by request type:**
 ```bash
-python view_observability.py --stats --type recs
+python scripts/observability/view_observability.py --stats --type recs
 ```
 
 **Filter by outcome:**
 ```bash
-python view_observability.py --stats --outcome success
+python scripts/observability/view_observability.py --stats --outcome success
 ```
 
 **Combine filters:**
 ```bash
-python view_observability.py --stats --days 7 --type recs --outcome success
+python scripts/observability/view_observability.py --stats --days 7 --type recs --outcome success
 ```
 
 ### 4. View Tag Distribution
@@ -84,7 +84,7 @@ python view_observability.py --stats --days 7 --type recs --outcome success
 See how requests are distributed by type and outcome:
 
 ```bash
-python view_observability.py --tags
+python scripts/observability/view_observability.py --tags
 ```
 
 **Shows:**
@@ -93,7 +93,7 @@ python view_observability.py --tags
 
 **For specific time period:**
 ```bash
-python view_observability.py --tags --days 30
+python scripts/observability/view_observability.py --tags --days 30
 ```
 
 ## Common Use Cases
@@ -102,38 +102,38 @@ python view_observability.py --tags --days 30
 
 First, list recent requests:
 ```bash
-python view_observability.py
+python scripts/observability/view_observability.py
 ```
 
 Copy the request ID (first 8 chars) and use it:
 ```bash
-python view_observability.py --request-id <full-id>
+python scripts/observability/view_observability.py --request-id <full-id>
 ```
 
 ### Check Performance
 
 View stats to see average response times and costs:
 ```bash
-python view_observability.py --stats --days 7
+python scripts/observability/view_observability.py --stats --days 7
 ```
 
 ### Analyze Request Types
 
 See what types of requests are most common:
 ```bash
-python view_observability.py --tags
+python scripts/observability/view_observability.py --tags
 ```
 
 ### Find Failed Requests
 
 Look for errors:
 ```bash
-python view_observability.py --stats --outcome error
+python scripts/observability/view_observability.py --stats --outcome error
 ```
 
 Or check recent requests for failed status:
 ```bash
-python view_observability.py --limit 50
+python scripts/observability/view_observability.py --limit 50
 # Look for requests with status: error
 ```
 
@@ -141,12 +141,12 @@ python view_observability.py --limit 50
 
 View total costs over time:
 ```bash
-python view_observability.py --stats --days 30
+python scripts/observability/view_observability.py --stats --days 30
 ```
 
 View costs for specific request type:
 ```bash
-python view_observability.py --stats --days 30 --type recs
+python scripts/observability/view_observability.py --stats --days 30 --type recs
 ```
 
 ## Advanced Usage
@@ -156,14 +156,14 @@ python view_observability.py --stats --days 30 --type recs
 If your database is in a different location:
 
 ```bash
-python view_observability.py --db "C:/data/cinemind.db"
+python scripts/observability/view_observability.py --db "C:/data/cinemind.db"
 ```
 
 ### Complete Request Trace
 
 Get everything about a request:
 ```bash
-python view_observability.py --request-id <id>
+python scripts/observability/view_observability.py --request-id <id>
 ```
 
 This shows:
@@ -180,37 +180,37 @@ This shows:
 ### Example 1: Quick Overview
 ```bash
 # See last 5 requests
-python view_observability.py --limit 5
+python scripts/observability/view_observability.py --limit 5
 
 # Then get details on one
-python view_observability.py --request-id <id-from-above>
+python scripts/observability/view_observability.py --request-id <id-from-above>
 ```
 
 ### Example 2: Weekly Report
 ```bash
 # Weekly statistics
-python view_observability.py --stats --days 7
+python scripts/observability/view_observability.py --stats --days 7
 
 # Tag distribution
-python view_observability.py --tags --days 7
+python scripts/observability/view_observability.py --tags --days 7
 ```
 
 ### Example 3: Analyze Recommendations
 ```bash
 # Stats for recommendation requests only
-python view_observability.py --stats --type recs
+python scripts/observability/view_observability.py --stats --type recs
 
 # Tag distribution
-python view_observability.py --tags
+python scripts/observability/view_observability.py --tags
 ```
 
 ### Example 4: Debugging
 ```bash
 # Find request ID from recent requests
-python view_observability.py --limit 20
+python scripts/observability/view_observability.py --limit 20
 
 # Get full trace
-python view_observability.py --request-id <id>
+python scripts/observability/view_observability.py --request-id <id>
 ```
 
 ## Understanding the Output
@@ -248,7 +248,7 @@ python view_observability.py --request-id <id>
 
 ## Tips
 
-1. **Start with recent requests**: Always start with `view_observability.py` to see what's there
+1. **Start with recent requests**: Always start with `scripts/observability/view_observability.py` to see what's there
 2. **Use request IDs**: Copy the full request ID from recent requests to get details
 3. **Filter wisely**: Use `--type` and `--outcome` to narrow down results
 4. **Time periods**: Use `--days` to analyze different time ranges

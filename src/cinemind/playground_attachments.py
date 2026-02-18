@@ -230,7 +230,7 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
         # If scenes fetch failed or returned empty, we still have poster (primary_movie).
 
         result["attachments"] = {"sections": sections}
-        from .config import ENABLE_TMDB_SCENES
+        from config import ENABLE_TMDB_SCENES
         debug = {
             "detected_movie_count": 1,
             "attachment_intent": intent,

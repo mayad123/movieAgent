@@ -15,5 +15,12 @@
   "offending_text": "Dune is available on HBO Max and for rent on various platforms.",
   "fixed_text": null,
   "repair_instruction": "CORRECTION REQUIRED: The previous response violated the response contract.\n\nVIOLATIONS:\n1. Missing freshness/timestamp language (required: 'as of [date]', 'currently', etc.)\n\nSTRICT REQUIREMENTS:\nLength: maximum 4 sentences or maximum 100 words. Be concise and direct.\nRequired elements: Provide the direct answer immediately (first sentence); Include current date/time context (e.g., 'as of [date]', 'currently', 'as of today').\nStructure: Use list format (numbered or bulleted).\nCitation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names.\nForbidden terms: Never use these terms in the response: \"Tier\", \"dataset\", \"Kaggle\", \"Tavily\", \"confidence framework\".\n\nPlease regenerate the response following ALL requirements above. Do not include any forbidden terms. Respect the length limits exactly.",
-  "timestamp": "2025-12-30T12:26:01"
+  "kaggle": {
+    "attempted": false,
+    "used": false,
+    "item_count": 0,
+    "fallback_reason": null,
+    "warnings": []
+  },
+  "timestamp": "2026-02-17T21:31:23"
 }

@@ -50,10 +50,10 @@ from test_cases.simple_facts import SIMPLE_FACT_TESTS
 python tests/test_runner.py
 
 # Query test results
-python scripts/analyze_test_results.py --pass-rates
-python scripts/analyze_test_results.py --test simple_fact_director
-python scripts/analyze_test_results.py --flaky
-python scripts/analyze_test_results.py --compare-versions v1 v4 v5
+python scripts/analysis/analyze_test_results.py --pass-rates
+python scripts/analysis/analyze_test_results.py --test simple_fact_director
+python scripts/analysis/analyze_test_results.py --flaky
+python scripts/analysis/analyze_test_results.py --compare-versions v1 v4 v5
 ```
 
 **Database Schema:**
@@ -89,13 +89,13 @@ python tests/test_runner.py --parallel --max-concurrent 5
 
 1. **CSV Export** - Export all data to CSV
    ```bash
-   python scripts/export_to_csv.py
+   python scripts/export/export_to_csv.py
    ```
 
 2. **Database Analysis** - SQL-like queries
    ```bash
-   python scripts/analyze_test_results.py --pass-rates
-   python scripts/analyze_test_results.py --flaky
+   python scripts/analysis/analyze_test_results.py --pass-rates
+   python scripts/analysis/analyze_test_results.py --flaky
    ```
 
 3. **Graphical Visualization**
@@ -217,16 +217,16 @@ jobs:
 
 ```bash
 # Pass rates by version
-python scripts/analyze_test_results.py --pass-rates
+python scripts/analysis/analyze_test_results.py --pass-rates
 
 # Specific test history
-python scripts/analyze_test_results.py --test simple_fact_director
+python scripts/analysis/analyze_test_results.py --test simple_fact_director
 
 # Find flaky tests
-python scripts/analyze_test_results.py --flaky
+python scripts/analysis/analyze_test_results.py --flaky
 
 # Compare versions
-python scripts/analyze_test_results.py --compare-versions v1 v4 v5
+python scripts/analysis/analyze_test_results.py --compare-versions v1 v4 v5
 ```
 
 **Direct Database Access:**
@@ -272,10 +272,10 @@ python tests/test_runner.py --parallel
 python tests/test_runner.py --suite simple
 
 # Export to CSV
-python scripts/export_to_csv.py
+python scripts/export/export_to_csv.py
 
 # Analyze results
-python scripts/analyze_test_results.py --pass-rates
+python scripts/analysis/analyze_test_results.py --pass-rates
 
 # View graphically
 python tests/view_test_results_graphical.py

@@ -196,7 +196,7 @@ def get_scenes_provider() -> ScenesProvider:
     Safe fallback when TMDB is disabled or misconfigured: always returns a provider that
     does not raise and returns [] on failure. Playground mode never breaks when TMDB is off.
     """
-    from .config import ENABLE_TMDB_SCENES, TMDB_READ_ACCESS_TOKEN
+    from config import ENABLE_TMDB_SCENES, TMDB_READ_ACCESS_TOKEN
     if ENABLE_TMDB_SCENES and TMDB_READ_ACCESS_TOKEN:
         return ScenesProviderTMDB(access_token=TMDB_READ_ACCESS_TOKEN)
     return ScenesProviderEmpty()
