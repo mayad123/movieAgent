@@ -89,3 +89,16 @@ def test_user_query_title_only_fallback():
         apply_playground_attachment_behavior("Avatar", result)
     assert result["attachments"]["sections"]
     assert result[ATTACHMENT_DEBUG_KEY]["detected_movie_count"] == 1
+
+
+def test_single_title_multi_movie_intent_no_scenes():
+    """Intent-based: 'movies similar to Inception' → 1 title but multi_movie focus → poster only, no scenes section."""
+    result = {}
+    with patch("cinemind.playground_attachments.enrich") as mock_enrich:
+        mock_enrich.return_value = type("R", (), {"media_strip": {"movie_title": "Inception", "year": 2010, "page_url": "#"}, "media_candidates": []})()
+        apply_playground_attachment_behavior("movies similar to Inception", result)
+    sections = result["attachments"]["sections"]
+    assert result[ATTACHMENT_DEBUG_KEY]["detected_movie_count"] == 1
+    assert result[ATTACHMENT_DEBUG_KEY]["media_focus"] == "multi_movie"
+    assert any(s["type"] == SECTION_PRIMARY_MOVIE for s in sections)
+    assert not any(s["type"] == SECTION_SCENES for s in sections)

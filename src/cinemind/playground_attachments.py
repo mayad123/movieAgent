@@ -32,18 +32,16 @@ from .attachment_intent_classifier import (
     INTENT_MOVIE_LIST,
     INTENT_DID_YOU_MEAN,
 )
+from .media_focus import get_media_focus, MEDIA_FOCUS_SINGLE
 from .media_enrichment import (
     enrich,
     enrich_batch,
     SECTION_PRIMARY_MOVIE,
     SECTION_MOVIE_LIST,
-    SECTION_SCENES,
     SECTION_DID_YOU_MEAN,
     _movie_card_item,
 )
 from .title_extraction import get_search_phrases, extract_movie_titles
-from .wikipedia_entity_resolver import WikipediaEntityResolver
-from .wikipedia_cache import get_default_wikipedia_cache
 from .scenes_provider import get_scenes_provider
 
 logger = logging.getLogger(__name__)
@@ -56,7 +54,7 @@ def _fetch_scenes_nonblocking(title: str, year: Optional[int] = None) -> list[di
     """
     Fetch scene/backdrop items for a movie via the pluggable scenes provider.
 
-    Uses TMDB when enabled and configured; otherwise fallback (empty or Wikipedia-only).
+    Uses TMDB when enabled and configured; otherwise returns empty list.
     Must not raise; returns [] on any failure so poster is still returned.
     """
     try:
@@ -66,15 +64,6 @@ def _fetch_scenes_nonblocking(title: str, year: Optional[int] = None) -> list[di
     except Exception as e:
         logger.debug("Scenes fetch skipped or failed for %r: %s", title, e)
         return []
-
-
-def _scenes_section(items: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build a scenes section for attachments schema."""
-    return {
-        "type": SECTION_SCENES,
-        "title": "Scenes",
-        "items": items,
-    }
 
 
 def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]) -> None:
@@ -211,10 +200,34 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
         result["media_candidates"] = list(enrichment.media_candidates) if enrichment.media_candidates else []
         if result["media_candidates"]:
             result["media_gallery_label"] = "Did you mean?"
+        # Intent-based: single-movie focus → hero + scenes in one carousel; multi → poster only.
+        request_type = result.get("request_type")
+        if not request_type:
+            try:
+                from .request_type_router import get_request_type_router
+                request_type = get_request_type_router().route(user_query_stripped).request_type
+            except Exception:
+                request_type = None
+        media_focus = get_media_focus(user_query_stripped, request_type)
+        single_year = strip.get("year") if isinstance(strip.get("year"), int) else None
+        scenes_items: list[dict[str, Any]] = []
+        if media_focus == MEDIA_FOCUS_SINGLE:
+            scenes_items = _fetch_scenes_nonblocking(single_title, year=single_year)
+
+        # Single carousel: hero first, then scenes (same section; frontend renders one track).
+        primary_items: list[dict[str, Any]] = []
+        poster_item = _movie_card_item(strip)
+        poster_item["kind"] = "poster"
+        primary_items.append(poster_item)
+        if scenes_items:
+            for s in scenes_items:
+                scene_item = dict(s)
+                scene_item["kind"] = "scene"
+                primary_items.append(scene_item)
         sections.append({
             "type": SECTION_PRIMARY_MOVIE,
             "title": "This movie",
-            "items": [_movie_card_item(strip)],
+            "items": primary_items,
         })
         if result["media_candidates"]:
             sections.append({
@@ -223,17 +236,13 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
                 "items": [_movie_card_item(c) for c in result["media_candidates"] if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
             })
 
-        single_year = strip.get("year") if isinstance(strip.get("year"), int) else None
-        scenes_items = _fetch_scenes_nonblocking(single_title, year=single_year)
-        if scenes_items:
-            sections.append(_scenes_section(scenes_items))
-        # If scenes fetch failed or returned empty, we still have poster (primary_movie).
-
         result["attachments"] = {"sections": sections}
+        result.setdefault("meta", {})["media_focus"] = media_focus
         from config import ENABLE_TMDB_SCENES
         debug = {
             "detected_movie_count": 1,
             "attachment_intent": intent,
+            "media_focus": media_focus,
             "rationale": intent_result.rationale,
             "scenes_count": len(scenes_items),
             "tmdb_scenes_enabled": ENABLE_TMDB_SCENES,
@@ -241,16 +250,8 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
         pd = getattr(enrichment, "poster_debug", None) or {}
         debug.update(pd)
         debug.setdefault("poster_provider", None)
-        debug.setdefault("tmdb_fallback_ran", False)
-        tmdb_attempted = debug.get("tmdb_attempted", False)
-        logger.info("request poster_debug tmdb_attempted=%s", tmdb_attempted)
-        try:
-            resolver = WikipediaEntityResolver(cache=get_default_wikipedia_cache())
-            resolve_result = resolver.resolve(single_title)
-            debug["resolver_status"] = getattr(resolve_result, "status", None)
-            debug["resolver_candidate_count"] = len(getattr(resolve_result, "candidates", []) or [])
-        except Exception as e:
-            logger.debug("Resolver debug skipped: %s", e)
+        debug.setdefault("tmdb_attempted", False)
+        logger.info("request poster_debug tmdb_attempted=%s", debug.get("tmdb_attempted"))
         result[ATTACHMENT_DEBUG_KEY] = debug
         logger.info(
             "Playground attachment: single → primary_movie + scenes (title=%s, scenes_count=%s)",

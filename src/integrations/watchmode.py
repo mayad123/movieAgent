@@ -27,6 +27,7 @@ AVAILABILITY_CACHE_TTL_SEC = 6 * 3600  # 6 hours (respect typical provider cache
 ACCESS_TYPE_MAP = {
     "sub": ("subscription", "Subscription"),
     "subscription": ("subscription", "Subscription"),
+    "streaming": ("subscription", "Subscription"),
     "free": ("free", "Free"),
     "ads": ("free", "Free"),
     "rent": ("rental", "Rent"),
@@ -168,11 +169,48 @@ class WatchmodeClient:
             logger.debug("Watchmode autocomplete-search by name failed: %s", e)
         return None
 
-    async def get_title_sources_raw(self, watchmode_title_id: int, regions: str) -> Dict[str, Any]:
-        """GET /v1/title/{id}/sources/?regions=... Id can be Watchmode internal id (int). Returns raw JSON."""
-        tid = watchmode_title_id
-        url = f"{WATCHMODE_BASE}/title/{tid}/sources/"
-        params = {"apiKey": self._api_key, "regions": regions}
+    async def get_title_details(self, title_id: str) -> Optional[Dict[str, Any]]:
+        """GET /v1/title/{title_id}/details/ to get title info including external_ids (e.g. tmdb_id)."""
+        url = f"{WATCHMODE_BASE}/title/{title_id}/details/"
+        params = {"apiKey": self._api_key}
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                r = await client.get(url, params=params)
+                if r.status_code == 404:
+                    return None
+                r.raise_for_status()
+                return r.json()
+        except (httpx.HTTPStatusError, ValueError, KeyError):
+            return None
+
+    def _extract_tmdb_id_from_details(self, details: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Extract TMDB id from Watchmode title details response."""
+        if not details or not isinstance(details, dict):
+            return None
+        tid = details.get("tmdb_id")
+        if tid is not None and str(tid).strip():
+            return str(tid).strip()
+        ext = details.get("external_ids") or {}
+        if isinstance(ext, dict):
+            tid = ext.get("tmdb") or ext.get("tmdb_id")
+            if tid is not None and str(tid).strip():
+                return str(tid).strip()
+        return None
+
+    async def get_title_sources_raw(self, title_id: str, regions: str) -> Dict[str, Any]:
+        """
+        GET /v1/title/{title_id}/sources/?regions=...&types=...
+
+        title_id: Watchmode ID (e.g. 345534), IMDB ID (e.g. tt0903747), or TMDB format (e.g. movie-278, tv-1396).
+        See https://api.watchmode.com/docs#tag/Title/operation/getTitleSources
+        """
+        url = f"{WATCHMODE_BASE}/title/{title_id}/sources/"
+        params = {
+            "apiKey": self._api_key,
+            "regions": regions,
+            "types": "sub,free,purchase,rent,tve",
+            "sourceTypes": "sub,free,purchase,rent,tve",
+        }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.get(url, params=params)
             r.raise_for_status()
@@ -183,23 +221,28 @@ class WatchmodeClient:
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """
         Get availability for a title. Returns (error_message, normalized_response).
-        If error_message is set, normalized_response is None. Otherwise response matches UI contract.
+        Uses Watchmode getTitleSources with TMDB-format title_id (e.g. movie-278, tv-1396).
         """
         regions = country.upper() if country else "US"
-        ck = self._cache_key(f"{media_type}-{tmdb_id}", regions)
+        mt = (media_type or "movie").strip().lower()
+        if mt not in ("movie", "tv"):
+            mt = "movie"
+        title_id = f"{mt}-{(tmdb_id or '').strip()}"
+        if not (tmdb_id or "").strip():
+            return MSG_TITLE_NOT_FOUND_TMDB, None
+
+        ck = self._cache_key(title_id, regions)
         now_sec = time.time()
         if ck in self._availability_cache:
             ts, payload = self._availability_cache[ck]
             if (now_sec - ts) < AVAILABILITY_CACHE_TTL_SEC:
                 return None, payload
 
-        title_id = await self.find_title_id_by_tmdb(tmdb_id, media_type)
-        if title_id is None:
-            return MSG_TITLE_NOT_FOUND_TMDB, None
-
         try:
             raw = await self.get_title_sources_raw(title_id, regions)
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return MSG_TITLE_NOT_FOUND_TMDB, None
             if e.response.status_code == 429:
                 return "Rate limit exceeded. Try again later.", None
             return f"Watchmode API error: {e.response.status_code}.", None
@@ -212,12 +255,29 @@ class WatchmodeClient:
         self._availability_cache[ck] = (now_sec, normalized)
         return None, normalized
 
+    def _strip_disambiguation_suffix(self, title: str) -> Optional[str]:
+        """
+        If title ends with ' (something)' and 'something' is not a 4-digit year,
+        return the base title without the parenthetical (for retry when exact match fails).
+        E.g. 'Avatar (franchise)' -> 'Avatar'; 'Avatar (2009)' -> None (keep year).
+        """
+        if not title or " (" not in title or not title.endswith(")"):
+            return None
+        base, _, suffix = title.rpartition(" (")
+        suffix = suffix[:-1].strip()  # drop trailing )
+        if not base.strip():
+            return None
+        if len(suffix) == 4 and suffix.isdigit():
+            return None  # year: don't strip
+        return base.strip() or None
+
     async def get_availability_by_title(
         self, title: str, year: Optional[int], media_type: str, country: str
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """
         Get availability by title name (and optional year). Uses autocomplete-search then sources.
         Returns (error_message, normalized_response) like get_availability.
+        If exact title fails and title has a disambiguation suffix (e.g. " (franchise)"), retries with base name.
         """
         title = (title or "").strip()
         if not title:
@@ -234,10 +294,18 @@ class WatchmodeClient:
                 return None, payload
         title_id = await self.find_title_id_by_name(title, year, media_type)
         if title_id is None:
+            base_title = self._strip_disambiguation_suffix(title)
+            if base_title and base_title != title:
+                title_id = await self.find_title_id_by_name(base_title, year, media_type)
+                if title_id is not None:
+                    logger.info("Where-to-watch: title '%s' not found; used base title '%s'", title, base_title)
+        if title_id is None:
             return MSG_TITLE_NOT_FOUND_NAME, None
         try:
-            raw = await self.get_title_sources_raw(title_id, regions)
+            raw = await self.get_title_sources_raw(str(title_id), regions)
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return MSG_TITLE_NOT_FOUND_NAME, None
             if e.response.status_code == 429:
                 return "Rate limit exceeded. Try again later.", None
             return f"Watchmode API error: {e.response.status_code}.", None
@@ -246,6 +314,10 @@ class WatchmodeClient:
             return "Service temporarily unavailable.", None
         catalog = await self.get_sources_catalog()
         normalized = self._normalize_sources_response(raw, regions, catalog)
+        details = await self.get_title_details(str(title_id))
+        resolved_tmdb_id = self._extract_tmdb_id_from_details(details)
+        if resolved_tmdb_id:
+            normalized["_resolved_tmdb_id"] = resolved_tmdb_id
         self._availability_cache[ck] = (now_sec, normalized)
         return None, normalized
 
@@ -259,11 +331,24 @@ class WatchmodeClient:
             "groups": [],
         }
         if not isinstance(raw, dict):
-            return out
-        # Raw can be { sources: [ { source_id, type, name?, web_url?, deeplink?, price?, ... } ] } or list
-        sources = raw.get("sources") or raw.get("results") or (raw if isinstance(raw, list) else [])
+            if isinstance(raw, list):
+                sources = raw
+            else:
+                return out
+        else:
+            # Watchmode may use "sources", "title_sources", "results", or "data"
+            sources = (
+                raw.get("sources")
+                or raw.get("title_sources")
+                or raw.get("results")
+                or raw.get("data")
+            )
+            if not isinstance(sources, list):
+                sources = []
         if not isinstance(sources, list):
             return out
+        if len(sources) == 0 and isinstance(raw, dict):
+            logger.debug("Watchmode sources response empty; keys received: %s", list(raw.keys()))
 
         by_type: Dict[str, List[Dict[str, Any]]] = {}
         for s in sources:
@@ -275,6 +360,8 @@ class WatchmodeClient:
             name = (s.get("name") or "").strip() or provider_names.get(int(source_id) if source_id is not None else 0) or "Unknown"
             web_url = (s.get("web_url") or s.get("webUrl") or s.get("url") or "").strip() or None
             deeplink = (s.get("deeplink") or s.get("deeplink_url") or "").strip() or None
+            if not deeplink and isinstance(s.get("deeplinks"), dict):
+                deeplink = (s["deeplinks"].get("ios") or s["deeplinks"].get("android") or "").strip() or None
             price = None
             if s.get("price") is not None:
                 try:

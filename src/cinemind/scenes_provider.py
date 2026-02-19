@@ -155,14 +155,16 @@ class ScenesProviderTMDB:
             from .tmdb_image_config import get_config, build_image_url, SIZE_BACKDROP_GALLERY
             img_config = get_config(self._token, timeout=self._timeout)
             source_url = f"{self.MOVIE_PAGE_BASE}/{movie_id}"
+            seen_urls: set[str] = set()
             items: list[SceneItem] = []
             for b in backdrops[: self._max_backdrops]:
                 path = (b.get("file_path") or "").strip()
                 if not path or path.startswith("http"):
                     continue
                 image_url = build_image_url(path, SIZE_BACKDROP_GALLERY, img_config)
-                if not image_url:
+                if not image_url or image_url in seen_urls:
                     continue
+                seen_urls.add(image_url)
                 caption = None
                 if b.get("vote_count"):
                     caption = f"Backdrop ({b.get('vote_count')} votes)"

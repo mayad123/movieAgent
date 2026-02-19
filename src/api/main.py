@@ -112,7 +112,7 @@ def _inject_mode_metadata(
         if result.get("sources"):
             tools_used.append("sources")
     elif actual_agent_mode == "PLAYGROUND":
-        tools_used = ["wikipedia"]  # Playground uses Wikipedia-only media
+        tools_used = ["tmdb"]  # Playground uses TMDB for media/posters
     result["toolsUsed"] = tools_used
 
 
@@ -266,13 +266,17 @@ async def where_to_watch_by_tmdb(
         if "rate limit" in err.lower():
             return _watchmode_error_response(429, "rate_limit_exceeded", err)
         return _watchmode_error_response(500, "service_error", err)
+    request_region = (country or "US").strip().upper()
+    response_data = data or {"movie": {}, "region": request_region, "groups": []}
+    title_id_for_response = (tmdbId or "").strip() or (response_data.get("_resolved_tmdb_id") if isinstance(response_data, dict) else None)
     payload = normalize_where_to_watch_response(
-        data or {"movie": {}, "region": country or "US", "groups": []},
-        title_id=(tmdbId or "").strip() or None,
+        response_data,
+        title_id=title_id_for_response or None,
         title_name=title_name,
         year=year_val,
         media_type=mt,
     )
+    payload["region"] = request_region
     return JSONResponse(status_code=200, content=payload)
 
 
@@ -303,7 +307,7 @@ async def where_to_watch(
 async def search_movies(query: MovieQuery):
     """
     Search and analyze movie information.
-    Dispatches to PLAYGROUND (Wikipedia-only) or REAL_AGENT based on backend config.
+    Dispatches to PLAYGROUND (TMDB media) or REAL_AGENT based on backend config.
     """
     try:
         if not query.query or not query.query.strip():

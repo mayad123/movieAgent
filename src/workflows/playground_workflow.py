@@ -1,5 +1,5 @@
 """
-Playground workflow: Wikipedia-only, deterministic pipeline.
+Playground workflow: deterministic pipeline with TMDB media.
 
 Thin orchestration layer; implementation lives in cinemind.playground.
 Callers (API, tests) use this entry point so wiring stays thin.
@@ -15,7 +15,7 @@ async def run_playground(
     request_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Execute a query through the playground pipeline (Wikipedia-only, no real LLM).
+    Execute a query through the playground pipeline (TMDB media, no real LLM).
 
     Returns:
         Full structured result (response, sources, attachments, etc.).

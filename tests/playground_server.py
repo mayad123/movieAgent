@@ -147,7 +147,7 @@ async def execute_query(request: QueryRequest) -> Dict[str, Any]:
         result["actualAgentMode"] = "PLAYGROUND"
         result["requestedAgentMode"] = getattr(request, "requestedAgentMode", None) or "PLAYGROUND"
         result["modeFallback"] = False
-        result["toolsUsed"] = ["wikipedia"]
+        result["toolsUsed"] = ["tmdb"]
         if getattr(request, "requestedAgentMode", None) == "REAL_AGENT":
             result["modeOverrideReason"] = (
                 "Playground Server is running (offline only). Start the CineMind API (src.api.main) for Real Agent."

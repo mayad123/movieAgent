@@ -106,15 +106,18 @@ def _score_candidate(
 
 @dataclass
 class TMDBCandidate:
-    """One candidate for display in 'Did you mean?' (id, title, year)."""
+    """One candidate for display in 'Did you mean?' (id, title, year, optional poster_path)."""
     id: int
     title: str
     year: Optional[int] = None
+    poster_path: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"id": self.id, "title": self.title}
         if self.year is not None:
             out["year"] = self.year
+        if self.poster_path is not None:
+            out["poster_path"] = self.poster_path
         return out
 
 
@@ -197,12 +200,13 @@ def resolve_movie(
     second_score = scored[1][1] if len(scored) > 1 else 0.0
     gap = top_score - second_score
 
-    # Build candidate list for "Did you mean?"
+    # Build candidate list for "Did you mean?" (include poster_path for each)
     candidates = [
         TMDBCandidate(
             id=int(r.get("id") or 0),
             title=(r.get("title") or r.get("original_title") or "").strip() or "Unknown",
             year=_extract_year(r.get("release_date")),
+            poster_path=(r.get("poster_path") or "").strip() or None,
         )
         for r, _ in scored[:max_candidates]
     ]

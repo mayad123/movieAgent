@@ -79,6 +79,14 @@ def test_direct_x_and_y():
     assert r.intent == "compare"
 
 
+def test_comma_separated_titles():
+    """Comma-separated list (e.g. 'Avatar, Inception, Kung Fu Panda') splits into individual titles."""
+    r = extract_movie_titles("Avatar, Inception, Kung Fu Panda")
+    assert r.titles == ("Avatar", "Inception", "Kung Fu Panda")
+    assert r.reason == "comma_separated"
+    assert r.intent == "compare"
+
+
 def test_empty_query():
     """Empty query returns empty titles."""
     r = extract_movie_titles("")

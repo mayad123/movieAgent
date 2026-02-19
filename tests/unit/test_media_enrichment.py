@@ -1,4 +1,4 @@
-"""Unit tests for media_enrichment (shared Wikipedia-only enrichment)."""
+"""Unit tests for media_enrichment (TMDB-only enrichment)."""
 import sys
 from pathlib import Path
 
@@ -16,8 +16,6 @@ from cinemind.media_enrichment import (
     SECTION_MOVIE_LIST,
     SECTION_DID_YOU_MEAN,
 )
-from cinemind.wikipedia_entity_resolver import WikipediaEntityResolver, ResolverResult, ResolvedEntity
-from cinemind.wikipedia_media_provider import WikipediaMediaProvider
 
 
 def test_enrich_returns_media_strip_with_movie_title():
@@ -35,15 +33,13 @@ def test_enrich_strips_prefixes():
 
 
 def test_enrich_fallback_from_user_query():
-    """When Wikipedia fails, fallback uses user query as movie_title."""
-    # Use a query that won't resolve (empty is handled)
+    """When TMDB fails or is disabled, fallback uses fallback_title."""
     result = enrich("xyz nonexistent movie 12345", fallback_title="Custom Fallback")
     assert result.media_strip.get("movie_title") == "Custom Fallback"
 
 
 def test_enrich_fallback_from_result():
-    """When Wikipedia fails, fallback uses result.query or first source title."""
-    # Use a query that won't resolve to any Wikipedia page
+    """When TMDB fails, fallback uses result.query or first source title."""
     result = enrich(
         "xyznonexistentmovie123",
         fallback_from_result={"query": "Inception", "sources": []},
@@ -58,7 +54,7 @@ def test_build_attachments_from_media_primary_only():
             "movie_title": "Dune (1984 film)",
             "year": 1984,
             "primary_image_url": "https://example.com/dune.jpg",
-            "page_url": "https://en.wikipedia.org/wiki/Dune_(1984_film)",
+            "page_url": "https://www.themoviedb.org/movie/841",
         },
         "media_candidates": [],
     }
@@ -72,15 +68,15 @@ def test_build_attachments_from_media_primary_only():
     assert item["title"] == "Dune (1984 film)"
     assert item["year"] == 1984
     assert item.get("imageUrl") and "dune" in item["imageUrl"]
-    assert item.get("sourceUrl") and "wikipedia" in item["sourceUrl"]
+    assert item.get("sourceUrl")
 
 
 def test_build_attachments_from_media_movie_list():
     """build_attachments_from_media produces movie_list section from media_candidates with label."""
     result = {
-        "media_strip": {"movie_title": "Dune", "page_url": "https://en.wikipedia.org/wiki/Dune"},
+        "media_strip": {"movie_title": "Dune", "page_url": "https://www.themoviedb.org/movie/438631"},
         "media_candidates": [
-            {"movie_title": "Inception", "year": 2010, "page_url": "https://en.wikipedia.org/wiki/Inception", "primary_image_url": "https://ex.inception.jpg"},
+            {"movie_title": "Inception", "year": 2010, "page_url": "https://www.themoviedb.org/movie/27205", "primary_image_url": "https://ex.inception.jpg"},
         ],
         "media_gallery_label": "Similar movies",
     }
@@ -98,7 +94,7 @@ def test_build_attachments_from_media_did_you_mean():
     result = {
         "media_strip": {},
         "media_candidates": [
-            {"movie_title": "Dune (1984 film)", "page_url": "https://en.wikipedia.org/wiki/Dune_(1984_film)"},
+            {"movie_title": "Dune (1984 film)", "page_url": "https://www.themoviedb.org/movie/841"},
         ],
         "media_gallery_label": "Did you mean?",
     }
@@ -127,14 +123,12 @@ def test_enrich_never_raises():
 
 def test_enrich_candidate_payload_has_page_url_and_year():
     """When ambiguous, candidates include page_url and year when available."""
-    result = enrich("Dune")  # Ambiguous: Dune 1984, Dune 2021, etc.
-    # May be single or gallery depending on resolver; if we get candidates, check shape
+    result = enrich("Dune")
     if result.media_candidates:
         for c in result.media_candidates:
             assert "movie_title" in c
             assert "page_url" in c
-            assert c["page_url"].startswith("https://en.wikipedia.org/wiki/")
-            # year is optional
+            assert c["page_url"].startswith("https://") or c["page_url"] == "#"
             if "year" in c:
                 assert isinstance(c["year"], int)
                 assert 1900 <= c["year"] <= 2100
@@ -151,12 +145,11 @@ def test_enrich_images_for_phrasing():
     """'show me images for X' resolves X and returns media_strip (title extraction)."""
     result = enrich("show me images for Inception")
     assert result.media_strip.get("movie_title")
-    # Should resolve to Inception (film)
     assert "Inception" in (result.media_strip.get("movie_title") or "")
 
 
 def test_enrich_movies_like_phrasing():
-    """'movies like X' resolves seed title X and returns media_strip (similar-movies intent)."""
+    """'movies like X' resolves seed title X and returns media_strip."""
     result = enrich("movies like The Matrix")
     assert result.media_strip.get("movie_title")
     assert "Matrix" in (result.media_strip.get("movie_title") or "")
@@ -180,7 +173,6 @@ def test_attach_media_x_and_y_uses_batch():
     assert result["media_strip"].get("movie_title")
     assert "media_candidates" in result
     assert len(result["media_candidates"]) >= 1
-    # Should have 2 cards total (strip + at least 1 candidate)
     total = 1 + len(result["media_candidates"])
     assert total >= 2
 
@@ -188,7 +180,7 @@ def test_attach_media_x_and_y_uses_batch():
 def test_enrich_batch_graceful_degradation():
     """One failing title does not fail the batch; returns cards for resolved titles."""
     cards = enrich_batch(["Inception", "xyznonexistent123", "The Matrix"])
-    assert len(cards) >= 2  # At least Inception and The Matrix
+    assert len(cards) >= 2
     titles = [c["movie_title"] for c in cards]
     assert "Inception" in titles or any("Inception" in t for t in titles)
     assert any("Matrix" in t for t in titles)

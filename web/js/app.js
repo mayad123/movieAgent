@@ -191,13 +191,22 @@
             whereToWatchDrawerResults.classList.remove('hidden');
             whereToWatchDrawerResults.innerHTML = '';
             if (hasOffers) {
-                var accessOrder = ['subscription', 'free', 'rent', 'buy', 'tve', 'unknown'];
+                var accessOrder = ['subscription', 'free', 'rent', 'buy', 'tve', 'other', 'unknown'];
                 var byType = {};
                 s.results.offers.forEach(function (offer) {
                     var at = (offer.accessType || 'unknown').toLowerCase();
+                    if (at === 'rental') at = 'rent';
+                    if (at === 'purchase') at = 'buy';
                     if (!byType[at]) byType[at] = [];
                     byType[at].push(offer);
                 });
+                var region = (s.results.region && String(s.results.region).trim()) || '';
+                if (region) {
+                    var regionLine = document.createElement('p');
+                    regionLine.className = 'where-to-watch-drawer-region';
+                    regionLine.textContent = 'Results for ' + region;
+                    whereToWatchDrawerResults.appendChild(regionLine);
+                }
                 accessOrder.forEach(function (at) {
                     if (!byType[at] || byType[at].length === 0) return;
                     var groupTitle = document.createElement('div');
@@ -227,22 +236,31 @@
                             price.textContent = (offer.price.currency || 'USD') + ' ' + Number(offer.price.amount);
                             info.appendChild(price);
                         }
-                        li.appendChild(info);
                         var url = (offer.webUrl && offer.webUrl.trim()) || (offer.iosUrl && offer.iosUrl.trim()) || (offer.androidUrl && offer.androidUrl.trim());
                         if (url) {
-                            var openLink = document.createElement('a');
-                            openLink.className = 'where-to-watch-offer-open';
-                            openLink.href = url;
-                            openLink.target = '_blank';
-                            openLink.rel = 'noopener';
-                            openLink.textContent = 'Open';
-                            li.appendChild(openLink);
+                            var rowLink = document.createElement('a');
+                            rowLink.className = 'where-to-watch-offer-link';
+                            rowLink.href = url;
+                            rowLink.target = '_blank';
+                            rowLink.rel = 'noopener';
+                            rowLink.setAttribute('aria-label', 'Open ' + ((offer.provider && offer.provider.name) || 'provider'));
+                            rowLink.appendChild(info);
+                            li.appendChild(rowLink);
+                        } else {
+                            li.appendChild(info);
                         }
                         list.appendChild(li);
                     });
                     whereToWatchDrawerResults.appendChild(list);
                 });
-            } else {
+            } else if (hasGroups) {
+                var region = (s.results.region && String(s.results.region).trim()) || '';
+                if (region) {
+                    var regionLine = document.createElement('p');
+                    regionLine.className = 'where-to-watch-drawer-region';
+                    regionLine.textContent = 'Results for ' + region;
+                    whereToWatchDrawerResults.appendChild(regionLine);
+                }
                 s.results.groups.forEach(function (group) {
                     var groupTitle = document.createElement('div');
                     groupTitle.className = 'where-to-watch-group-title';
@@ -265,16 +283,18 @@
                             price.textContent = (offer.price.currency || 'USD') + ' ' + Number(offer.price.amount);
                             info.appendChild(price);
                         }
-                        li.appendChild(info);
                         var url = offer.webUrl || offer.deeplink;
                         if (url) {
-                            var openLink = document.createElement('a');
-                            openLink.className = 'where-to-watch-offer-open';
-                            openLink.href = url;
-                            openLink.target = '_blank';
-                            openLink.rel = 'noopener';
-                            openLink.textContent = 'Open';
-                            li.appendChild(openLink);
+                            var rowLink = document.createElement('a');
+                            rowLink.className = 'where-to-watch-offer-link';
+                            rowLink.href = url;
+                            rowLink.target = '_blank';
+                            rowLink.rel = 'noopener';
+                            rowLink.setAttribute('aria-label', 'Open ' + (offer.providerName || (offer.provider && offer.provider.name) || 'provider'));
+                            rowLink.appendChild(info);
+                            li.appendChild(rowLink);
+                        } else {
+                            li.appendChild(info);
                         }
                         list.appendChild(li);
                     });
@@ -1401,10 +1421,12 @@
     var addIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
     var messageIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
     var whereToWatchIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    var infoIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
 
-    /* One hero-sized card: poster + overlay (add / add to conversation) + label. */
+    /* One hero-sized card: poster + optional overlay (add / conversation / where to watch) + label. */
     function createHeroCard(item, options) {
         options = options || {};
+        var noOverlay = options.noOverlay === true;
         var title = String((item.movie_title || item.title || '')).trim();
         if (!title) return null;
         var labelText = title;
@@ -1447,79 +1469,96 @@
             poster.innerHTML = '<span class="media-strip-placeholder-title">' + escapeHtml(title) + '</span><span class="media-strip-placeholder-caption">No image</span>';
         }
 
-        var topRightOverlay = document.createElement('div');
-        topRightOverlay.className = 'media-strip-card-overlay media-strip-card-overlay--top-right';
-        var whereToWatchBtn = document.createElement('button');
-        whereToWatchBtn.type = 'button';
-        whereToWatchBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
-        whereToWatchBtn.setAttribute('data-tooltip', 'Where to watch');
-        whereToWatchBtn.setAttribute('title', 'Where to watch');
-        whereToWatchBtn.setAttribute('aria-label', 'Where to watch');
-        whereToWatchBtn.innerHTML = whereToWatchIconSvg;
-        whereToWatchBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            onWhereToWatch({
-                title: title,
-                year: item.year,
-                pageUrl: href || undefined,
-                pageId: pageIdFromUrl(href || '') || undefined,
-                tmdbId: item.tmdbId || item.tmdb_id || undefined,
-                mediaType: item.mediaType || item.media_type || undefined
-            });
-        });
-        topRightOverlay.appendChild(whereToWatchBtn);
-        poster.appendChild(topRightOverlay);
-
-        var overlay = document.createElement('div');
-        overlay.className = 'media-strip-card-overlay';
-        var pageUrl = href || '';
-        var pageId = pageIdFromUrl(pageUrl);
-        var isInCollection = isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
-        var addBtn = document.createElement('button');
-        addBtn.type = 'button';
-        addBtn.className = 'media-strip-card-action' + (isInCollection ? ' is-added' : '');
-        addBtn.setAttribute('data-tooltip', isInCollection ? 'Already Added' : 'Add to Collection');
-        addBtn.setAttribute('title', isInCollection ? 'Already Added' : 'Add to Collection');
-        addBtn.setAttribute('aria-label', isInCollection ? 'Already Added' : 'Add to Collection');
-        if (isInCollection) addBtn.disabled = true;
-        addBtn.innerHTML = addIconSvg;
-        addBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (isInCollection) return false;
-            addToCollection(title, imgUrl, pageUrl || undefined, pageId || undefined);
-            return false;
-        });
-        var msgBtn = document.createElement('button');
-        msgBtn.type = 'button';
-        msgBtn.className = 'media-strip-card-action';
-        msgBtn.setAttribute('data-tooltip', 'Add to Conversation');
-        msgBtn.setAttribute('title', 'Add to Conversation');
-        msgBtn.setAttribute('aria-label', 'Add to Conversation');
-        msgBtn.innerHTML = messageIconSvg;
-        msgBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (typeof addSubConversationFromPoster === 'function') {
-                addSubConversationFromPoster({
+        if (!noOverlay) {
+            var topRightOverlay = document.createElement('div');
+            topRightOverlay.className = 'media-strip-card-overlay media-strip-card-overlay--top-right';
+            if (href) {
+                var infoBtn = document.createElement('button');
+                infoBtn.type = 'button';
+                infoBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below media-strip-card-action--info';
+                infoBtn.setAttribute('data-tooltip', 'More info');
+                infoBtn.setAttribute('title', 'More info');
+                infoBtn.setAttribute('aria-label', 'More info');
+                infoBtn.innerHTML = infoIconSvg;
+                infoBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.open(href, '_blank', 'noopener');
+                });
+                topRightOverlay.appendChild(infoBtn);
+            }
+            var whereToWatchBtn = document.createElement('button');
+            whereToWatchBtn.type = 'button';
+            whereToWatchBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
+            whereToWatchBtn.setAttribute('data-tooltip', 'Where to watch');
+            whereToWatchBtn.setAttribute('title', 'Where to watch');
+            whereToWatchBtn.setAttribute('aria-label', 'Where to watch');
+            whereToWatchBtn.innerHTML = whereToWatchIconSvg;
+            whereToWatchBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                onWhereToWatch({
                     title: title,
                     year: item.year,
-                    pageUrl: pageUrl || undefined,
-                    pageId: pageId || undefined,
-                    imageUrl: imgUrl || undefined
+                    pageUrl: href || undefined,
+                    pageId: pageIdFromUrl(href || '') || undefined,
+                    tmdbId: item.tmdbId || item.tmdb_id || undefined,
+                    mediaType: item.mediaType || item.media_type || undefined
                 });
+            });
+            topRightOverlay.appendChild(whereToWatchBtn);
+            poster.appendChild(topRightOverlay);
+
+            var overlay = document.createElement('div');
+            overlay.className = 'media-strip-card-overlay';
+            var pageUrl = href || '';
+            var pageId = pageIdFromUrl(pageUrl);
+            var isInCollection = isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
+            var addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below' + (isInCollection ? ' is-added' : '');
+            addBtn.setAttribute('data-tooltip', isInCollection ? 'Already Added' : 'Add to Collection');
+            addBtn.setAttribute('title', isInCollection ? 'Already Added' : 'Add to Collection');
+            addBtn.setAttribute('aria-label', isInCollection ? 'Already Added' : 'Add to Collection');
+            if (isInCollection) addBtn.disabled = true;
+            addBtn.innerHTML = addIconSvg;
+            addBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isInCollection) return false;
+                addToCollection(title, imgUrl, pageUrl || undefined, pageId || undefined);
+                return false;
+            });
+            var msgBtn = document.createElement('button');
+            msgBtn.type = 'button';
+            msgBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
+            msgBtn.setAttribute('data-tooltip', 'Talk More About This');
+            msgBtn.setAttribute('title', 'Talk More About This');
+            msgBtn.setAttribute('aria-label', 'Talk More About This');
+            msgBtn.innerHTML = messageIconSvg;
+            msgBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof addSubConversationFromPoster === 'function') {
+                    addSubConversationFromPoster({
+                        title: title,
+                        year: item.year,
+                        pageUrl: pageUrl || undefined,
+                        pageId: pageId || undefined,
+                        imageUrl: imgUrl || undefined
+                    });
+                }
+            });
+            overlay.appendChild(addBtn);
+            overlay.appendChild(msgBtn);
+            if (isInCollection) {
+                var addedLabel = document.createElement('span');
+                addedLabel.className = 'media-strip-card-already-added';
+                addedLabel.textContent = 'Already Added';
+                overlay.appendChild(addedLabel);
             }
-        });
-        overlay.appendChild(addBtn);
-        overlay.appendChild(msgBtn);
-        if (isInCollection) {
-            var addedLabel = document.createElement('span');
-            addedLabel.className = 'media-strip-card-already-added';
-            addedLabel.textContent = 'Already Added';
-            overlay.appendChild(addedLabel);
+            poster.appendChild(overlay);
         }
-        poster.appendChild(overlay);
         card.appendChild(poster);
 
         var lbl = document.createElement('span');
@@ -1667,23 +1706,41 @@
             }
             var posterWrap = document.createElement('div');
             posterWrap.className = 'poster-carousel-wheel-poster-wrap';
+            var posterInner = document.createElement('div');
+            posterInner.className = 'poster-carousel-wheel-poster-inner';
             if (imgUrl) {
                 var img = document.createElement('img');
                 img.src = imgUrl;
                 img.alt = title;
                 img.loading = 'lazy';
-                posterWrap.appendChild(img);
+                posterInner.appendChild(img);
             } else {
                 var ph = document.createElement('div');
                 ph.className = 'poster-carousel-wheel-item-placeholder';
                 ph.textContent = title;
-                posterWrap.appendChild(ph);
+                posterInner.appendChild(ph);
             }
+            posterWrap.appendChild(posterInner);
             var pageUrl = href || '';
             var pageId = (it.pageId != null && String(it.pageId).trim()) ? String(it.pageId).trim() : undefined;
             var isInCollection = typeof isPosterInActiveCollection === 'function' && isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
             var topRightOverlayCarousel = document.createElement('div');
             topRightOverlayCarousel.className = 'poster-carousel-wheel-overlay poster-carousel-wheel-overlay--top-right';
+            if (href) {
+                var infoBtnCarousel = document.createElement('button');
+                infoBtnCarousel.type = 'button';
+                infoBtnCarousel.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below poster-carousel-wheel-action--info';
+                infoBtnCarousel.setAttribute('data-tooltip', 'More info');
+                infoBtnCarousel.setAttribute('title', 'More info');
+                infoBtnCarousel.setAttribute('aria-label', 'More info');
+                infoBtnCarousel.innerHTML = infoIconSvg;
+                infoBtnCarousel.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.open(href, '_blank', 'noopener');
+                });
+                topRightOverlayCarousel.appendChild(infoBtnCarousel);
+            }
             var whereToWatchEl = document.createElement('button');
             whereToWatchEl.type = 'button';
             whereToWatchEl.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
@@ -1710,7 +1767,7 @@
             overlay.className = 'poster-carousel-wheel-overlay';
             var addBtn = document.createElement('button');
             addBtn.type = 'button';
-            addBtn.className = 'poster-carousel-wheel-action' + (isInCollection ? ' is-added' : '');
+            addBtn.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below' + (isInCollection ? ' is-added' : '');
             addBtn.setAttribute('data-tooltip', isInCollection ? 'Already Added' : 'Add to Collection');
             addBtn.setAttribute('title', isInCollection ? 'Already Added' : 'Add to Collection');
             addBtn.setAttribute('aria-label', isInCollection ? 'Already Added' : 'Add to Collection');
@@ -1726,10 +1783,10 @@
             })(title, imgUrl, pageUrl, pageId, isInCollection);
             var msgBtn = document.createElement('button');
             msgBtn.type = 'button';
-            msgBtn.className = 'poster-carousel-wheel-action';
-            msgBtn.setAttribute('data-tooltip', 'Add to Conversation');
-            msgBtn.setAttribute('title', 'Add to Conversation');
-            msgBtn.setAttribute('aria-label', 'Add to Conversation');
+            msgBtn.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
+            msgBtn.setAttribute('data-tooltip', 'Talk More About This');
+            msgBtn.setAttribute('title', 'Talk More About This');
+            msgBtn.setAttribute('aria-label', 'Talk More About This');
             msgBtn.innerHTML = messageIconSvg;
             (function (itemTitle, itemYear, itemPageUrl, itemPageId, itemImgUrl) {
                 msgBtn.addEventListener('click', function (e) {
@@ -1843,6 +1900,160 @@
         return wrap;
     }
 
+    /* Hero + scenes wheel: first/center item largest, others smaller toward edges; arrows move selection. */
+    function createHeroAndScenesCarousel(items) {
+        if (!items || items.length === 0) return null;
+        var visibleWindow = 2;
+        var root = document.createElement('div');
+        root.className = 'hero-scenes-carousel-wrap';
+        var inner = document.createElement('div');
+        inner.className = 'hero-scenes-carousel-inner';
+        var track = document.createElement('div');
+        track.className = 'hero-scenes-carousel-track';
+
+        var currentIndex = 0;
+        var itemEls = [];
+
+        function readWheelTokens() {
+            var s = root.isConnected ? window.getComputedStyle(root) : (document.documentElement ? window.getComputedStyle(document.documentElement) : null);
+            if (!s) {
+                return { centerScale: 1, neighborScale: 0.82, farScale: 0.65, centerOpacity: 1, neighborOpacity: 0.88, farOpacity: 0.55 };
+            }
+            var parseNum = function (val, fallback) { var n = parseFloat(String(val).trim()); return isNaN(n) ? fallback : n; };
+            return {
+                centerScale: parseNum(s.getPropertyValue('--carousel-center-scale'), 1),
+                neighborScale: parseNum(s.getPropertyValue('--carousel-neighbor-scale'), 0.82),
+                farScale: parseNum(s.getPropertyValue('--carousel-far-scale'), 0.65),
+                centerOpacity: parseNum(s.getPropertyValue('--carousel-center-opacity'), 1),
+                neighborOpacity: parseNum(s.getPropertyValue('--carousel-neighbor-opacity'), 0.88),
+                farOpacity: parseNum(s.getPropertyValue('--carousel-far-opacity'), 0.55)
+            };
+        }
+        function getScaleAndOpacity(distance, tokens) {
+            var d = Math.abs(distance);
+            if (d === 0) return { scale: tokens.centerScale, opacity: tokens.centerOpacity };
+            if (d === 1) return { scale: tokens.neighborScale, opacity: tokens.neighborOpacity };
+            return { scale: tokens.farScale, opacity: tokens.farOpacity };
+        }
+        function applyTransforms() {
+            var tokens = readWheelTokens();
+            var n = itemEls.length;
+            for (var i = 0; i < n; i++) {
+                var distance = i - currentIndex;
+                var so = getScaleAndOpacity(distance, tokens);
+                var z = 10 + visibleWindow - Math.abs(distance);
+                itemEls[i].style.setProperty('--carousel-offset', String(distance));
+                itemEls[i].style.setProperty('--carousel-item-scale', String(so.scale));
+                itemEls[i].style.setProperty('--carousel-item-opacity', String(so.opacity));
+                itemEls[i].style.zIndex = z;
+                itemEls[i].setAttribute('aria-current', i === currentIndex ? 'true' : 'false');
+            }
+            leftBtn.disabled = currentIndex <= 0;
+            rightBtn.disabled = currentIndex >= n - 1;
+        }
+
+        var displayIndex = 0;
+        items.forEach(function (it) {
+            var kind = (it.kind && String(it.kind).trim()) || 'poster';
+            var itemEl = document.createElement('div');
+            var idx = displayIndex;
+            itemEl.className = 'hero-scenes-wheel-item hero-scenes-wheel-item--' + kind;
+            itemEl.setAttribute('data-index', String(idx));
+            itemEl.setAttribute('aria-current', idx === 0 ? 'true' : 'false');
+            if (kind === 'scene') {
+                var imageUrl = (it.imageUrl && String(it.imageUrl).trim()) || '';
+                if (!imageUrl) return;
+                var caption = (it.caption && String(it.caption).trim()) || '';
+                var sourceUrl = (it.sourceUrl && String(it.sourceUrl).trim()) || '';
+                var card = document.createElement('div');
+                card.className = 'attachment-scene-card attachment-scene-card--wheel';
+                var imgWrap = document.createElement('div');
+                imgWrap.className = 'attachment-scene-card-img-wrap';
+                var img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = caption || 'Scene';
+                img.loading = 'lazy';
+                imgWrap.appendChild(img);
+                card.appendChild(imgWrap);
+                if (caption) {
+                    var capEl = document.createElement('span');
+                    capEl.className = 'media-strip-card-label attachment-scene-caption';
+                    capEl.textContent = caption;
+                    card.appendChild(capEl);
+                }
+                if (sourceUrl) {
+                    var link = document.createElement('a');
+                    link.href = sourceUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.className = 'hero-scenes-wheel-item-link';
+                    link.appendChild(card);
+                    itemEl.appendChild(link);
+                } else {
+                    itemEl.appendChild(card);
+                }
+            } else {
+                var heroShape = attachmentItemToHeroShape(it);
+                if (!heroShape) return;
+                var heroWrap = document.createElement('div');
+                heroWrap.className = 'hero-scenes-wheel-poster-wrap';
+                var heroCard = createHeroCard(heroShape, { link: !!heroShape.page_url });
+                if (heroCard) heroWrap.appendChild(heroCard);
+                itemEl.appendChild(heroWrap);
+            }
+            itemEl.addEventListener('click', function (e) {
+                var i = parseInt(itemEl.getAttribute('data-index'), 10);
+                if (i !== currentIndex) {
+                    e.preventDefault();
+                    currentIndex = i;
+                    applyTransforms();
+                }
+            });
+            track.appendChild(itemEl);
+            itemEls.push(itemEl);
+            displayIndex++;
+        });
+
+        if (itemEls.length === 0) return root;
+
+        var leftBtn = document.createElement('button');
+        leftBtn.type = 'button';
+        leftBtn.className = 'hero-scenes-carousel-arrow hero-scenes-carousel-arrow-left';
+        leftBtn.setAttribute('aria-label', 'Previous');
+        leftBtn.innerHTML = arrowLeftSvg;
+        leftBtn.addEventListener('click', function () {
+            if (currentIndex <= 0) return;
+            currentIndex--;
+            applyTransforms();
+        });
+        var rightBtn = document.createElement('button');
+        rightBtn.type = 'button';
+        rightBtn.className = 'hero-scenes-carousel-arrow hero-scenes-carousel-arrow-right';
+        rightBtn.setAttribute('aria-label', 'Next');
+        rightBtn.innerHTML = arrowRightSvg;
+        rightBtn.addEventListener('click', function () {
+            if (currentIndex >= itemEls.length - 1) return;
+            currentIndex++;
+            applyTransforms();
+        });
+
+        root.appendChild(leftBtn);
+        root.appendChild(rightBtn);
+        inner.appendChild(track);
+        root.appendChild(inner);
+
+        applyTransforms();
+        requestAnimationFrame(function () {
+            if (root.isConnected) {
+                applyTransforms();
+                requestAnimationFrame(function () {
+                    root.classList.add('hero-scenes-carousel-wrap--animated');
+                });
+            }
+        });
+        return root;
+    }
+
     /* Render attachments.sections (primary_movie, movie_list, did_you_mean, scenes). Backward compat: fallback to media_strip/media_candidates. */
     function createAttachmentsFromSections(sections) {
         if (!sections || sections.length === 0) return null;
@@ -1863,40 +2074,58 @@
             sectionEl.appendChild(heading);
 
             if (type === 'primary_movie') {
+                var hasScenes = items.some(function (it) { return (it.kind && String(it.kind).trim()) === 'scene'; });
+                if (hasScenes) {
+                    var heroScenesCarousel = createHeroAndScenesCarousel(items);
+                    if (heroScenesCarousel) sectionEl.appendChild(heroScenesCarousel);
+                } else {
+                    var carouselItems = items.map(function (it) {
+                        return {
+                            title: (it.title != null && String(it.title).trim()) || '',
+                            year: typeof it.year === 'number' ? it.year : undefined,
+                            imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
+                            sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || '',
+                            tmdbId: it.tmdbId || it.tmdb_id || undefined,
+                            mediaType: it.mediaType || it.media_type || undefined,
+                            pageId: it.pageId || it.page_id || undefined
+                        };
+                    }).filter(function (it) { return it.title; });
+                    if (carouselItems.length > 0) {
+                        var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
+                        sectionEl.appendChild(carousel);
+                    }
+                }
+            } else if (type === 'did_you_mean' || type === 'movie_list') {
+                /* Same wheel carousel as single-movie: center largest, arrows to navigate; works for 2, 9, 20, 30+ movies. */
                 var carouselItems = items.map(function (it) {
+                    var heroShape = attachmentItemToHeroShape(it);
+                    if (!heroShape) return null;
                     return {
-                        title: (it.title != null && String(it.title).trim()) || '',
-                        year: typeof it.year === 'number' ? it.year : undefined,
-                        imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
-                        sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || '',
-                        tmdbId: it.tmdbId || it.tmdb_id || undefined,
-                        mediaType: it.mediaType || it.media_type || undefined,
+                        title: heroShape.movie_title || '',
+                        year: heroShape.year,
+                        imageUrl: heroShape.primary_image_url || '',
+                        sourceUrl: heroShape.page_url || '',
+                        tmdbId: heroShape.tmdbId || undefined,
+                        mediaType: heroShape.mediaType || undefined,
                         pageId: it.pageId || it.page_id || undefined
                     };
-                }).filter(function (it) { return it.title; });
+                }).filter(function (it) { return it && it.title; });
                 if (carouselItems.length > 0) {
                     var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
                     sectionEl.appendChild(carousel);
                 }
-            } else if (type === 'did_you_mean' || type === 'movie_list') {
-                var layout = document.createElement('div');
-                layout.className = 'media-strip-layout';
-                items.forEach(function (it) {
-                    var heroShape = attachmentItemToHeroShape(it);
-                    if (heroShape) {
-                        var card = createHeroCard(heroShape, { link: !!heroShape.page_url });
-                        if (card) layout.appendChild(card);
-                    }
-                });
-                sectionEl.appendChild(layout);
             } else if (type === 'scenes') {
-                var layout = document.createElement('div');
-                layout.className = 'media-strip-layout';
-                items.forEach(function (it) {
-                    var card = createSceneCard(it);
-                    if (card) layout.appendChild(card);
-                });
-                sectionEl.appendChild(layout);
+                var seenSceneUrls = {};
+                var uniqueItems = items.filter(function (it) {
+                    var url = (it.imageUrl && String(it.imageUrl).trim()) || '';
+                    if (!url || seenSceneUrls[url]) return false;
+                    seenSceneUrls[url] = true;
+                    return true;
+                }).map(function (it) { var o = {}; for (var k in it) o[k] = it[k]; o.kind = 'scene'; return o; });
+                if (uniqueItems.length > 0) {
+                    var scenesCarousel = createHeroAndScenesCarousel(uniqueItems);
+                    if (scenesCarousel) sectionEl.appendChild(scenesCarousel);
+                }
             } else {
                 var carouselItemsOther = items.map(function (it) {
                     var heroShape = attachmentItemToHeroShape(it);

@@ -305,7 +305,7 @@ class CineMind:
                     "skip_reason": reason
                 }
                 
-                # Wikipedia-only media enrichment (skip in playground_mode; playground applies its own rule)
+                # Media enrichment via TMDB (skip in playground_mode; playground applies its own rule)
                 if not playground_mode:
                     await asyncio.to_thread(attach_media_to_result, user_query, result)
 
@@ -1218,7 +1218,7 @@ class CineMind:
                 if meta.get("similar_movies"):
                     result["recommended_movies"] = meta["similar_movies"]
 
-                # Wikipedia-only media enrichment (skip in playground_mode; playground applies its own rule)
+                # Media enrichment via TMDB (skip in playground_mode; playground applies its own rule)
                 if not playground_mode:
                     await asyncio.to_thread(attach_media_to_result, user_query, result)
 

@@ -82,6 +82,23 @@ def _split_and(titles: list[str]) -> list[str]:
     return out
 
 
+def _split_comma_separated(text: str) -> list[str]:
+    """
+    Split text on commas into candidate titles; normalize each part.
+    E.g. "Avatar, Inception, Kung Fu Panda" -> ["Avatar", "Inception", "Kung Fu Panda"].
+    Then expand any part that is "X and Y" via _split_and.
+    """
+    if not text or not text.strip():
+        return []
+    parts = [p.strip() for p in text.split(",") if (p or "").strip()]
+    parts = [_normalize_phrase(p) for p in parts if len(_normalize_phrase(p)) >= 2]
+    # Expand "X and Y" within any part
+    expanded: list[str] = []
+    for p in parts:
+        expanded.extend(_split_and([p]))
+    return [s for s in expanded if s]
+
+
 def extract_movie_titles(user_query: str) -> TitleExtractionResult:
     """
     Extract candidate movie title(s) from a user query using deterministic patterns.
@@ -132,7 +149,15 @@ def extract_movie_titles(user_query: str) -> TitleExtractionResult:
                 intent=intent,
             )
 
-    # No prefix matched: check for "X and Y" (direct multi-title)
+    # No prefix matched: check for comma-separated list (e.g. "Avatar, Inception, Kung Fu Panda")
+    comma_split = _split_comma_separated(q)
+    if len(comma_split) >= 2:
+        return TitleExtractionResult(
+            titles=tuple(comma_split),
+            reason="comma_separated",
+            intent="compare",
+        )
+    # Check for "X and Y" (direct multi-title)
     split = _split_and([q])
     if len(split) >= 2:
         return TitleExtractionResult(
