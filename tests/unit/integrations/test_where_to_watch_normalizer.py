@@ -11,7 +11,7 @@ _src = Path(__file__).resolve().parent.parent.parent / "src"
 if _src.exists() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from integrations.where_to_watch_normalizer import normalize_where_to_watch_response
+from integrations.watchmode.normalizer import normalize_where_to_watch_response
 
 
 def test_empty_groups_returns_title_region_offers():

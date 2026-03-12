@@ -102,7 +102,7 @@ class ScenesProviderTMDB:
         if not self._token or not (title or "").strip():
             return []
         try:
-            from .tmdb_resolver import resolve_movie
+            from .resolver import resolve_movie
             result = resolve_movie(
                 (title or "").strip(),
                 year=year,
@@ -152,7 +152,7 @@ class ScenesProviderTMDB:
                 key=lambda b: (-(b.get("vote_average") or 0), -(b.get("vote_count") or 0)),
             )
 
-            from .tmdb_image_config import get_config, build_image_url, SIZE_BACKDROP_GALLERY
+            from .image_config import get_config, build_image_url, SIZE_BACKDROP_GALLERY
             img_config = get_config(self._token, timeout=self._timeout)
             source_url = f"{self.MOVIE_PAGE_BASE}/{movie_id}"
             seen_urls: set[str] = set()

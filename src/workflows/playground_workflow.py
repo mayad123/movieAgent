@@ -7,7 +7,7 @@ Callers (API, tests) use this entry point so wiring stays thin.
 from typing import Any, Dict, Optional
 
 # Implementation remains in cinemind; workflow layer delegates
-from cinemind.playground import run_playground_query
+from cinemind.agent.playground import run_playground_query
 
 
 async def run_playground(

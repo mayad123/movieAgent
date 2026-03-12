@@ -30,21 +30,21 @@ from config import (
     REAL_AGENT_MAX_TOKENS,
     REAL_AGENT_MAX_TOOL_CALLS,
 )
-from .search_engine import SearchEngine, MovieDataAggregator
-from .database import Database
-from .observability import Observability, calculate_openai_cost
-from .tagging import RequestTagger, HybridClassifier, classify_with_llm
-from .cache import SemanticCache
-from .source_policy import SourcePolicy
-from .intent_extraction import IntentExtractor
-from .verification import FactVerifier, VerifiedFact
-from .request_plan import RequestPlanner, RequestPlan
-from .candidate_extraction import CandidateExtractor
-from .tool_plan import ToolPlanner, ToolPlan
-from .prompting import PromptBuilder, EvidenceBundle, get_template
-from .prompting.output_validator import OutputValidator
-from .llm_client import LLMClient, OpenAILLMClient
-from .media_enrichment import attach_media_to_result
+from ..search.search_engine import SearchEngine, MovieDataAggregator
+from ..infrastructure.database import Database
+from ..infrastructure.observability import Observability, calculate_openai_cost
+from ..infrastructure.tagging import RequestTagger, HybridClassifier, classify_with_llm
+from ..infrastructure.cache import SemanticCache
+from ..planning.source_policy import SourcePolicy
+from ..extraction.intent_extraction import IntentExtractor
+from ..verification.fact_verifier import FactVerifier, VerifiedFact
+from ..planning.request_plan import RequestPlanner, RequestPlan
+from ..extraction.candidate_extraction import CandidateExtractor
+from ..planning.tool_plan import ToolPlanner, ToolPlan
+from ..prompting import PromptBuilder, EvidenceBundle, get_template
+from ..prompting.output_validator import OutputValidator
+from ..llm.client import LLMClient, OpenAILLMClient
+from ..media.media_enrichment import attach_media_to_result
 
 # Configure logging (simple format, request_id added in observability)
 logging.basicConfig(
@@ -342,7 +342,7 @@ class CineMind:
             structured_intent = None
             if request_plan:
                 # Reconstruct StructuredIntent from RequestPlan (no OpenAI call needed)
-                from .intent_extraction import StructuredIntent
+                from ..extraction.intent_extraction import StructuredIntent
                 # Use typed entities from RequestPlan (preferred over flat list)
                 typed_entities = request_plan.entities_typed if hasattr(request_plan, 'entities_typed') and request_plan.entities_typed else {"movies": [], "people": []}
                 # Ensure required keys exist
@@ -395,7 +395,7 @@ class CineMind:
             kaggle_search_results = []
             if structured_intent:
                 # Try Kaggle retrieval adapter (configurable, with timeout)
-                from .kaggle_retrieval_adapter import get_kaggle_adapter
+                from ..search.kaggle_retrieval_adapter import get_kaggle_adapter
                 # Get Kaggle adapter (can be enabled/disabled via environment or config)
                 kaggle_enabled = os.getenv("CINEMIND_KAGGLE_ENABLED", "true").lower() == "true"
                 kaggle_timeout = float(os.getenv("CINEMIND_KAGGLE_TIMEOUT", "5.0"))
@@ -456,7 +456,7 @@ class CineMind:
                 
                 # Determine override reason for Tavily (only valid reasons can override skip_tavily)
                 override_reason = None
-                from .search_engine import TavilyOverrideReason
+                from ..search.search_engine import TavilyOverrideReason
                 
                 # Check for disambiguation_needed
                 if structured_intent and hasattr(structured_intent, 'requires_disambiguation') and structured_intent.requires_disambiguation:
@@ -533,7 +533,7 @@ class CineMind:
                         # For fact-based queries, extract and verify candidates to check if we have usable evidence
                         if request_type in ["info", "fact-check"] and structured_intent:
                             # Convert search results to SourceMetadata for candidate extraction
-                            from .source_policy import SourceMetadata
+                            from ..planning.source_policy import SourceMetadata
                             source_metadata_list = []
                             for r in search_results:
                                 tier = self.source_policy.classify_source(
@@ -734,7 +734,7 @@ class CineMind:
                     # Perform "candidate → verify → answer" pattern for fact-based queries
                     if request_type in ["info", "fact-check"] and structured_intent:
                         # Convert search results to SourceMetadata for verification
-                        from .source_policy import SourceMetadata, SourceTier
+                        from ..planning.source_policy import SourceMetadata, SourceTier
                         source_metadata_list = []
                         for r in search_results:
                             tier = self.source_policy.classify_source(

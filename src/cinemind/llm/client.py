@@ -49,7 +49,7 @@ class FakeLLMClient(LLMClient):
     Returns predetermined responses based on intent and messages.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize fake LLM client."""
         pass
     
@@ -454,7 +454,7 @@ class FakeLLMClient(LLMClient):
 class OpenAILLMClient(LLMClient):
     """Wrapper for OpenAI client to match LLMClient interface."""
     
-    def __init__(self, openai_client):
+    def __init__(self, openai_client: Any) -> None:
         """
         Initialize OpenAI LLM client wrapper.
         

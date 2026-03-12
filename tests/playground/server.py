@@ -182,7 +182,7 @@ async def where_to_watch(
     if not is_watchmode_configured():
         return _playground_watchmode_500()
     from integrations.watchmode import get_watchmode_client
-    from integrations.where_to_watch_normalizer import normalize_where_to_watch_response
+    from integrations.watchmode.normalizer import normalize_where_to_watch_response
 
     client = get_watchmode_client()
     if not client:

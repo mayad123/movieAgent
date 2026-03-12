@@ -3,7 +3,7 @@ Tool planning and routing based on freshness requirements.
 Decides which tools to call (or skip) before making any API calls.
 """
 import logging
-from typing import List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict
 from dataclasses import dataclass
 from enum import Enum
 
@@ -39,7 +39,7 @@ class ToolPlan:
     override_used: bool = False  # Whether tool plan decision was overridden
     override_reason: Optional[str] = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
             "use_tavily": self.use_tavily,
@@ -67,7 +67,7 @@ class ToolPlanner:
     # Movie age threshold (years) - movies older than this don't need freshness for stable metadata
     MOVIE_AGE_THRESHOLD = 2  # 2-3 years old = stable
     
-    def __init__(self, current_year: Optional[int] = None):
+    def __init__(self, current_year: Optional[int] = None) -> None:
         """
         Initialize tool planner.
         

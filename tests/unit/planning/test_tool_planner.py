@@ -10,7 +10,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from cinemind.tool_plan import ToolPlanner, ToolPlan
+from cinemind.planning.tool_plan import ToolPlanner, ToolPlan
 
 
 class TestDirectorInfoFreshness:

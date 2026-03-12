@@ -9,14 +9,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media_enrichment import (
+from cinemind.media.media_enrichment import (
     enrich,
     build_attachments_from_media,
     _movie_card_item,
     _same_movie_as_strip,
     MediaEnrichmentResult,
 )
-from cinemind.tmdb_resolver import TMDBResolveResult, TMDBCandidate
+from integrations.tmdb.resolver import TMDBResolveResult, TMDBCandidate
 
 
 def test_same_movie_as_strip_by_tmdb_id():
@@ -37,13 +37,13 @@ def test_same_movie_as_strip_by_title_year():
     assert _same_movie_as_strip(card_other, strip) is False
 
 
-@patch("cinemind.media_enrichment.get_default_media_cache")
-@patch("cinemind.media_enrichment.get_search_phrases", return_value=["Inception"])
+@patch("cinemind.media.media_enrichment.get_default_media_cache")
+@patch("cinemind.media.media_enrichment.get_search_phrases", return_value=["Inception"])
 @patch("config.is_tmdb_enabled", return_value=True)
 @patch("config.get_tmdb_access_token", return_value="token")
-@patch("cinemind.tmdb_image_config.build_image_url", return_value="https://image.tmdb.org/poster.jpg")
-@patch("cinemind.tmdb_image_config.get_config", return_value=MagicMock())
-@patch("cinemind.tmdb_resolver.resolve_movie")
+@patch("integrations.tmdb.image_config.build_image_url", return_value="https://image.tmdb.org/poster.jpg")
+@patch("integrations.tmdb.image_config.get_config", return_value=MagicMock())
+@patch("integrations.tmdb.resolver.resolve_movie")
 def test_hero_not_in_did_you_mean_when_ambiguous(
     mock_resolve, _mock_config, _mock_build_url, _mock_token, _mock_enabled, _mock_phrases, mock_cache
 ):

@@ -11,10 +11,10 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from cinemind.search_engine import SearchEngine, SearchDecision, TavilyOverrideReason
+from cinemind.search.search_engine import SearchEngine, SearchDecision, TavilyOverrideReason
 from cinemind.agent import CineMind
-from cinemind.request_plan import RequestPlan
-from cinemind.source_policy import SourceConstraints
+from cinemind.planning.request_plan import RequestPlan
+from cinemind.planning.source_policy import SourceConstraints
 
 
 class TestKaggleHighCorrelationNoTavily:
@@ -452,7 +452,7 @@ class TestAgentRoutingIntegration:
     @pytest.mark.asyncio
     async def test_agent_routing_kaggle_high_correlation(self, mock_openai_client, mock_kaggle_high_correlation):
         """Test agent-level routing when Kaggle has high correlation."""
-        with patch('cinemind.agent.AsyncOpenAI', return_value=mock_openai_client):
+        with patch('cinemind.agent.core.AsyncOpenAI', return_value=mock_openai_client):
             # Mock Tavily to track calls
             tavily_calls = []
             
@@ -504,7 +504,7 @@ class TestAgentRoutingIntegration:
         ))
         mock_kaggle_empty.correlation_threshold = 0.7
         
-        with patch('cinemind.agent.AsyncOpenAI', return_value=mock_openai_client):
+        with patch('cinemind.agent.core.AsyncOpenAI', return_value=mock_openai_client):
             # Mock Tavily to track calls
             tavily_calls = []
             
@@ -540,7 +540,7 @@ class TestAgentRoutingIntegration:
             agent.planner.plan_request = AsyncMock(return_value=request_plan)
             
             # Mock intent extractor to return structured intent
-            from cinemind.intent_extraction import StructuredIntent
+            from cinemind.extraction.intent_extraction import StructuredIntent
             structured_intent = StructuredIntent(
                 intent="director_info",
                 entities={"movies": ["Unknown Movie"], "people": []},

@@ -28,7 +28,7 @@ class StructuredIntent:
     needs_clarification: bool = False  # True if query is too ambiguous/vague and needs user clarification
     slots: Optional[Dict[str, Optional[str]]] = None  # Award slots: {"award_body": str|null, "award_category": str|null, "award_year_basis": "ceremony_year"|"release_year"|"ambiguous"|null}
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Normalize entities to typed format and validate constraints."""
         # If entities is a list (old format), convert to typed dict
         if isinstance(self.entities, list):
@@ -402,7 +402,7 @@ class IntentExtractor:
     async def extract_smart(
         self, 
         query: str, 
-        client=None, 
+        client: Any = None, 
         request_type: str = "info",
         force_llm: bool = False
     ) -> Tuple[StructuredIntent, str, float]:
@@ -914,7 +914,7 @@ class IntentExtractor:
         
         return constraints
     
-    async def extract_with_llm(self, query: str, client, request_type: str = "info") -> StructuredIntent:
+    async def extract_with_llm(self, query: str, client: Any, request_type: str = "info") -> StructuredIntent:
         """
         Extract structured intent using LLM for better accuracy.
         

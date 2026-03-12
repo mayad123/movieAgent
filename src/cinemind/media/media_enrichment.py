@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .media_cache import MediaCache, get_default_media_cache
-from .title_extraction import get_search_phrases, extract_movie_titles
+from ..extraction.title_extraction import get_search_phrases, extract_movie_titles
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def _build_strip_from_tmdb(
         if hit and cached_url:
             poster_url = cached_url
     if not poster_url and (tr.poster_path or "").strip():
-        from .tmdb_image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
+        from integrations.tmdb.image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
         cfg = get_config(token)
         poster_url = build_image_url((tr.poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
         if cache is not None and poster_url:
@@ -108,7 +108,7 @@ def _build_candidate_from_tmdb(c: Any, token: str = "") -> dict[str, Any]:
     poster_path = getattr(c, "poster_path", None) or (c.get("poster_path") if isinstance(c, dict) else None)
     if (poster_path or "").strip() and token:
         try:
-            from .tmdb_image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
+            from integrations.tmdb.image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
             cfg = get_config(token)
             url = build_image_url((poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
             if url:
@@ -174,7 +174,7 @@ def _enrich_one_title_tmdb(
     if not title:
         return {}
     try:
-        from .tmdb_resolver import resolve_movie
+        from integrations.tmdb.resolver import resolve_movie
         tr = resolve_movie(title, year=None, access_token=token)
         if tr.status == "not_found":
             return {"movie_title": title, "page_url": "#"}
@@ -239,7 +239,7 @@ def enrich(
         return MediaEnrichmentResult(media_strip={}, poster_debug={})
 
     try:
-        from .tmdb_resolver import resolve_movie
+        from integrations.tmdb.resolver import resolve_movie
         for search_text in get_search_phrases(user_query):
             if not (search_text or "").strip():
                 continue
@@ -270,7 +270,7 @@ def enrich(
     if title:
         fallback_strip: dict[str, Any] = {"movie_title": title, "page_url": "#"}
         try:
-            from .tmdb_resolver import resolve_movie
+            from integrations.tmdb.resolver import resolve_movie
             tr = resolve_movie(title, year=None, access_token=token)
             if tr.status != "not_found":
                 fallback_strip, poster_debug = _build_strip_from_tmdb(tr, title, token, cache=media_cache)
@@ -452,7 +452,7 @@ def attach_media_to_result(
     # Priority 3: parse movie titles from agent response text
     response_text = (result.get("response") or result.get("answer") or "").strip()
     if response_text:
-        from .response_movie_extractor import extract_titles_for_enrichment
+        from ..extraction.response_movie_extractor import extract_titles_for_enrichment
         extracted = extract_titles_for_enrichment(response_text)
         if len(extracted) > 1:
             _attach_batch(extracted, result, gallery_label, cache)

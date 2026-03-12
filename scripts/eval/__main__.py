@@ -2,8 +2,8 @@
 CLI entry point for CineMind evaluation tools.
 
 Usage:
-    python -m cinemind.eval list-violations
-    python -m cinemind.eval show-violation --scenario <name>
+    python -m scripts.eval list-violations
+    python -m scripts.eval show-violation --scenario <name>
 """
 import sys
 import argparse
@@ -154,7 +154,7 @@ def cmd_list_violations(args):
         
         print(f"{name:<40} {template_id:<20} {count:<15} {types}")
     
-    print(f"\nUse 'python -m cinemind.eval show-violation --scenario <name>' to see details.")
+    print(f"\nUse 'python -m scripts.eval show-violation --scenario <name>' to see details.")
 
 
 def cmd_show_violation(args):
@@ -242,10 +242,10 @@ def main():
         epilog="""
 Examples:
   # List all scenarios with violations
-  python -m cinemind.eval list-violations
+  python -m scripts.eval list-violations
   
   # Show detailed violation information for a specific scenario
-  python -m cinemind.eval show-violation --scenario director_matrix
+  python -m scripts.eval show-violation --scenario director_matrix
         """
     )
     

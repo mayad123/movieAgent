@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media_focus import get_media_focus, MEDIA_FOCUS_SINGLE, MEDIA_FOCUS_MULTI
+from cinemind.media.media_focus import get_media_focus, MEDIA_FOCUS_SINGLE, MEDIA_FOCUS_MULTI
 
 
 def test_compare_intent_multi():

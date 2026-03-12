@@ -36,6 +36,8 @@ dev = [
     "freezegun>=1.2.0",
     "pyyaml>=6.0.0",
     "ruff>=0.4.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
 ]
 scripts = [
     "matplotlib>=3.7.0",
@@ -90,3 +92,25 @@ known-first-party = ["cinemind", "config", "schemas", "services", "workflows", "
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# mypy  (gradual typing)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false          # gradual: flip to true once coverage grows
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["tests/", "scripts/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "cinemind.planning.*",
+    "cinemind.extraction.*",
+    "cinemind.llm.*",
+    "cinemind.verification.*",
+    "integrations.tmdb.*",
+]
+disallow_untyped_defs = true

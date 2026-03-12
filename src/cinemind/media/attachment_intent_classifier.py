@@ -28,7 +28,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from .response_movie_extractor import ResponseParseResult
+from ..extraction.response_movie_extractor import ResponseParseResult
 
 logger = logging.getLogger(__name__)
 

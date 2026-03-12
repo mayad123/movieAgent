@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 
-# Add src to path (repo root = parent of scripts/)
+# Add src and tests to path (repo root = parent of scripts/)
 _repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_repo_root / "src"))
+sys.path.insert(0, str(_repo_root / "tests"))
 
-from cinemind.test_results_db import TestResultsDB
+from helpers.test_results_db import TestResultsDB
 
 
 def analyze_pass_rates(db: TestResultsDB, days: int = 30):

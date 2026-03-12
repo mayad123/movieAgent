@@ -10,7 +10,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from cinemind.source_policy import SourcePolicy, SourceConstraints, SourceTier, SourceMetadata
+from cinemind.planning.source_policy import SourcePolicy, SourceConstraints, SourceTier, SourceMetadata
 
 
 class TestSourcePolicyFixtures:

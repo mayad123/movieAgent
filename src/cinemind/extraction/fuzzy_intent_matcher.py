@@ -128,7 +128,7 @@ class FuzzyIntentMatcher:
     FUZZY_TYPO_STRENGTH = 0.85  # High confidence for typos
     FUZZY_PARAPHRASE_STRENGTH = 0.80  # Good confidence for paraphrases
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the fuzzy matcher."""
         # Pre-compile regex patterns for performance
         self._compiled_typo_patterns = self._compile_typo_patterns()

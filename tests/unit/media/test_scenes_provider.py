@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.scenes_provider import (
+from integrations.tmdb.scenes import (
     SceneItem,
     ScenesProviderEmpty,
     ScenesProviderTMDB,
@@ -49,7 +49,7 @@ class TestScenesProviderTMDB:
             assert p.fetch_scenes("Inception") == []
 
     def test_returns_normalized_items_on_mock_response(self):
-        from cinemind.tmdb_image_config import TMDBImageConfig, get_config, clear_config_cache
+        from integrations.tmdb.image_config import TMDBImageConfig, get_config, clear_config_cache
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=2)
         search_response = b'{"results":[{"id":27205,"title":"Inception","release_date":"2010-07-16"}]}'
@@ -59,7 +59,7 @@ class TestScenesProviderTMDB:
             backdrop_sizes=["w300", "w780", "w1280", "original"],
             poster_sizes=["w92", "w185", "w500", "original"],
         )
-        with patch("cinemind.tmdb_image_config.get_config", return_value=fixed_config):
+        with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
             with patch("urllib.request.urlopen") as m:
                 m.return_value.__enter__.return_value.read.side_effect = [search_response, images_response]
                 items = p.fetch_scenes("Inception")
@@ -75,7 +75,7 @@ class TestScenesProviderTMDB:
 
     def test_low_resolution_backdrops_filtered_out(self):
         """Backdrops below MIN_BACKDROP_WIDTH/MIN_BACKDROP_HEIGHT are excluded."""
-        from cinemind.tmdb_image_config import TMDBImageConfig, get_config, clear_config_cache
+        from integrations.tmdb.image_config import TMDBImageConfig, get_config, clear_config_cache
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=5)
         search_response = b'{"results":[{"id":1,"title":"X","release_date":"2020-01-01"}]}'
@@ -90,7 +90,7 @@ class TestScenesProviderTMDB:
             backdrop_sizes=["w780"],
             poster_sizes=["w185"],
         )
-        with patch("cinemind.tmdb_image_config.get_config", return_value=fixed_config):
+        with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
             with patch("urllib.request.urlopen") as m:
                 m.return_value.__enter__.return_value.read.side_effect = [search_response, images_response]
                 items = p.fetch_scenes("X")
@@ -100,7 +100,7 @@ class TestScenesProviderTMDB:
 
     def test_uses_bearer_header_not_api_key_in_url(self):
         """TMDB requests use Authorization: Bearer and no token in query string."""
-        from cinemind.scenes_provider import _bearer_headers
+        from integrations.tmdb.scenes import _bearer_headers
         h = _bearer_headers("secret-token")
         assert h["Authorization"] == "Bearer secret-token"
         assert "Accept" in h

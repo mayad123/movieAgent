@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.tmdb_resolver import (
+from integrations.tmdb.resolver import (
     TMDBResolveResult,
     TMDBCandidate,
     resolve_movie,

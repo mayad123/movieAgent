@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.tmdb_image_config import (
+from integrations.tmdb.image_config import (
     TMDBImageConfig,
     fetch_config,
     get_config,
@@ -90,7 +90,7 @@ class TestFetchConfig:
 class TestGetConfigCache:
     def test_cache_cleared(self):
         clear_config_cache()
-        with patch("cinemind.tmdb_image_config.fetch_config") as mock_fetch:
+        with patch("integrations.tmdb.image_config.fetch_config") as mock_fetch:
             mock_fetch.return_value = TMDBImageConfig()
             get_config("t")
             get_config("t")

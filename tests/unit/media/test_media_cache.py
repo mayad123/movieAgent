@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media_cache import MediaCache, TTLCache, get_default_media_cache, set_default_media_cache
+from cinemind.media.media_cache import MediaCache, TTLCache, get_default_media_cache, set_default_media_cache
 
 
 def test_enrich_cache_hit():

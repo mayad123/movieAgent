@@ -1,0 +1,354 @@
+/* --- Main column --- */
+.main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    transition: padding-left 0.2s ease, padding-right 0.2s ease;
+}
+/* Centered container: title and conversation share same width and stay centered */
+.main-center {
+    width: 100%;
+    max-width: min(calc(50% + 384px), 984px);
+    margin: 0 auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    transition: transform 0.2s ease;
+}
+/* Both panels closed: left toggle at screen edge (0); content clear of toggle */
+.app.sidebar-collapsed .main { padding-left: 28px; }
+.app:not(.right-panel-open) .main { padding-right: 28px; }
+/* Both panels open: smaller margin on the right than left */
+.app:not(.sidebar-collapsed).right-panel-open .main { padding-left: 24px; padding-right: 12px; }
+/* Left closed, right open: center content in viewport */
+.app.sidebar-collapsed.right-panel-open .main { padding-left: 97.5px; padding-right: 97.5px; }
+.app.sidebar-collapsed.right-panel-open .main-center { transform: translateX(97.5px); }
+
+/* --- Chat column --- */
+.chat-column {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 40px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+    position: relative;
+    z-index: 0;
+}
+.chat-column::-webkit-scrollbar {
+    width: 1px;
+}
+.chat-column::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chat-column::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0;
+    min-height: 24px;
+    max-height: 5%;
+}
+.chat-column::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.35);
+}
+.chat-inner {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding-bottom: 160px;
+    min-height: 0;
+}
+.chat-column.empty .chat-inner { flex: 1; min-height: 0; }
+.chat-column:not(.empty) .chat-inner { flex: none; }
+
+/* --- Empty state --- */
+.empty-state { text-align: center; padding: 48px 24px; color: #6b7280; }
+.empty-state h2 { font-size: 18px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+.empty-state p { font-size: 14px; line-height: 1.5; }
+.chat-column:not(.empty) .empty-state { display: none; }
+
+/* --- Messages (ChatGPT-like) --- */
+.message { padding: 24px 0; display: flex; gap: 16px; width: 100%; }
+.message.user { flex-direction: row-reverse; }
+.message-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+}
+.message.assistant .message-avatar { background: #0d0d0d; color: #fff; }
+.message.user .message-avatar { background: #4a90e2; color: #fff; }
+.message-content { flex: 1; min-width: 0; max-width: 100%; }
+.message.user .message-content { display: flex; justify-content: flex-end; }
+.message-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+.message.assistant .message-bubble { background: #f7f7f8; color: #0d0d0d; border: 1px solid #e5e5e5; }
+.message.user .message-bubble { background: #0d0d0d; color: #fff; }
+.message-mode-badge-wrap {
+    margin-top: 0.375rem;
+    margin-bottom: 0;
+}
+.message-mode-badge {
+    font-size: 0.5625rem;
+    font-weight: 500;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.message-meta { margin-top: 8px; font-size: 12px; color: #9ca3af; }
+.message.user .message-meta { text-align: right; }
+.metadata-toggle-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    text-decoration: underline;
+}
+.metadata-toggle-btn:hover { color: #6b7280; }
+.message-metadata {
+    margin-top: 8px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    overflow-x: auto;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.message-metadata.hidden { display: none; }
+
+/*
+ * Poster sizes: hero 3× base, candidates 1.5× base, Did you mean 1.25× base.
+ * Single source of truth: --poster-base-width (rem + clamp). No px in poster tokens.
+ * Height is derived from width + --poster-aspect-ratio in poster selectors.
+ *
+ * Scale via data-poster-scale on .app (comfortable | compact):
+ *   Token chain: scale → poster-base-width → hero (3×) / candidate (1.5×).
+ * To add a scale: add --poster-scale-<name> in :root and .app[data-poster-scale="<name>"] { --poster-scale: var(--poster-scale-<name>); }
+ */
+:root {
+    --poster-aspect-ratio: 2 / 3;
+    /* Scale multipliers: 1 = comfortable (default), <1 = compact, >1 = larger */
+    --poster-scale-comfortable: 1;
+    --poster-scale-compact: 0.85;
+    --poster-scale: var(--poster-scale-comfortable);
+    /* Base poster width: single source of truth, responsive clamp in rem only */
+    --poster-base-width: calc(clamp(2rem, 3.5rem, 4.5rem) * var(--poster-scale));
+    /* Hero = 3× base, candidate = 1.5× base, Did you mean = 1.25× base (smaller, more room for text) */
+    --hero-poster-width: calc(var(--poster-base-width) * 3);
+    --candidate-poster-width: calc(var(--poster-base-width) * 1.5);
+    --did-you-mean-poster-width: calc(var(--poster-base-width) * 1.25);
+    /* Poster corner radius: rem-based responsive */
+    --poster-radius: clamp(0.25rem, 0.375rem, 0.5rem);
+}
+.app[data-poster-scale="compact"] { --poster-scale: var(--poster-scale-compact); }
+.app[data-poster-scale="comfortable"] { --poster-scale: var(--poster-scale-comfortable); }
+
+/*
+ * Media strip & candidates: spacing and typography in rem / ch (no px).
+ * Border width in rem for scaling; label max-width in ch for stable truncation.
+ */
+:root {
+    --media-border-width: 0.0625rem;
+    --media-strip-gap: 0.75rem;
+    --media-strip-margin-bottom: 0.625rem;
+    --media-strip-padding-inline-start: 1.5rem;
+    --media-strip-padding-inline-end: 0.75rem;
+    /* scroll-padding matches inline padding so snap aligns and end cards aren't clipped */
+    --media-strip-scroll-padding-inline-start: 1.5rem;
+    --media-strip-scroll-padding-inline-end: 0.75rem;
+    --media-strip-overlay-padding-block: 0.5rem;
+    --media-strip-overlay-padding-inline: 0.625rem;
+    --media-strip-overlay-gap: 0.5rem;
+    --media-strip-tooltip-offset: 0.5rem;
+    --media-strip-tooltip-padding-block: 0.3125rem;
+    --media-strip-tooltip-padding-inline: 0.5rem;
+    --media-strip-tooltip-font-size: 0.6875rem;
+    --media-strip-tooltip-radius: 0.375rem;
+    --media-strip-placeholder-padding: 0.75rem;
+    --media-strip-placeholder-title-font-size: 0.8125rem;
+    --media-strip-placeholder-title-margin-bottom: 0.25rem;
+    --media-strip-placeholder-caption-font-size: 0.6875rem;
+    --media-strip-label-font-size: 0.75rem;
+    --media-strip-label-padding: 0.375rem 0.375rem 0.5rem;
+    --media-strip-label-max-width: 22ch;
+    --media-candidates-gap: 0.625rem;
+    --media-candidates-margin-bottom: 0.625rem;
+    --media-candidates-padding-inline-start: 0.625rem;
+    --media-candidates-padding-inline-end: 0.625rem;
+    --media-candidates-padding-bottom: 0.25rem;
+    /* scroll-padding matches inline padding for snap and so end cards aren't clipped */
+    --media-candidates-scroll-padding-inline-start: 0.625rem;
+    --media-candidates-scroll-padding-inline-end: 0.625rem;
+    --media-candidates-label-font-size: 0.6875rem;
+    --media-candidates-label-margin-bottom: 0.375rem;
+    --media-candidates-card-label-font-size: 0.6875rem;
+    --media-candidates-card-label-padding: 0.3125rem 0.25rem 0.375rem;
+    --media-candidates-card-label-max-width: 24ch;
+    --media-candidates-placeholder-font-size: 0.625rem;
+    --media-candidates-placeholder-padding: 0.375rem;
+}
+
+/* --- Retrieving state --- */
+.retrieving { padding: 24px 0; display: flex; gap: 16px; width: 100%; }
+.retrieving .message-avatar { background: #0d0d0d; color: #fff; width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.retrieving-content { flex: 1; padding: 12px 16px; color: #6b7280; font-size: 14px; }
+.retrieving-dots .dot { display: inline-block; animation: dotPulse 0.6s ease-in-out infinite; }
+.retrieving-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.retrieving-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+/* --- Composer --- */
+.composer-wrap {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    left: 260px;
+    z-index: 100;
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    padding: 12px 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    transition: left 0.2s, right 0.2s, padding-left 0.2s, padding-right 0.2s;
+}
+.app.sidebar-collapsed .composer-wrap { left: 0; padding-left: max(28px, env(safe-area-inset-left)); }
+.app.sidebar-collapsed.right-panel-open .composer-wrap { padding-left: max(97.5px, env(safe-area-inset-left)); padding-right: max(97.5px, env(safe-area-inset-right)); }
+.app.sidebar-collapsed.right-panel-open .composer-inner { transform: translateX(97.5px); }
+.app:not(.right-panel-open) .composer-wrap { padding-right: max(28px, env(safe-area-inset-right)); }
+.app.right-panel-open .composer-wrap { right: 195px; padding-right: 12px; }
+.app:not(.sidebar-collapsed).right-panel-open .composer-wrap { padding-left: 24px; padding-right: 12px; }
+.composer-inner {
+    max-width: min(calc(50% + 320px), 820px);
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: #f7f7f8;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    padding: 8px 10px 8px 14px;
+    min-height: 44px;
+    transition: transform 0.2s ease;
+}
+.composer-inner:focus-within { border-color: #0d0d0d; box-shadow: 0 0 0 1px #0d0d0d; }
+.composer-input {
+    flex: 1;
+    min-height: 24px;
+    max-height: 200px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 15px;
+    font-family: inherit;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+}
+.composer-input::placeholder { color: #9ca3af; }
+.composer-send {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: #0d0d0d;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+.composer-send:hover:not(:disabled) { background: #333; }
+.composer-send:disabled { background: #d1d5db; cursor: not-allowed; }
+
+/* Real Agent confirmation modal (session-only, rem-based). */
+.real-agent-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.real-agent-modal.hidden {
+    display: none;
+}
+.real-agent-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+}
+.real-agent-modal-content {
+    position: relative;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.15);
+    padding: 1.25rem 1.5rem;
+    max-width: 22rem;
+    width: 100%;
+}
+.real-agent-modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 0.5rem 0;
+}
+.real-agent-modal-body {
+    font-size: 0.875rem;
+    color: #4b5563;
+    line-height: 1.45;
+    margin: 0 0 1.25rem 0;
+}
+.real-agent-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+.real-agent-modal-btn {
+    font-size: 0.8125rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    border: none;
+    font-weight: 500;
+}
+.real-agent-modal-cancel {
+    background: #f3f4f6;
+    color: #374151;
+}
+.real-agent-modal-cancel:hover {
+    background: #e5e7eb;
+}
+.real-agent-modal-confirm {
+    background: #0d0d0d;
+    color: #fff;
+}
+.real-agent-modal-confirm:hover {
+    background: #333;
+}

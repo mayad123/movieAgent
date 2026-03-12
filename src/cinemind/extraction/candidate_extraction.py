@@ -193,7 +193,7 @@ class CandidateExtractor:
         return matches
     
     def extract_movie_candidates(self, search_results: List[Dict], 
-                                 entities: List[str] = None) -> List[Candidate]:
+                                 entities: Optional[List[str]] = None) -> List[Candidate]:
         """
         Extract candidate movie titles from search results.
         

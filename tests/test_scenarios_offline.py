@@ -17,7 +17,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from cinemind.request_plan import RequestPlan
+from cinemind.planning.request_plan import RequestPlan
 from cinemind.prompting import PromptBuilder, EvidenceBundle, get_template
 from cinemind.prompting.evidence_formatter import EvidenceFormatter
 from cinemind.prompting.output_validator import OutputValidator

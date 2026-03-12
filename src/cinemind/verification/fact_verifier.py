@@ -5,7 +5,7 @@ Implements "candidate → verify → answer" pattern for fact/list questions.
 """
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from urllib.parse import urlparse, parse_qs
 
@@ -23,7 +23,7 @@ class VerifiedFact:
     confidence: float
     conflicts: List[str] = None  # List of conflicting sources if any
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.conflicts is None:
             self.conflicts = []
 
@@ -33,7 +33,7 @@ class FactVerifier:
     Verifies facts against Tier A sources.
     """
     
-    def __init__(self, source_policy):
+    def __init__(self, source_policy: Any) -> None:
         """
         Initialize verifier.
         

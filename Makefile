@@ -30,6 +30,17 @@ format: ## Auto-format with ruff
 format-check: ## Check formatting without changing files
 	ruff format --check src/ tests/
 
+.PHONY: typecheck
+typecheck: ## Run mypy type checker
+	mypy src/cinemind src/integrations --config-file pyproject.toml
+
+.PHONY: check
+check: lint format-check typecheck ## Run all quality checks (lint + format + types)
+
+.PHONY: pre-commit
+pre-commit: ## Run pre-commit hooks on all files
+	pre-commit run --all-files
+
 # ---------------------------------------------------------------------------
 # Testing
 # ---------------------------------------------------------------------------
@@ -96,6 +107,7 @@ clean: ## Remove build artifacts, caches, and .pyc files
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
 	rm -rf build/ dist/ .eggs/
 
 .PHONY: help

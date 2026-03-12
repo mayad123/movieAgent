@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.response_movie_extractor import (
+from cinemind.extraction.response_movie_extractor import (
     normalize_title,
     parse_response,
     extract_titles_for_enrichment,

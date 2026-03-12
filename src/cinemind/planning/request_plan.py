@@ -71,7 +71,7 @@ class RequestPlan:
     intent_extraction_mode: str = "rules"  # "rules" or "llm" - which extractor path was used
     intent_confidence: float = 1.0  # Confidence of intent extraction (0-1)
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate and normalize the plan."""
         # Ensure tools_to_call is a list of ToolType enums
         if not isinstance(self.tools_to_call, list):
@@ -170,7 +170,7 @@ class RequestPlanner:
         "general_info": ResponseFormat.SHORT_FACT,
     }
     
-    def __init__(self, classifier, intent_extractor):
+    def __init__(self, classifier: Any, intent_extractor: Any) -> None:
         """
         Initialize planner.
         
@@ -181,7 +181,7 @@ class RequestPlanner:
         self.classifier = classifier
         self.intent_extractor = intent_extractor
     
-    async def plan_request(self, prompt: str, client, request_type: Optional[str] = None) -> RequestPlan:
+    async def plan_request(self, prompt: str, client: Any, request_type: Optional[str] = None) -> RequestPlan:
         """
         Create RequestPlan from user prompt.
         This is the ONLY way to route requests.

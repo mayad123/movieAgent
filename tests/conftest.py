@@ -5,7 +5,7 @@ import pytest
 from freezegun import freeze_time
 from tests.helpers.report_generator import get_collector
 
-from cinemind.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
 from cinemind.prompting.prompt_builder import EvidenceBundle
 
 

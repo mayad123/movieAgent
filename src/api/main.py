@@ -7,6 +7,7 @@ import os
 from typing import Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 try:
@@ -18,11 +19,11 @@ try:
         sys.path.insert(0, str(src_path))
 
     from cinemind.agent import CineMind
-    from cinemind.agent_mode import AgentMode, get_configured_mode, resolve_effective_mode
+    from cinemind.agent import AgentMode, get_configured_mode, resolve_effective_mode
     from config import REAL_AGENT_TIMEOUT_SECONDS, is_watchmode_configured
-    from cinemind.database import Database
-    from cinemind.observability import Observability
-    from cinemind.tagging import RequestTagger, OUTCOMES
+    from cinemind.infrastructure import Database
+    from cinemind.infrastructure import Observability
+    from cinemind.infrastructure.tagging import RequestTagger, OUTCOMES
     from workflows import run_real_agent_with_fallback as run_real_agent_workflow, run_playground
     from schemas import MovieQuery, MovieResponse, QueryRequest, HealthResponse, DiagnosticResponse
 except ImportError as e:
@@ -130,17 +131,6 @@ def _effective_mode(requested: Optional[str] = None) -> str:
 
 
 # API Endpoints
-@app.get("/", response_model=HealthResponse)
-async def root():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "agent": "CineMind",
-        "version": "1.0.0",
-        "agent_mode": _effective_mode(),
-    }
-
-
 @app.get("/health", response_model=HealthResponse)
 async def health():
     """Health check endpoint."""
@@ -187,7 +177,7 @@ async def health_diagnostic():
     if tmdb_enabled and config_loaded and tmdb_token_present:
         try:
             from config import get_tmdb_access_token as _get_token
-            from cinemind.tmdb_image_config import fetch_config
+            from integrations.tmdb.image_config import fetch_config
             fetch_config(_get_token(), timeout=3.0)
             tmdb_config_reachable = True
         except Exception as e:
@@ -251,7 +241,7 @@ async def where_to_watch_by_tmdb(
         return _watchmode_error_response(400, "missing_params", "Provide tmdbId or title to find where to watch.")
 
     from integrations.watchmode import get_watchmode_client
-    from integrations.where_to_watch_normalizer import normalize_where_to_watch_response
+    from integrations.watchmode.normalizer import normalize_where_to_watch_response
 
     client = get_watchmode_client()
     if not client:
@@ -616,6 +606,12 @@ async def shutdown_event():
     if _observability and hasattr(_observability, 'db'):
         _observability.db.close()
         _observability = None
+
+
+# Serve the web frontend (must be the LAST mount so API routes take priority)
+_web_dir = Path(__file__).resolve().parent.parent.parent / "web"
+if _web_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="web")
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000):

@@ -12,9 +12,9 @@ is only used when running the playground; real agent mode does not use it.
 import logging
 from typing import Any, Dict, Optional
 
-from .agent import CineMind
-from .llm_client import FakeLLMClient
-from .playground_attachments import apply_playground_attachment_behavior
+from .core import CineMind
+from ..llm.client import FakeLLMClient
+from ..media.playground_attachments import apply_playground_attachment_behavior
 
 logger = logging.getLogger(__name__)
 

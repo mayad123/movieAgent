@@ -625,7 +625,7 @@ class SemanticCache:
         Returns:
             (should_use: bool, reason: str)
         """
-        from .request_plan import RequestPlan as RP
+        from ..planning.request_plan import RequestPlan as RP
         
         # Rule 1: Version compatibility check
         # If agent/prompt/source policy version changed, bypass cache

@@ -9,8 +9,8 @@ from unittest.mock import Mock, AsyncMock
 from typing import Dict, Any
 
 from cinemind.agent import CineMind
-from cinemind.llm_client import FakeLLMClient
-from cinemind.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.llm.client import FakeLLMClient
+from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
 from cinemind.prompting import EvidenceBundle
 from cinemind.prompting.templates import get_template
 

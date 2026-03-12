@@ -15,10 +15,10 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 import pytest
-from cinemind.request_plan import RequestPlanner, RequestPlan
-from cinemind.intent_extraction import IntentExtractor
-from cinemind.tagging import HybridClassifier
-from cinemind.llm_client import FakeLLMClient
+from cinemind.planning.request_plan import RequestPlanner, RequestPlan
+from cinemind.extraction.intent_extraction import IntentExtractor
+from cinemind.infrastructure.tagging import HybridClassifier
+from cinemind.llm.client import FakeLLMClient
 
 
 @pytest.fixture

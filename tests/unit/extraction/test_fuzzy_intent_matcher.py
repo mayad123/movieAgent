@@ -18,8 +18,8 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 import pytest
-from cinemind.fuzzy_intent_matcher import FuzzyIntentMatcher, FuzzyMatchResult
-from cinemind.intent_extraction import IntentExtractor
+from cinemind.extraction.fuzzy_intent_matcher import FuzzyIntentMatcher, FuzzyMatchResult
+from cinemind.extraction.intent_extraction import IntentExtractor
 
 
 @pytest.fixture

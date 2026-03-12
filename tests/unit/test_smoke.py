@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 
 from tests.fixtures.loader import load_scenario, list_scenarios
-from cinemind.request_plan import RequestPlan
+from cinemind.planning.request_plan import RequestPlan
 from cinemind.prompting.prompt_builder import EvidenceBundle
 
 

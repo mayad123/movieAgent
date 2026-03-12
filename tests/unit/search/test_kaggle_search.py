@@ -12,7 +12,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from cinemind.kaggle_search import (
+from cinemind.search.kaggle_search import (
     KaggleDatasetSearcher, 
     normalize_title, 
     tokenize,

@@ -29,10 +29,10 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 from cinemind.agent import CineMind
-from cinemind.llm_client import FakeLLMClient
-from cinemind.playground_attachments import apply_playground_attachment_behavior
-from cinemind.playground import PLAYGROUND_ATTACHMENT_RULE_ENABLED
-from cinemind.request_type_router import get_request_type_router
+from cinemind.llm.client import FakeLLMClient
+from cinemind.media.playground_attachments import apply_playground_attachment_behavior
+from cinemind.agent.playground import PLAYGROUND_ATTACHMENT_RULE_ENABLED
+from cinemind.planning.request_type_router import get_request_type_router
 
 
 async def run_playground(

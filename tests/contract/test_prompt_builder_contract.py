@@ -13,7 +13,7 @@ from typing import Dict, Any
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from cinemind.prompting.prompt_builder import PromptBuilder, EvidenceBundle
-from cinemind.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
 
 
 class TestPromptBuilderContract:

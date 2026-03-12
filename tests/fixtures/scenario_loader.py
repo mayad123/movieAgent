@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from cinemind.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
 from cinemind.prompting import EvidenceBundle
 
 

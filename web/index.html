@@ -138,6 +138,14 @@
         </div>
     </div>
     <script src="js/config.js"></script>
-    <script src="js/app.js"></script>
+    <script>
+    window.addEventListener('error', function(e) {
+        var box = document.createElement('div');
+        box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fee;color:#c00;padding:12px 16px;font:13px/1.5 monospace;white-space:pre-wrap;border-bottom:2px solid #c00';
+        box.textContent = 'JS ERROR: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
+        document.body.prepend(box);
+    });
+    </script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

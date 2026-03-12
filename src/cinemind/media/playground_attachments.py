@@ -26,7 +26,7 @@ import logging
 import re
 from typing import Any, Optional
 
-from .response_movie_extractor import parse_response
+from ..extraction.response_movie_extractor import parse_response
 from .attachment_intent_classifier import (
     classify_attachment_intent,
     INTENT_MOVIE_LIST,
@@ -42,8 +42,8 @@ from .media_enrichment import (
     _movie_card_item,
     _same_movie_as_strip,
 )
-from .title_extraction import get_search_phrases, extract_movie_titles
-from .scenes_provider import get_scenes_provider
+from ..extraction.title_extraction import get_search_phrases, extract_movie_titles
+from integrations.tmdb.scenes import get_scenes_provider
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
         request_type = result.get("request_type")
         if not request_type:
             try:
-                from .request_type_router import get_request_type_router
+                from ..planning.request_type_router import get_request_type_router
                 request_type = get_request_type_router().route(user_query_stripped).request_type
             except Exception:
                 request_type = None

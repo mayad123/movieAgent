@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media_enrichment import (
+from cinemind.media.media_enrichment import (
     MediaEnrichmentResult,
     enrich,
     enrich_batch,
