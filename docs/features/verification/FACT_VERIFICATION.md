@@ -3,6 +3,25 @@
 > **Package:** `src/cinemind/verification/`
 > **Purpose:** Verifies extracted facts against authoritative (Tier A) sources, implementing the "candidate → verify → answer" pattern that ensures factual accuracy before responses reach the user.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| How verification fits in the pipeline | [Verification Pipeline](#verification-pipeline) |
+| Types of facts verified | [Verification Types](#verification-types) |
+| The VerifiedFact data structure | [Key Types](#key-types) |
+| How conflicts are resolved | [Conflict Resolution](#conflict-resolution) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new fact type" → [Verification Types](#verification-types) + [Key Types](#key-types)
+- "Change conflict resolution logic" → [Conflict Resolution](#conflict-resolution)
+- "Understand how verification connects to prompting" → [Integration with Agent Pipeline](#integration-with-agent-pipeline)
+
+</details>
+
 ---
 
 ## Module Map
@@ -178,6 +197,31 @@ sequenceDiagram
 3. **Conflict Preservation** — disagreements are recorded, not silently discarded
 4. **Single Dependency** — depends only on `SourcePolicy`, making it highly testable
 5. **Candidate → Verify → Answer** — the core pattern that prevents hallucinated facts
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# No dedicated unit tests yet — verify via integration tests
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+
+# Source policy tests (verification depends on SourcePolicy)
+python -m pytest tests/unit/planning/test_source_policy.py -v
+
+# Scenario tests (verification affects answer quality)
+python -m pytest tests/test_scenarios_offline.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/integration/test_agent_offline_e2e.py` | Full pipeline including verification stage |
+| `tests/unit/planning/test_source_policy.py` | Source tier logic that verification depends on |
+| `tests/test_scenarios_offline.py` | End-to-end scenarios that validate factual accuracy |
+
+> **Gap:** No dedicated `tests/unit/verification/` tests exist. When modifying verification logic, consider adding `tests/unit/verification/test_fact_verifier.py` with cases for each `verify_*` method.
 
 ---
 

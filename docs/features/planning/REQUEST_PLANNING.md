@@ -3,6 +3,26 @@
 > **Package:** `src/cinemind/planning/`
 > **Purpose:** Decides *how* to answer a query before any search or LLM call — classifying request type, selecting tools, applying source policies, and producing a structured execution plan.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| Full planning flow | [Planning Pipeline](#planning-pipeline) |
+| How queries are classified | [Request Type Router](#request-type-router-request_type_routerpy) |
+| How the plan is assembled | [Request Planner](#request-planner-request_planpy) |
+| When Tavily is used/skipped | [Tool Planner](#tool-planner-tool_planpy) |
+| Source trust tiers | [Source Policy](#source-policy-source_policypy) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new request type" → [Request Type Router](#request-type-router-request_type_routerpy) + [Request Types](#request-types)
+- "Change when Tavily is skipped" → [Tool Planner](#tool-planner-tool_planpy) + [Tavily Skip Logic](#tavily-skip-logic)
+- "Change source trust levels" → [Source Policy](#source-policy-source_policypy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -270,6 +290,37 @@ graph TD
 3. **Layered Classification** — guardrails → high confidence → medium → low → default prevents misclassification
 4. **Policy Object** — `SourcePolicy` encapsulates trust decisions, easily testable in isolation
 5. **Plan as Data** — `RequestPlan` is a plain dataclass, serializable and inspectable
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All planning unit tests
+python -m pytest tests/unit/planning/ -v
+
+# Individual module tests
+python -m pytest tests/unit/planning/test_request_type_router.py -v
+python -m pytest tests/unit/planning/test_request_planner_prompt_only.py -v
+python -m pytest tests/unit/planning/test_source_policy.py -v
+python -m pytest tests/unit/planning/test_tool_planner.py -v
+
+# Downstream: search routing uses tool plans
+python -m pytest tests/integration/test_routing_mocked.py -v
+
+# Full pipeline
+python -m pytest tests/test_scenarios_offline.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/unit/planning/test_request_type_router.py` | Request type classification: phrasings, ambiguous prompts, guardrails |
+| `tests/unit/planning/test_request_planner_prompt_only.py` | `RequestPlanner` plan creation from user prompt |
+| `tests/unit/planning/test_source_policy.py` | `SourcePolicy`: tier A/B/C enforcement, domain filtering |
+| `tests/unit/planning/test_tool_planner.py` | `ToolPlanner`: freshness policies, Tavily skip decisions |
+| `tests/integration/test_routing_mocked.py` | Search routing with mocked APIs using `SearchDecision` |
 
 ---
 

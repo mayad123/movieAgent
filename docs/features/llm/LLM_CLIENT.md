@@ -3,6 +3,27 @@
 > **Package:** `src/cinemind/llm/`
 > **Purpose:** Abstraction layer over LLM providers — defines a common interface, a real OpenAI implementation, and a fake client for testing and playground mode.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| Client class hierarchy | [Architecture](#architecture) |
+| OpenAI implementation | [OpenAILLMClient](#openaillmclient) |
+| Fake client for tests | [FakeLLMClient](#fakellmclient) |
+| Response data structure | [LLMResponse](#llmresponse) |
+| Who uses which client | [Integration Points](#integration-points) |
+| How client is selected | [Selection Logic](#selection-logic) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Switch LLM provider" → [Architecture](#architecture) + [OpenAILLMClient](#openaillmclient)
+- "Change FakeLLM responses" → [FakeLLMClient](#fakellmclient)
+- "Add streaming support" → [Architecture](#architecture)
+
+</details>
+
 ---
 
 ## Module Map
@@ -169,6 +190,31 @@ The client is selected at `CineMind` construction time and injected into all sub
 3. **Interface Segregation** — `LLMClient` exposes only `chat()` and `stream()`; no OpenAI-specific leaks
 4. **Zero-Cost Testing** — `FakeLLMClient` enables full pipeline testing without API calls or keys
 5. **Token Accounting** — every response includes usage stats for cost tracking
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# LLM is tested indirectly via integration tests
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+
+# Smoke test with real LLM (requires OPENAI_API_KEY)
+python -m pytest tests/smoke/test_real_workflow_smoke.py -v
+
+# All tests using FakeLLMClient
+python -m pytest tests/unit/ tests/integration/ -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/integration/test_agent_offline_e2e.py` | Full pipeline with `FakeLLMClient` |
+| `tests/smoke/test_real_workflow_smoke.py` | Real `OpenAILLMClient` (requires API key) |
+| All `tests/unit/` and `tests/integration/` | Use `FakeLLMClient` — changing its responses affects all |
+
+> **Note:** `FakeLLMClient` is used throughout the test suite. Changing its response format or behavior affects virtually every test.
 
 ---
 

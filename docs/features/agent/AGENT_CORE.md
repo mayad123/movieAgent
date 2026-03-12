@@ -3,6 +3,29 @@
 > **Package:** `src/cinemind/agent/`
 > **Purpose:** Central orchestration of the CineMind movie intelligence agent — the main entry point that wires together extraction, planning, search, prompting, and media enrichment into a coherent pipeline.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| What files are in this package | [Module Map](#module-map) |
+| How entry points connect | [Architecture Overview](#architecture-overview) |
+| Full pipeline sequence | [Pipeline Stages](#pipeline-stages) |
+| What CineMind depends on | [Constructor Dependencies](#constructor-dependencies) |
+| PLAYGROUND vs REAL_AGENT | [Agent Mode](#agent-mode-modepy) |
+| Offline/demo pipeline | [Playground Pipeline](#playground-pipeline-playgroundpy) |
+| What imports this package | [Internal Dependencies](#internal-dependencies) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new pipeline stage" → [Pipeline Stages](#pipeline-stages) + [Constructor Dependencies](#constructor-dependencies)
+- "Change how mode is selected" → [Agent Mode](#agent-mode-modepy)
+- "Modify playground behavior" → [Playground Pipeline](#playground-pipeline-playgroundpy)
+- "Understand what CineMind wires together" → [Constructor Dependencies](#constructor-dependencies)
+
+</details>
+
 ---
 
 ## Module Map
@@ -236,6 +259,34 @@ graph TD
 3. **Graceful Degradation** — missing API key auto-downgrades to playground mode
 4. **Dependency Injection** — `CineMind` accepts an optional `llm_client` parameter; tests inject fakes
 5. **Single Responsibility** — `core.py` orchestrates only; domain logic lives in dedicated packages
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# Direct tests (agent pipeline)
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+python -m pytest tests/smoke/test_playground_smoke.py -v
+python -m pytest tests/smoke/test_real_workflow_smoke.py -v
+
+# Scenario tests (full pipeline end-to-end)
+python -m pytest tests/test_scenarios_offline.py -v
+
+# All related tests at once
+python -m pytest tests/integration/ tests/smoke/ tests/test_scenarios_offline.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/integration/test_agent_offline_e2e.py` | Full pipeline with `FakeLLM`: plan → search → prompt → generate → validate |
+| `tests/smoke/test_playground_smoke.py` | Playground mode via FastAPI TestClient |
+| `tests/smoke/test_real_workflow_smoke.py` | Real LLM workflow (requires `OPENAI_API_KEY`) |
+| `tests/test_scenarios_offline.py` | YAML scenario harness — routing, prompting, validation |
+| `tests/fixtures/scenarios/gold/*.yaml` | 28 regression scenarios (must pass) |
+| `tests/fixtures/scenarios/explore/*.yaml` | 46 experimental scenarios (informational) |
 
 ---
 

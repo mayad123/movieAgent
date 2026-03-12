@@ -3,6 +3,27 @@
 > **Package:** `src/cinemind/media/`
 > **Purpose:** Enriches agent responses with visual media — poster images, scene backdrops, and structured attachment sections — by resolving movie titles through TMDB and applying intent-based attachment logic.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| Full enrichment flow | [Enrichment Pipeline](#enrichment-pipeline) |
+| How titles become posters | [Media Enrichment](#media-enrichment-media_enrichmentpy) |
+| How the media cache works | [Media Cache](#media-cache-media_cachepy) |
+| Single vs multi movie logic | [Media Focus](#media-focus-media_focuspy) |
+| What attachment sections are produced | [Attachment Intent Classifier](#attachment-intent-classifier-attachment_intent_classifierpy) |
+| Playground-specific behavior | [Playground Attachments](#playground-attachments-playground_attachmentspy) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change attachment logic" → [Attachment Intent Classifier](#attachment-intent-classifier-attachment_intent_classifierpy)
+- "Adjust cache TTL" → [Media Cache](#media-cache-media_cachepy)
+- "Change poster behavior for single movie" → [Media Focus](#media-focus-media_focuspy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -292,6 +313,38 @@ graph TD
 4. **Graceful Degradation** — `enrich_batch()` continues if individual enrichments fail
 5. **Singleton Cache** — `get_default_media_cache()` ensures one cache per process; tests swap via `set_default_media_cache()`
 6. **Separation of Concerns** — enrichment (TMDB calls) and classification (intent logic) are separate modules
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All media unit tests
+python -m pytest tests/unit/media/ -v
+
+# Individual module tests
+python -m pytest tests/unit/media/test_attachment_intent_classifier.py -v
+python -m pytest tests/unit/media/test_media_cache.py -v
+python -m pytest tests/unit/media/test_media_enrichment.py -v
+python -m pytest tests/unit/media/test_media_enrichment_dedup.py -v
+python -m pytest tests/unit/media/test_media_focus.py -v
+python -m pytest tests/unit/media/test_playground_attachments.py -v
+python -m pytest tests/unit/media/test_playground_attachments_invariants.py -v
+python -m pytest tests/unit/media/test_scenes_provider.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `test_attachment_intent_classifier.py` | `classify_attachment_intent`: precedence rules, intent selection |
+| `test_media_cache.py` | `MediaCache`, `TTLCache`: enrich cache, poster TTL, eviction |
+| `test_media_enrichment.py` | `enrich`, `enrich_batch`, `attach_media_to_result` |
+| `test_media_enrichment_dedup.py` | Hero vs did_you_mean deduplication invariants |
+| `test_media_focus.py` | `get_media_focus`: single vs multi-movie intent |
+| `test_playground_attachments.py` | Playground rules: single → poster+scenes, multi → posters |
+| `test_playground_attachments_invariants.py` | Invariants: hero not in did_you_mean, query-only seed |
+| `test_scenes_provider.py` | `SceneItem`, `ScenesProviderEmpty`, `ScenesProviderTMDB` |
 
 ---
 

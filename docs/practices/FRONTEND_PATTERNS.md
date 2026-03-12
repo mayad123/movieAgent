@@ -2,6 +2,24 @@
 
 > JavaScript and HTML conventions for the CineMind web frontend (`web/`).
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need guidance on... | Jump to |
+|----------------------|---------|
+| No-framework architecture rules | [Architecture Rules](#architecture-rules) |
+| How modules communicate | [Callback Wiring Pattern](#callback-wiring-pattern) |
+| State management rules | [State Management](#state-management) |
+| DOM element patterns | [DOM Patterns](#dom-patterns) |
+| API call conventions | [API Client Pattern](#api-client-pattern) |
+| How to build UI elements | [Rendering Patterns](#rendering-patterns) |
+| Response normalization | [Data Normalization](#data-normalization) |
+| Error handling in the UI | [Error Handling](#error-handling) |
+| Naming rules | [Naming Conventions](#naming-conventions) |
+| What NOT to do | [Anti-Patterns to Avoid](#anti-patterns-to-avoid) |
+
+</details>
+
 ---
 
 ## Architecture Rules

@@ -3,6 +3,27 @@
 > **Package:** `src/api/`
 > **Purpose:** FastAPI REST server that exposes CineMind's capabilities as HTTP endpoints, serves the web frontend, and provides observability dashboards.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| All available endpoints | [Endpoint Overview](#endpoint-overview) |
+| Query endpoint details | [Query Endpoints](#query-endpoints) |
+| Where-to-Watch endpoint | [Where to Watch](#where-to-watch) |
+| How a request flows | [Request Flow](#request-flow) |
+| Response Pydantic models | [Response Schema](#response-schema) |
+| What this imports | [Internal Dependencies](#internal-dependencies) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new endpoint" → [Endpoint Overview](#endpoint-overview) + [Response Schema](#response-schema)
+- "Change the response shape" → [Response Schema](#response-schema) + [Change Impact Guide](#change-impact-guide)
+- "Understand request routing" → [Request Flow](#request-flow)
+
+</details>
+
 ---
 
 ## Module Map
@@ -195,6 +216,27 @@ graph TD
 3. **Fallback Chain** — real agent timeout → automatic playground fallback → client gets a response
 4. **Contract-First** — Pydantic models in `schemas/api.py` define the API contract
 5. **Observability Built-In** — every request is tracked, tagged, and queryable
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# API endpoint tests
+python -m pytest tests/unit/integrations/test_where_to_watch_api.py -v
+python -m pytest tests/smoke/test_playground_smoke.py -v
+
+# Full pipeline (exercises API → workflow → agent)
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/unit/integrations/test_where_to_watch_api.py` | `/api/watch/where-to-watch` endpoint: happy path, not found, rate limit, missing key |
+| `tests/smoke/test_playground_smoke.py` | FastAPI app imports, basic `/query` request via TestClient |
+| `tests/integration/test_agent_offline_e2e.py` | Full pipeline through API layer with FakeLLM |
 
 ---
 

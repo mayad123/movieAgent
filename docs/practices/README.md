@@ -2,6 +2,19 @@
 
 > Standards and conventions for the CineMind codebase. Follow these when making changes or adding features.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need guidance on... | Read |
+|----------------------|------|
+| Python module design, dataclasses, error handling | [Backend Patterns](BACKEND_PATTERNS.md) |
+| JS modules, state, DOM, callbacks | [Frontend Patterns](FRONTEND_PATTERNS.md) |
+| CSS naming, tokens, responsive design | [CSS Style Guide](CSS_STYLE_GUIDE.md) |
+| Adding new packages, integrations, endpoints | [Directory Structure](DIRECTORY_STRUCTURE.md) |
+| Writing and running tests | [Testing Practices](TESTING_PRACTICES.md) |
+
+</details>
+
 ---
 
 ## Index

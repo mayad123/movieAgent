@@ -3,6 +3,25 @@
 > **Packages:** `src/config/`, `src/schemas/`, `src/services/`, `src/lib/`
 > **Purpose:** Foundation layer — environment resolution, API contracts, service interfaces, and shared utilities that every other package depends on.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| How .env is located | [Environment Configuration](#environment-configuration-configenvpy) |
+| API request/response models | [API Schemas](#api-schemas-schemasapipy) |
+| The IAgentRunner protocol | [Service Interfaces](#service-interfaces-servicesinterfacespy) |
+| Full list of all env vars | [Environment Variables (Full Registry)](#environment-variables-full-registry) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new env var" → [Environment Variables (Full Registry)](#environment-variables-full-registry)
+- "Change API response model" → [API Schemas](#api-schemas-schemasapipy) + [Change Impact Guide](#change-impact-guide)
+- "Change IAgentRunner" → [Service Interfaces](#service-interfaces-servicesinterfacespy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -257,6 +276,31 @@ This is the consolidated list of all environment variables used across the syste
 3. **Configuration as Discovery** — `.env` is found by walking the filesystem, not hardcoded to a path
 4. **Minimal Foundation** — foundation modules have zero business logic; they're pure plumbing
 5. **Single Source of Truth** — env var names and defaults documented alongside usage
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# Import/smoke test
+python -m pytest tests/unit/test_smoke.py -v
+
+# Config changes affect everything — run full suite
+python -m pytest tests/ -v
+
+# Schema changes affect API tests
+python -m pytest tests/smoke/ tests/unit/integrations/test_where_to_watch_api.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/unit/test_smoke.py` | Import checks, fixture loading, scenario listing |
+| `tests/smoke/test_playground_smoke.py` | FastAPI app with Pydantic models |
+| `tests/unit/workflows/test_workflows.py` | `IAgentRunner` protocol usage |
+
+> **Warning:** Foundation changes (schemas, protocols, env vars) have the widest blast radius. Run the full test suite after any change.
 
 ---
 

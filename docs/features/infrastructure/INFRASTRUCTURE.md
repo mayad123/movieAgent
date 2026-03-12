@@ -3,6 +3,27 @@
 > **Package:** `src/cinemind/infrastructure/`
 > **Purpose:** Cross-cutting concerns that support the entire agent pipeline — semantic caching, database persistence, observability/metrics, and request classification/tagging.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| How the cache works | [Semantic Cache](#semantic-cache-cachepy) |
+| Cache freshness/TTL rules | [Freshness Rules](#freshness-rules) |
+| Database schema | [Database](#database-databasepy) |
+| Request tracking/timing | [Observability](#observability-observabilitypy) |
+| Request classification | [Request Tagging](#request-tagging-taggingpy) |
+| Cost calculation | [Cost Calculation](#cost-calculation) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change cache TTL" → [Freshness Rules](#freshness-rules) + [Key Methods](#key-methods)
+- "Add a database table" → [Database](#database-databasepy) + [Schema](#schema)
+- "Add a new request type to classification" → [Request Tagging](#request-tagging-taggingpy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -346,6 +367,31 @@ graph TD
 5. **Hybrid Classification** — deterministic rules handle common cases; LLM handles edge cases; guardrails catch misclassification
 6. **Cost Tracking** — every LLM call is costed and persisted for budget monitoring
 7. **Structured Logging** — all operations include request IDs for distributed tracing
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# Integration tests (infrastructure is exercised throughout)
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+
+# Scenario tests (cache affects which responses are fresh)
+python -m pytest tests/test_scenarios_offline.py -v
+
+# Smoke tests
+python -m pytest tests/smoke/ -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/integration/test_agent_offline_e2e.py` | Full pipeline exercises cache, observability, tagging |
+| `tests/test_scenarios_offline.py` | Scenarios test classification and caching behavior |
+| `tests/smoke/test_playground_smoke.py` | Database and observability via API |
+
+> **Gap:** No dedicated `tests/unit/infrastructure/` tests exist. When modifying cache, database, or tagging logic, consider adding unit tests for `SemanticCache`, `Database`, and `HybridClassifier`.
 
 ---
 

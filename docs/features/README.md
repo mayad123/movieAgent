@@ -2,6 +2,29 @@
 
 > Post-refactor feature documentation organized by domain area. Each document is a self-contained reference describing capabilities, code structure, dependencies, and change impact — designed to be used as context for understanding and modifying the codebase.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to... | Jump to |
+|-------------|---------|
+| See the full system diagram | [System Architecture](#system-architecture) |
+| Find the doc for a specific feature | [Documentation Index](#documentation-index) |
+| Understand cross-cutting dependencies | [Cross-Cutting Dependency Map](#cross-cutting-dependency-map) |
+| Map source code to docs | [Source ↔ Documentation Mapping](#source--documentation-mapping) |
+| Know how to use these docs | [How to Use These Documents](#how-to-use-these-documents) |
+
+**Quick lookup by source directory:**
+- `src/api/` → [API Server](api/API_SERVER.md)
+- `src/cinemind/agent/` → [Agent Core](agent/AGENT_CORE.md)
+- `src/cinemind/extraction/` → [Extraction](extraction/EXTRACTION_PIPELINE.md)
+- `src/cinemind/media/` → [Media](media/MEDIA_ENRICHMENT.md)
+- `src/cinemind/planning/` → [Planning](planning/REQUEST_PLANNING.md)
+- `src/cinemind/search/` → [Search](search/SEARCH_ENGINE.md)
+- `src/integrations/` → [Integrations](integrations/EXTERNAL_INTEGRATIONS.md)
+- `web/` → [Frontend](web/WEB_FRONTEND.md)
+
+</details>
+
 ---
 
 ## System Architecture

@@ -2,6 +2,24 @@
 
 > CSS architecture and naming conventions for the CineMind web frontend (`web/css/`).
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need guidance on... | Jump to |
+|----------------------|---------|
+| File organization and imports | [Architecture](#architecture) |
+| How to name classes | [Naming Convention](#naming-convention) |
+| Which file owns which prefix | [Prefixing by Region](#prefixing-by-region) |
+| Design tokens / custom properties | [CSS Custom Properties](#css-custom-properties-design-tokens) |
+| Responsive design approach | [Responsive Design](#responsive-design) |
+| Layout patterns (grid, flex) | [Layout Patterns](#layout-patterns) |
+| How to show/hide elements | [Visibility](#visibility) |
+| Transition and animation rules | [Transitions & Animations](#transitions--animations) |
+| Full example of adding a component | [Example: Adding a New Component](#example-adding-a-new-component) |
+| What NOT to do | [Anti-Patterns to Avoid](#anti-patterns-to-avoid) |
+
+</details>
+
 ---
 
 ## Architecture

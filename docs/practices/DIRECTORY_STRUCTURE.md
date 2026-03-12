@@ -2,6 +2,21 @@
 
 > How to add new modules, packages, and features to the CineMind codebase following established conventions.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I want to add... | Jump to |
+|-----------------|---------|
+| A new `cinemind/` sub-package | [Adding a New Feature Sub-Package](#adding-a-new-feature-sub-package) |
+| A new external API integration | [Adding a New External Integration](#adding-a-new-external-integration) |
+| A new API endpoint | [Adding a New API Endpoint](#adding-a-new-api-endpoint) |
+| A new frontend feature | [Adding a New Frontend Feature](#adding-a-new-frontend-feature) |
+| Understand the layer hierarchy | [Layer Hierarchy](#layer-hierarchy) |
+| Decide where code goes | [File Placement Decision Tree](#file-placement-decision-tree) |
+| Verify completeness | [Checklist for Any New Module](#checklist-for-any-new-module) |
+
+</details>
+
 ---
 
 ## Current Structure

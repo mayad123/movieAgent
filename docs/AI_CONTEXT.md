@@ -3,6 +3,40 @@
 > **Start here when using an AI assistant to modify CineMind.**
 > This document routes you to the right feature documentation based on what you're changing, maps dependencies between systems, and links to best practices.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to... | Jump to |
+|-------------|---------|
+| Pick which companion doc to add | [Companion Context Documents](#companion-context-documents) |
+| Route my change to the right docs | [Change Routing Table](#change-routing-table) |
+| Understand dependency ripple effects | [Dependency Chain Map](#dependency-chain-map) |
+| See exact doc combos for common tasks | [Context Assembly Recipes](#context-assembly-recipes) |
+| See the full doc tree | [Full Documentation Map](#full-documentation-map) |
+
+**Quick routing:**
+- Adding something new → also include `ADD_FEATURE_CONTEXT.md`
+- Changing existing code → also include `CHANGE_FEATURE_CONTEXT.md`
+- Both → include both companion docs
+
+</details>
+
+---
+
+## Companion Context Documents
+
+This is the base context. Depending on the task, **also include one of these:**
+
+| Task | Include | Purpose |
+|------|---------|---------|
+| Adding something new | [ADD_FEATURE_CONTEXT.md](ADD_FEATURE_CONTEXT.md) | Full-stack traces, templates, and checklists for new pages, endpoints, buttons, modules, integrations |
+| Modifying existing code | [CHANGE_FEATURE_CONTEXT.md](CHANGE_FEATURE_CONTEXT.md) | Investigation strategies, dependency tracing, breaking-change analysis, verification checklists |
+
+**Usage pattern:**
+- Small change → `AI_CONTEXT.md` alone (use the routing table below)
+- Adding a feature → `AI_CONTEXT.md` + `ADD_FEATURE_CONTEXT.md` + relevant feature docs
+- Fixing / changing behavior → `AI_CONTEXT.md` + `CHANGE_FEATURE_CONTEXT.md` + relevant feature docs
+
 ---
 
 ## How to Use This Document
@@ -231,7 +265,9 @@ Files to modify:
 
 ```
 docs/
-├── AI_CONTEXT.md              ← YOU ARE HERE
+├── AI_CONTEXT.md              ← YOU ARE HERE (base context)
+├── ADD_FEATURE_CONTEXT.md     ← Include when adding new features
+├── CHANGE_FEATURE_CONTEXT.md  ← Include when modifying existing code
 ├── README.md                  ← Documentation index
 ├── getting-started/           ← Setup & deployment
 ├── features/                  ← Feature documentation

@@ -2,6 +2,24 @@
 
 > How to organize, write, and run tests for CineMind.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to... | Jump to |
+|-------------|---------|
+| See the test directory layout | [Test Structure](#test-structure) |
+| Run tests for a specific feature | [Feature Test Map](#feature-test-map) |
+| Run common test commands | [Running Tests](#running-tests) |
+| Write a new unit test | [Writing Unit Tests](#writing-unit-tests) |
+| Write an integration test | [Writing Integration Tests](#writing-integration-tests) |
+| Use fakes vs mocks | [Using Fakes and Mocks](#using-fakes-and-mocks) |
+| Add tests for a new feature | [Adding Tests for New Features](#adding-tests-for-new-features) |
+| Write a scenario test | [Scenario Tests](#scenario-tests) |
+| Know when to run what | [Test Categories and When to Run](#test-categories-and-when-to-run) |
+| What NOT to do | [Anti-Patterns to Avoid](#anti-patterns-to-avoid) |
+
+</details>
+
 ---
 
 ## Test Structure
@@ -293,6 +311,173 @@ The playground server:
 - Responds to `/query` with TMDB-based responses (no LLM)
 - Runs the full extraction/media pipeline
 - Useful for testing UI changes without API keys
+
+---
+
+## Feature Test Map
+
+Quick reference: which tests cover which feature area.
+
+| Feature | Unit Tests | Integration Tests | Scenarios |
+|---------|-----------|------------------|-----------|
+| **Extraction** | `tests/unit/extraction/` (4 files) | — | `tests/test_scenarios_offline.py` |
+| **Planning** | `tests/unit/planning/` (4 files) | `test_routing_mocked.py` | `tests/test_scenarios_offline.py` |
+| **Search** | `tests/unit/search/` (2 files) | `test_routing_mocked.py` | — |
+| **Media** | `tests/unit/media/` (8 files) | — | — |
+| **Prompting** | `tests/unit/prompting/` (3 files) | `test_agent_offline_e2e.py` | `tests/test_scenarios_offline.py` |
+| **Integrations** | `tests/unit/integrations/` (4 files) | — | — |
+| **Workflows** | `tests/unit/workflows/` (1 file) | — | — |
+| **Agent Core** | — | `test_agent_offline_e2e.py` | `tests/test_scenarios_offline.py` |
+| **Infrastructure** | — | `test_agent_offline_e2e.py` | — |
+| **Verification** | — | `test_agent_offline_e2e.py` | — |
+| **LLM Client** | — | `test_agent_offline_e2e.py` | — |
+| **API Server** | `test_where_to_watch_api.py` | — | — |
+| **Frontend** | — | — | Manual via playground |
+
+### Test Gaps
+
+The following areas lack dedicated unit tests and should be prioritized when modifying:
+
+| Area | Missing Tests | Recommended |
+|------|-------------|-------------|
+| `cinemind/verification/` | No unit tests | Add `tests/unit/verification/test_fact_verifier.py` |
+| `cinemind/infrastructure/cache.py` | No unit tests | Add `tests/unit/infrastructure/test_cache.py` |
+| `cinemind/infrastructure/database.py` | No unit tests | Add `tests/unit/infrastructure/test_database.py` |
+| `cinemind/infrastructure/tagging.py` | No unit tests | Add `tests/unit/infrastructure/test_tagging.py` |
+| `cinemind/agent/core.py` | No unit tests (integration only) | Consider unit tests for individual methods |
+
+---
+
+## Adding Tests for New Features
+
+When adding a new feature, follow this decision tree to determine what tests to write:
+
+```mermaid
+flowchart TD
+    NEW["New feature added"] --> TYPE{"What type?"}
+
+    TYPE -->|"New cinemind/ sub-package"| UNIT_PKG["Add tests/unit/<feature>/<br/>test_<module>.py for each module"]
+    TYPE -->|"New integration"| UNIT_INT["Add tests/unit/integrations/<br/>test_<service>_*.py"]
+    TYPE -->|"New API endpoint"| UNIT_API["Add test in tests/unit/integrations/<br/>or tests/smoke/"]
+    TYPE -->|"New extraction pattern"| UNIT_EXT["Add cases to existing<br/>tests/unit/extraction/ files"]
+    TYPE -->|"New request type"| MULTI["Add tests in extraction,<br/>planning, AND prompting"]
+    TYPE -->|"New frontend feature"| MANUAL["Manual test + consider<br/>smoke test extension"]
+
+    UNIT_PKG --> INTEGRATION{"Crosses module boundaries?"}
+    INTEGRATION -->|Yes| ADD_INT["Add tests/integration/<br/>test_<feature>_pipeline.py"]
+    INTEGRATION -->|No| SCENARIO{"User-visible behavior change?"}
+
+    SCENARIO -->|Yes| ADD_SCENARIO["Add scenario in<br/>tests/fixtures/scenarios/explore/"]
+    SCENARIO -->|No| DONE["Done"]
+    ADD_INT --> SCENARIO
+    ADD_SCENARIO --> DONE
+```
+
+### Test Templates by Feature Type
+
+#### New Backend Sub-Package
+
+```python
+# tests/unit/<feature>/test_<module>.py
+"""Tests for cinemind.<feature>.<module>."""
+import pytest
+from cinemind.<feature> import <MainClass>, <ResultType>
+
+
+class Test<MainClass>:
+
+    @pytest.fixture
+    def instance(self):
+        return <MainClass>(...)
+
+    def test_basic_behavior(self, instance):
+        result = instance.<method>("test input")
+        assert isinstance(result, <ResultType>)
+        assert result.<field> == expected_value
+
+    def test_edge_case_empty_input(self, instance):
+        result = instance.<method>("")
+        assert result.<field> == default_value
+
+    def test_error_handling(self, instance):
+        # Should degrade gracefully, not raise
+        result = instance.<method>(None)
+        assert result is not None
+```
+
+#### New Request Type (multi-module)
+
+```python
+# 1. tests/unit/planning/test_request_type_router.py — ADD cases:
+def test_new_type_recognized(self):
+    result = router.classify("example query for new type")
+    assert result.request_type == "new_type"
+
+# 2. tests/unit/extraction/test_entity_extraction.py — ADD cases:
+def test_new_intent_extracted(self):
+    intent = extractor.extract("example query")
+    assert intent.intent == "new_type"
+
+# 3. tests/unit/prompting/test_output_validator.py — ADD cases:
+def test_new_type_template_applied(self):
+    template = get_template("new_type")
+    assert template is not None
+
+# 4. tests/fixtures/scenarios/explore/<NNN>_new_type.yaml — ADD scenario:
+# query: "example query for new type"
+# expected_type: "new_type"
+# expected_contains: ["expected output fragment"]
+```
+
+#### New External Integration
+
+```python
+# tests/unit/integrations/test_<service>_client.py
+"""Tests for integrations.<service>.client."""
+import pytest
+from unittest.mock import AsyncMock, patch
+from integrations.<service> import get_<service>_client
+
+
+class Test<Service>Client:
+
+    @pytest.fixture
+    def client(self):
+        return get_<service>_client()
+
+    @patch("integrations.<service>.client.httpx.AsyncClient.get")
+    async def test_happy_path(self, mock_get, client):
+        mock_get.return_value = MockResponse(200, {"data": "value"})
+        result = await client.<method>("test")
+        assert result is not None
+
+    @patch("integrations.<service>.client.httpx.AsyncClient.get")
+    async def test_api_error_returns_empty(self, mock_get, client):
+        mock_get.side_effect = Exception("API down")
+        result = await client.<method>("test")
+        assert result == [] or result is None  # graceful degradation
+```
+
+#### New API Endpoint
+
+```python
+# tests/smoke/test_<endpoint>_smoke.py  OR extend test_playground_smoke.py
+"""Smoke test for /api/<endpoint>."""
+import pytest
+from fastapi.testclient import TestClient
+from api.main import app
+
+client = TestClient(app)
+
+def test_endpoint_returns_200():
+    response = client.get("/api/<endpoint>?param=value")
+    assert response.status_code == 200
+
+def test_endpoint_returns_expected_shape():
+    response = client.get("/api/<endpoint>?param=value")
+    data = response.json()
+    assert "expected_field" in data
+```
 
 ---
 

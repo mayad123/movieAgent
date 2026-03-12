@@ -3,6 +3,27 @@
 > **Package:** `src/cinemind/extraction/`
 > **Purpose:** Deterministic NLP pipeline that extracts structured information from user queries and agent responses — movie titles, intents, candidates, and response structure — without requiring LLM calls for most operations.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| What stage does what | [Pipeline Overview](#pipeline-overview) |
+| How titles are extracted from queries | [Title Extraction](#title-extraction-title_extractionpy) |
+| How intents are classified | [Intent Extraction](#intent-extraction-intent_extractionpy) |
+| How candidates come from search results | [Candidate Extraction](#candidate-extraction-candidate_extractionpy) |
+| How agent responses are parsed | [Response Movie Extractor](#response-movie-extractor-response_movie_extractorpy) |
+| Typo tolerance | [Fuzzy Intent Matcher](#fuzzy-intent-matcher-fuzzy_intent_matcherpy) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Add a new intent type" → [Intent Extraction](#intent-extraction-intent_extractionpy) + [Change Impact Guide](#change-impact-guide)
+- "Fix title parsing bug" → [Title Extraction](#title-extraction-title_extractionpy) or [Response Movie Extractor](#response-movie-extractor-response_movie_extractorpy)
+- "Add new query prefix pattern" → [Title Extraction](#title-extraction-title_extractionpy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -294,6 +315,38 @@ graph TD
 4. **Normalization at Boundaries** — `normalize_title()` is called at extraction time, not downstream
 5. **Singleton for Stateful Matchers** — `get_fuzzy_matcher()` avoids recompiling pattern tables
 6. **No Side Effects** — all extraction functions are pure transforms (input → output)
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All extraction unit tests
+python -m pytest tests/unit/extraction/ -v
+
+# Individual module tests
+python -m pytest tests/unit/extraction/test_title_extraction.py -v
+python -m pytest tests/unit/extraction/test_entity_extraction.py -v
+python -m pytest tests/unit/extraction/test_fuzzy_intent_matcher.py -v
+python -m pytest tests/unit/extraction/test_response_movie_extractor.py -v
+
+# Downstream consumers (planning uses extraction output)
+python -m pytest tests/unit/planning/ -v
+
+# Full pipeline (extraction feeds into everything)
+python -m pytest tests/test_scenarios_offline.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/unit/extraction/test_title_extraction.py` | `extract_movie_titles`, `get_search_phrases`, prefix matching |
+| `tests/unit/extraction/test_entity_extraction.py` | `IntentExtractor`: interrogatives, punctuation, multi-title |
+| `tests/unit/extraction/test_fuzzy_intent_matcher.py` | Fuzzy matching: exact, typo tolerance, paraphrases, false positives |
+| `tests/unit/extraction/test_response_movie_extractor.py` | `parse_response`, `extract_titles_for_enrichment`, `normalize_title` |
+| `tests/unit/planning/test_request_type_router.py` | Downstream: router uses extraction output |
+| `tests/unit/media/test_attachment_intent_classifier.py` | Downstream: classifier uses `ResponseParseResult` |
 
 ---
 

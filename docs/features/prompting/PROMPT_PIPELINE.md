@@ -3,6 +3,27 @@
 > **Package:** `src/cinemind/prompting/`
 > **Purpose:** Builds, formats, and validates the messages sent to the LLM — assembling system prompts, evidence, response templates, and post-generation validation into a structured pipeline.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| Full prompting flow | [Pipeline Overview](#pipeline-overview) |
+| How messages are assembled | [Prompt Builder](#prompt-builder-prompt_builderpy) |
+| How evidence is formatted | [Evidence Formatter](#evidence-formatter-evidence_formatterpy) |
+| Per-intent response rules | [Response Templates](#response-templates-templatespy) |
+| Post-generation validation | [Output Validator](#output-validator-output_validatorpy) |
+| A/B testing of prompts | [Prompt Versioning](#prompt-versioning-versionspy) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change system prompt" → [Prompt Builder](#prompt-builder-prompt_builderpy)
+- "Add/change a response template" → [Response Templates](#response-templates-templatespy)
+- "Fix forbidden terms" → [Output Validator](#output-validator-output_validatorpy)
+
+</details>
+
 ---
 
 ## Module Map
@@ -281,6 +302,37 @@ graph TD
 4. **Auto-Fix over Reject** — forbidden terms are removed rather than causing a full retry
 5. **Version Registry** — prompt versions are named configs, enabling safe rollback and comparison
 6. **Evidence Deduplication** — duplicates are removed before they consume LLM context window tokens
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All prompting tests
+python -m pytest tests/unit/prompting/ tests/contract/ -v
+
+# Individual module tests
+python -m pytest tests/unit/prompting/test_evidence_formatter.py -v
+python -m pytest tests/unit/prompting/test_evidence_formatter_structured.py -v
+python -m pytest tests/unit/prompting/test_output_validator.py -v
+python -m pytest tests/contract/test_prompt_builder_contract.py -v
+
+# Integration (prompt → generate → validate cycle)
+python -m pytest tests/integration/test_agent_offline_e2e.py -v
+
+# Scenario tests (validates prompt quality via output)
+python -m pytest tests/test_scenarios_offline.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `test_evidence_formatter.py` | Dedup, truncation, source labels |
+| `test_evidence_formatter_structured.py` | `EvidenceFormatResult`, `FormattedEvidenceItem`, metadata |
+| `test_output_validator.py` | Forbidden terms, verbosity, freshness, auto-fix repair |
+| `test_prompt_builder_contract.py` | Message structure, template selection, system/dev/user separation |
+| `test_agent_offline_e2e.py` | Full prompt → generate → validate cycle |
 
 ---
 

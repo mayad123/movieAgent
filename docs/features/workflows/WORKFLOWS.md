@@ -3,6 +3,26 @@
 > **Package:** `src/workflows/`
 > **Purpose:** Thin orchestration layer that decouples API endpoints from domain logic. Workflows depend on service interfaces, not on concrete implementations.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| What files are in this package | [Module Map](#module-map) |
+| How API calls the agent | [Architecture](#architecture) |
+| Playground workflow details | [Playground Workflow](#playground-workflow) |
+| Timeout and fallback logic | [Timeout & Fallback Logic](#timeout--fallback-logic) |
+| The IAgentRunner protocol | [Service Interface](#service-interface) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change the timeout duration" → [Timeout & Fallback Logic](#timeout--fallback-logic)
+- "Add a new workflow variant" → [Architecture](#architecture) + [Service Interface](#service-interface)
+- "Change how fallback works" → [Real Agent Workflow](#real-agent-workflow)
+
+</details>
+
 ---
 
 ## Module Map
@@ -161,6 +181,27 @@ graph LR
 2. **Thin Orchestration** — no business logic in workflows; they wire inputs to domain functions
 3. **Structured Error Propagation** — `(result, fallback_reason)` tuple avoids silent failures
 4. **Single Import Direction** — API → Workflows → Domain (never reverse)
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# Direct unit tests
+python -m pytest tests/unit/workflows/test_workflows.py -v
+
+# Smoke tests (exercise full workflow paths)
+python -m pytest tests/smoke/test_playground_smoke.py -v
+python -m pytest tests/smoke/test_real_workflow_smoke.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `tests/unit/workflows/test_workflows.py` | `run_real_agent_with_fallback`: timeout, error fallback, success path |
+| `tests/smoke/test_playground_smoke.py` | Playground workflow via FastAPI |
+| `tests/smoke/test_real_workflow_smoke.py` | Real agent workflow (requires API key) |
 
 ---
 

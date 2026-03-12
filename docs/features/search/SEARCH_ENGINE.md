@@ -3,6 +3,26 @@
 > **Package:** `src/cinemind/search/`
 > **Purpose:** Multi-source search and data retrieval — orchestrates Kaggle (offline IMDB dataset), Tavily (real-time web search), and DuckDuckGo (fallback) to gather evidence for the agent pipeline.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| How search sources are orchestrated | [Search Engine](#search-engine-search_enginepy) |
+| When Tavily is used vs skipped | [Search Decision Flow](#search-decision-flow) |
+| How the Kaggle dataset is searched | [Kaggle Dataset Searcher](#kaggle-dataset-searcher-kaggle_searchpy) |
+| How Kaggle results become evidence | [Kaggle Retrieval Adapter](#kaggle-retrieval-adapter-kaggle_retrieval_adapterpy) |
+| How data flows through the pipeline | [Data Flow Through the Pipeline](#data-flow-through-the-pipeline) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change Kaggle correlation threshold" → [Kaggle Dataset Searcher](#kaggle-dataset-searcher-kaggle_searchpy)
+- "Add a new search source" → [Search Engine](#search-engine-search_enginepy)
+- "Change DuckDuckGo fallback" → [Search Decision Flow](#search-decision-flow)
+
+</details>
+
 ---
 
 ## Module Map
@@ -281,6 +301,30 @@ graph TD
 4. **Two-Stage Search** — fast candidate retrieval before expensive scoring reduces total latency
 5. **Decision Tracking** — `SearchDecision` and `TavilyOverrideReason` enable observability of search choices
 6. **Feature Toggles** — `KAGGLE_ENABLED` allows disabling the dataset without code changes
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All search unit tests
+python -m pytest tests/unit/search/ -v
+
+# Individual module tests
+python -m pytest tests/unit/search/test_kaggle_search.py -v
+python -m pytest tests/unit/search/test_kaggle_retrieval_adapter.py -v
+
+# Integration: search routing with mocked APIs
+python -m pytest tests/integration/test_routing_mocked.py -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `test_kaggle_search.py` | `KaggleDatasetSearcher`: matching, normalization, two-stage pipeline |
+| `test_kaggle_retrieval_adapter.py` | Adapter: hit, miss fallback, disabled mode, timeout |
+| `test_routing_mocked.py` | `SearchEngine` + `SearchDecision`: Kaggle vs Tavily routing |
 
 ---
 

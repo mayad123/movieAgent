@@ -2,6 +2,24 @@
 
 > Python conventions and design patterns used throughout the CineMind backend (`src/`).
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need guidance on... | Jump to |
+|----------------------|---------|
+| Package structure and `__init__.py` | [Module Design](#module-design) |
+| How to define data structures | [Dataclass Conventions](#dataclass-conventions) |
+| When to use Protocol interfaces | [Protocol Interfaces](#protocol-interfaces) |
+| Error handling and fallbacks | [Error Handling](#error-handling) |
+| Async patterns and timeouts | [Async Patterns](#async-patterns) |
+| Constructor injection and singletons | [Dependency Injection](#dependency-injection) |
+| Environment variable conventions | [Configuration Pattern](#configuration-pattern) |
+| Naming rules | [Naming Conventions](#naming-conventions) |
+| Import organization | [Import Organization](#import-organization) |
+| What NOT to do | [Anti-Patterns to Avoid](#anti-patterns-to-avoid) |
+
+</details>
+
 ---
 
 ## Module Design

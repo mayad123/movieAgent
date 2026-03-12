@@ -3,6 +3,26 @@
 > **Package:** `src/integrations/`
 > **Purpose:** Server-side clients for external APIs — TMDB (movie metadata, posters, scenes) and Watchmode (streaming availability). Isolated from business logic; consumed by media enrichment and API endpoints.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| TMDB image URL building | [Image Configuration](#image-configuration-image_configpy) |
+| How movie titles resolve to TMDB data | [Movie Resolver](#movie-resolver-resolverpy) |
+| How scenes/backdrops work | [Scenes Provider](#scenes-provider-scenespy) |
+| Streaming availability lookup | [Client](#client-clientpy) |
+| How raw API responses are shaped | [Normalizer](#normalizer-normalizerpy) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Fix TMDB resolver scoring" → [Movie Resolver](#movie-resolver-resolverpy) + [Scoring Factors](#scoring-factors)
+- "Change Watchmode response format" → [Normalizer](#normalizer-normalizerpy)
+- "Add a new external API" → [Architecture](#architecture) + see `ADD_FEATURE_CONTEXT.md`
+
+</details>
+
 ---
 
 ## Module Map
@@ -297,6 +317,35 @@ graph TD
 4. **Response Normalization** — raw API responses are shaped at the integration boundary, not in domain code
 5. **Cached Configuration** — TMDB image config and Watchmode source catalogs are fetched once and cached
 6. **Graceful Degradation** — missing API keys produce empty providers, not crashes
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing This Package
+
+```bash
+# All integration unit tests
+python -m pytest tests/unit/integrations/ -v
+
+# TMDB tests
+python -m pytest tests/unit/integrations/test_tmdb_image_config.py -v
+python -m pytest tests/unit/integrations/test_tmdb_resolver.py -v
+
+# Watchmode tests
+python -m pytest tests/unit/integrations/test_where_to_watch_api.py -v
+python -m pytest tests/unit/integrations/test_where_to_watch_normalizer.py -v
+
+# Downstream: media enrichment uses TMDB
+python -m pytest tests/unit/media/ -v
+```
+
+| Test File | What It Covers |
+|-----------|---------------|
+| `test_tmdb_image_config.py` | `TMDBImageConfig`, `fetch_config`, `build_image_url`, size constants |
+| `test_tmdb_resolver.py` | `resolve_movie`, `_normalize_title`, `_score_candidate`, confidence |
+| `test_where_to_watch_api.py` | FastAPI endpoint: happy path, not found, rate limit, missing key |
+| `test_where_to_watch_normalizer.py` | `normalize_where_to_watch_response`: grouping, dedup, sorting |
 
 ---
 

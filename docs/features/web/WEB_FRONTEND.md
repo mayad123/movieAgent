@@ -3,6 +3,33 @@
 > **Directory:** `web/`
 > **Purpose:** Vanilla JS single-page application — the CineMind chat UI. No build step, no framework. Plain HTML, ES modules, and CSS custom properties.
 
+<details>
+<summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
+
+| I need to understand... | Jump to |
+|------------------------|---------|
+| All files and their roles | [File Map](#file-map) |
+| How modules are wired | [Callback Wiring System](#callback-wiring-system) |
+| Application state shape | [Application State](#application-state-statejs) |
+| How API calls work | [API Client](#api-client-apijs) |
+| Page layout structure | [UI Layout](#ui-layout) |
+| How messages are rendered | [Message Rendering Flow](#message-rendering-flow) |
+| Poster cards and carousels | [Media & Poster System](#media--poster-system-postersjs) |
+| Where-to-Watch drawer | [Where-to-Watch Drawer](#where-to-watch-drawer-where-to-watchjs) |
+| CSS file organization | [CSS Architecture](#css-architecture) |
+| Design tokens | [CSS Custom Properties](#css-custom-properties-design-tokens) |
+| Backend response contract | [Backend ↔ Frontend Contract](#backend--frontend-contract) |
+| Which tests to run | [Test Coverage](#test-coverage) |
+| What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
+
+**Example changes and where to look:**
+- "Change how messages look" → [Message Rendering Flow](#message-rendering-flow) + `css/chat.css`
+- "Add a new card type" → [Media & Poster System](#media--poster-system-postersjs) + `css/media.css`
+- "Change sidebar behavior" → [UI Layout](#ui-layout) + `css/sidebar.css`
+- "Handle a new response field" → [Backend ↔ Frontend Contract](#backend--frontend-contract) + [Normalization](#normalization-normalizejs)
+
+</details>
+
 ---
 
 ## File Map
@@ -444,6 +471,29 @@ classDiagram
 5. **Progressive Enhancement** — error overlay in `index.html` catches load failures before modules execute
 6. **CSS Component Files** — one CSS file per UI region; `app.css` is the import aggregator
 7. **Design Tokens** — CSS custom properties in `base.css` for theming consistency
+
+---
+
+## Test Coverage
+
+### Tests to Run When Changing the Frontend
+
+```bash
+# Smoke test (serves frontend, exercises API)
+python -m pytest tests/smoke/test_playground_smoke.py -v
+
+# Manual testing via playground server
+python -m tests.playground.server
+# Open http://localhost:8000
+```
+
+| Test Method | What It Covers |
+|------------|---------------|
+| `tests/smoke/test_playground_smoke.py` | FastAPI serves `web/`, basic request-response cycle |
+| Playground server (manual) | Full UI testing: messages, posters, sidebar, Where-to-Watch |
+| Browser DevTools console | Check for JS errors after changes |
+
+> **Note:** The frontend has no automated unit tests. All validation is through the playground server smoke test and manual browser testing. When adding significant JS logic, consider adding tests via a lightweight runner or at minimum verifying no console errors.
 
 ---
 
