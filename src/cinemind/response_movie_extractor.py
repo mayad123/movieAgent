@@ -23,6 +23,7 @@ from typing import Any
 __all__ = [
     "normalize_title",
     "parse_response",
+    "extract_titles_for_enrichment",
     "ResponseParseResult",
     "ExtractedMovie",
     "ParseStructure",
@@ -259,36 +260,110 @@ def _compute_signals(text: str) -> ParseSignals:
     return sig
 
 
+_QUOTED_TITLE_START = re.compile(r'^["\u201c]([^"\u201d]+)["\u201d]')
+_DESC_SEPARATOR = re.compile(r'\s+[-\u2013\u2014]\s+')
+
+
+def _year_from_text(text: str) -> int | None:
+    """Extract first valid (YYYY) from text, or None."""
+    m = _YEAR_PATTERN.search(text)
+    if m:
+        y = int(m.group(1))
+        if 1900 <= y <= 2100:
+            return y
+    return None
+
+
 def _extract_from_bullets_and_numbered(text: str) -> list[tuple[str, int | None, float]]:
-    """Extract candidate (title, year, confidence) from bullet/numbered lines."""
+    """
+    Extract candidate (title, year, confidence) from structured lines.
+
+    Strategies (tried in order per line):
+      1. Bold title (**Title**) — check rest of line for (Year)
+      2. Quoted title ("Title") — check rest of line for (Year)
+      3. Title (Year) anywhere in line
+      4. Separator-based: split at ' - ' / ' — ' / ': ' (list items only)
+      5. Short bare line fallback (list items only, low confidence)
+    """
     out: list[tuple[str, int | None, float]] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
+    for raw_line in text.splitlines():
+        raw_line = raw_line.strip()
+        if not raw_line:
             continue
-        # Strip bullet or numbered prefix
-        line = _BULLET_START.sub("", line, count=1)
+        is_list_item = bool(_BULLET_START.match(raw_line) or _NUMBERED_START.match(raw_line))
+        line = _BULLET_START.sub("", raw_line, count=1)
         line = _NUMBERED_START.sub("", line, count=1)
         line = line.strip()
         if not line or len(line) < 2:
             continue
-        # Strip leading bold markers
+
+        # 1. Bold title — extract between ** and check rest for year
         if line.startswith("**") and "**" in line[2:]:
-            line = line[2:].split("**", 1)[0].strip()
+            parts = line[2:].split("**", 1)
+            bold_text = parts[0].strip()
+            rest = parts[1] if len(parts) > 1 else ""
+            title_text = normalize_title(bold_text)
+            year = _year_from_text(rest)
+            if not year:
+                title_text, year = _extract_year_from_tail(title_text)
+                title_text = normalize_title(title_text)
+            if title_text and len(title_text) >= 2:
+                out.append((title_text, year, 0.9 if year else 0.85))
+                continue
         elif line.startswith("*") and not line.startswith("**") and "*" in line[1:]:
-            line = line[1:].split("*", 1)[0].strip()
-        # Title (Year) at end?
+            parts = line[1:].split("*", 1)
+            italic_text = parts[0].strip()
+            rest = parts[1] if len(parts) > 1 else ""
+            title_text = normalize_title(italic_text)
+            year = _year_from_text(rest)
+            if title_text and len(title_text) >= 2:
+                out.append((title_text, year, 0.9 if year else 0.8))
+                continue
+
+        # 2. Quoted title at start of line
+        qm = _QUOTED_TITLE_START.match(line)
+        if qm:
+            title_text = normalize_title(qm.group(1))
+            rest = line[qm.end():]
+            year = _year_from_text(rest)
+            if title_text and len(title_text) >= 2:
+                out.append((title_text, year, 0.9 if year else 0.85))
+                continue
+
+        # 3. Title (Year) anywhere
         title_part, year = _extract_year_from_tail(line)
-        if title_part:
+        if year is not None and title_part:
             title_part = normalize_title(title_part)
             if len(title_part) >= 2:
-                conf = 0.85 if year is not None else 0.7
-                out.append((title_part, year, conf))
+                out.append((title_part, year, 0.85))
+                continue
+
+        if not is_list_item:
+            continue
+
+        # 4. Separator-based: "Title - Description" or "Title: Description"
+        sep_m = _DESC_SEPARATOR.search(line)
+        if sep_m:
+            candidate = normalize_title(line[:sep_m.start()])
+            if 2 <= len(candidate) <= 80:
+                out.append((candidate, None, 0.75))
+                continue
+        colon_m = re.match(r'^([^:\n]{2,80}):\s+\S', line)
+        if colon_m:
+            candidate = normalize_title(colon_m.group(1))
+            if 2 <= len(candidate) <= 80:
+                out.append((candidate, None, 0.75))
+                continue
+
+        # 5. Short bare list items (likely just a title)
+        title_part = normalize_title(line)
+        if 2 <= len(title_part) <= 60:
+            out.append((title_part, None, 0.65))
     return out
 
 
 def _extract_from_bold(text: str) -> list[tuple[str, int | None, float]]:
-    """Extract from **Title** or *Title* (high confidence for short titles)."""
+    """Extract from **Title** or *Title*. Checks for (Year) both inside and after the bold markers."""
     out: list[tuple[str, int | None, float]] = []
     for m in _BOLD_TITLE.finditer(text):
         g = m.group(1) or m.group(2)
@@ -298,6 +373,10 @@ def _extract_from_bold(text: str) -> list[tuple[str, int | None, float]]:
         if len(t) < 2 or len(t) > 120:
             continue
         title_part, year = _extract_year_from_tail(t)
+        if not year:
+            # Year might be right after the closing bold markers: **Title** (2010)
+            after_bold = text[m.end():m.end() + 20]
+            year = _year_from_text(after_bold)
         if title_part:
             title_part = normalize_title(title_part)
             if len(title_part) >= 2:
@@ -357,3 +436,20 @@ def parse_response(response_text: str) -> ResponseParseResult:
     movies = _dedupe_movies(collected)
 
     return ResponseParseResult(movies=movies, structure=structure, signals=signals)
+
+
+def extract_titles_for_enrichment(
+    response_text: str,
+    min_confidence: float = 0.8,
+) -> list[str]:
+    """
+    Extract clean movie titles from agent response text for TMDB enrichment.
+
+    Filters by confidence so only structurally-evidenced titles survive
+    (bold, quoted, (Year), or bullet+separator patterns). Prose fragments
+    and full-sentence garbage are excluded.
+
+    Returns title strings in first-seen order, suitable for enrich / enrich_batch.
+    """
+    result = parse_response(response_text)
+    return [m.title for m in result.movies if m.confidence >= min_confidence]

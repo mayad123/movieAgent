@@ -1205,7 +1205,7 @@ body {
 
 /* --- Media Strip (hero): horizontal shelf, scroll-snap, end spacing --- */
 /* Horizontal only: multi-movie responses use a single row; no vertical stacking. */
-.media-strip { width: 100%; margin-bottom: var(--media-strip-margin-bottom); flex-shrink: 0; }
+.media-strip { width: 100%; margin-bottom: 1.25rem; flex-shrink: 0; }
 .media-strip-layout {
     display: flex;
     flex-direction: row;
@@ -1446,7 +1446,7 @@ body {
 }
 
 /* --- Attachments (P0): sections (primary_movie, movie_list, did_you_mean, scenes) --- */
-.attachments { width: 100%; margin-bottom: var(--media-strip-margin-bottom, 0.75rem); }
+.attachments { width: 100%; margin-bottom: 1.25rem; }
 .attachments-section { margin-bottom: 1rem; }
 .attachments-section:last-child { margin-bottom: 0; }
 .attachments-section-title {
@@ -1534,17 +1534,18 @@ body {
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: var(--carousel-arrow-bg);
+    color: var(--carousel-arrow-color);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2;
     transition: background 0.2s, color 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .scenes-carousel-arrow:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: var(--carousel-arrow-bg-hover);
 }
 .scenes-carousel-arrow:disabled {
     opacity: 0.4;
@@ -1693,7 +1694,7 @@ body {
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--carousel-arrow-bg);
     color: var(--carousel-arrow-color);
     cursor: pointer;
     display: flex;
@@ -1701,9 +1702,10 @@ body {
     justify-content: center;
     z-index: 10;
     transition: background 0.2s, color 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .hero-scenes-carousel-arrow:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: var(--carousel-arrow-bg-hover);
     color: var(--carousel-arrow-hover);
 }
 .hero-scenes-carousel-arrow:disabled {
@@ -1856,8 +1858,10 @@ body {
     --carousel-transition-duration: 0.32s;
     --carousel-transition-easing: cubic-bezier(0.33, 1, 0.68, 1);
     --carousel-arrow-size: clamp(2rem, 2.5rem, 3rem);
-    --carousel-arrow-color: rgba(255, 255, 255, 0.9);
+    --carousel-arrow-color: #fff;
     --carousel-arrow-hover: #fff;
+    --carousel-arrow-bg: rgba(0, 0, 0, 0.55);
+    --carousel-arrow-bg-hover: rgba(0, 0, 0, 0.75);
 }
 
 .poster-carousel-wheel {
@@ -2106,7 +2110,7 @@ body {
     height: var(--carousel-arrow-size);
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--carousel-arrow-bg);
     color: var(--carousel-arrow-color);
     cursor: pointer;
     display: flex;
@@ -2114,9 +2118,10 @@ body {
     justify-content: center;
     z-index: 10;
     transition: background 0.2s, color 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .poster-carousel-wheel-arrow:hover {
-    background: rgba(255, 255, 255, 0.22);
+    background: var(--carousel-arrow-bg-hover);
     color: var(--carousel-arrow-hover);
 }
 .poster-carousel-wheel-arrow:disabled {

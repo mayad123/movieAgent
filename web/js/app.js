@@ -510,6 +510,10 @@
                     showSavedToProjectToast(proj ? proj.name : null);
                     loadProjectAssets(projectId);
                     updateRightPanelScope();
+                    if (rightPanel && rightPanel.classList.contains('collapsed')) {
+                        rightPanel.classList.remove('collapsed');
+                        app.classList.add('right-panel-open');
+                    }
                 })
                 .catch(function () {
                     showFallbackToast('Could not add to project. Check that the server supports projects.');
@@ -528,7 +532,34 @@
         if (conversationView === 'sub' && activeSubConversationId) item.addedFromSubConversationId = activeSubConversationId;
         conv.collection.push(item);
         renderCollectionPanel();
+        openRightPanelToCollection();
         /* Do not re-render messages: it tears down the carousel DOM and breaks subsequent "Add to Collection" clicks. */
+    }
+
+    /** Open the right panel (if collapsed) and scroll the collection into view. */
+    function openRightPanelToCollection() {
+        if (rightPanel && rightPanel.classList.contains('collapsed')) {
+            rightPanel.classList.remove('collapsed');
+            app.classList.add('right-panel-open');
+        }
+        var collectionEl = document.getElementById('collectionList');
+        if (collectionEl) {
+            setTimeout(function () {
+                collectionEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 80);
+        }
+        showSavedToCollectionToast();
+    }
+
+    function showSavedToCollectionToast() {
+        var el = document.getElementById('rightPanelSavedToast');
+        if (!el) return;
+        el.textContent = 'Added to Collection';
+        el.classList.add('is-visible');
+        clearTimeout(showSavedToCollectionToast._hideId);
+        showSavedToCollectionToast._hideId = setTimeout(function () {
+            el.classList.remove('is-visible');
+        }, 2500);
     }
 
     /** Max stack layers (above/below active) from panel height for adaptive layout. */
@@ -1527,6 +1558,12 @@
                 e.stopPropagation();
                 if (isInCollection) return false;
                 addToCollection(title, imgUrl, pageUrl || undefined, pageId || undefined);
+                addBtn.classList.add('is-added');
+                addBtn.setAttribute('data-tooltip', 'Already Added');
+                addBtn.setAttribute('title', 'Already Added');
+                addBtn.setAttribute('aria-label', 'Already Added');
+                addBtn.disabled = true;
+                isInCollection = true;
                 return false;
             });
             var msgBtn = document.createElement('button');
@@ -1773,14 +1810,19 @@
             addBtn.setAttribute('aria-label', isInCollection ? 'Already Added' : 'Add to Collection');
             if (isInCollection) addBtn.disabled = true;
             addBtn.innerHTML = addIconSvg;
-            (function (itemTitle, itemImgUrl, itemPageUrl, itemPageId, itemInCollection) {
-                addBtn.addEventListener('click', function (e) {
+            (function (btn, itemTitle, itemImgUrl, itemPageUrl, itemPageId, itemInCollection) {
+                btn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (itemInCollection) return;
                     if (typeof addToCollection === 'function') addToCollection(itemTitle, itemImgUrl, itemPageUrl || undefined, itemPageId);
+                    btn.classList.add('is-added');
+                    btn.setAttribute('data-tooltip', 'Already Added');
+                    btn.setAttribute('title', 'Already Added');
+                    btn.setAttribute('aria-label', 'Already Added');
+                    btn.disabled = true;
                 });
-            })(title, imgUrl, pageUrl, pageId, isInCollection);
+            })(addBtn, title, imgUrl, pageUrl, pageId, isInCollection);
             var msgBtn = document.createElement('button');
             msgBtn.type = 'button';
             msgBtn.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
@@ -2054,96 +2096,120 @@
         return root;
     }
 
-    /* Render attachments.sections (primary_movie, movie_list, did_you_mean, scenes). Backward compat: fallback to media_strip/media_candidates. */
+    /**
+     * Normalize a single attachment item (any section type) into a carousel-ready shape.
+     * Returns null for scene-kind items or items without a title.
+     */
+    function _attachmentItemToCarouselItem(it) {
+        var kind = (it.kind && String(it.kind).trim()) || '';
+        if (kind === 'scene') return null;
+        var title = (it.title != null && String(it.title).trim()) || '';
+        if (!title) {
+            var heroShape = attachmentItemToHeroShape(it);
+            if (!heroShape) return null;
+            title = heroShape.movie_title || '';
+            if (!title) return null;
+            return {
+                title: title,
+                year: heroShape.year,
+                imageUrl: heroShape.primary_image_url || '',
+                sourceUrl: heroShape.page_url || '',
+                tmdbId: heroShape.tmdbId || undefined,
+                mediaType: heroShape.mediaType || undefined,
+                pageId: it.pageId || it.page_id || undefined
+            };
+        }
+        return {
+            title: title,
+            year: typeof it.year === 'number' ? it.year : undefined,
+            imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
+            sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || '',
+            tmdbId: it.tmdbId || it.tmdb_id || undefined,
+            mediaType: it.mediaType || it.media_type || undefined,
+            pageId: it.pageId || it.page_id || undefined
+        };
+    }
+
+    /* Render attachments.sections — all movie items merged into one carousel. Scenes kept separate. */
     function createAttachmentsFromSections(sections) {
         if (!sections || sections.length === 0) return null;
         var wrap = document.createElement('div');
         wrap.className = 'attachments';
+
+        var allMovieItems = [];
+        var sceneItems = [];
+        var hasScenes = false;
+        var heroSceneItems = [];
+
         sections.forEach(function (section) {
             var type = (section.type && String(section.type).trim()) || 'movie_list';
-            var title = (section.title && String(section.title).trim()) || 'Movies';
             var items = Array.isArray(section.items) ? section.items : [];
             if (items.length === 0) return;
 
-            var sectionEl = document.createElement('div');
-            sectionEl.className = 'attachments-section attachments-section-' + type.replace(/_/g, '-');
-            sectionEl.setAttribute('data-section-type', type);
-            var heading = document.createElement('div');
-            heading.className = 'attachments-section-title';
-            heading.textContent = title;
-            sectionEl.appendChild(heading);
+            if (type === 'scenes') {
+                var seenSceneUrls = {};
+                items.forEach(function (it) {
+                    var url = (it.imageUrl && String(it.imageUrl).trim()) || '';
+                    if (url && !seenSceneUrls[url]) {
+                        seenSceneUrls[url] = true;
+                        var o = {}; for (var k in it) o[k] = it[k]; o.kind = 'scene';
+                        sceneItems.push(o);
+                    }
+                });
+                return;
+            }
 
             if (type === 'primary_movie') {
-                var hasScenes = items.some(function (it) { return (it.kind && String(it.kind).trim()) === 'scene'; });
-                if (hasScenes) {
-                    var heroScenesCarousel = createHeroAndScenesCarousel(items);
-                    if (heroScenesCarousel) sectionEl.appendChild(heroScenesCarousel);
-                } else {
-                    var carouselItems = items.map(function (it) {
-                        return {
-                            title: (it.title != null && String(it.title).trim()) || '',
-                            year: typeof it.year === 'number' ? it.year : undefined,
-                            imageUrl: (it.imageUrl && String(it.imageUrl).trim()) || '',
-                            sourceUrl: (it.sourceUrl && String(it.sourceUrl).trim()) || '',
-                            tmdbId: it.tmdbId || it.tmdb_id || undefined,
-                            mediaType: it.mediaType || it.media_type || undefined,
-                            pageId: it.pageId || it.page_id || undefined
-                        };
-                    }).filter(function (it) { return it.title; });
-                    if (carouselItems.length > 0) {
-                        var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
-                        sectionEl.appendChild(carousel);
-                    }
-                }
-            } else if (type === 'did_you_mean' || type === 'movie_list') {
-                /* Same wheel carousel as single-movie: center largest, arrows to navigate; works for 2, 9, 20, 30+ movies. */
-                var carouselItems = items.map(function (it) {
-                    var heroShape = attachmentItemToHeroShape(it);
-                    if (!heroShape) return null;
-                    return {
-                        title: heroShape.movie_title || '',
-                        year: heroShape.year,
-                        imageUrl: heroShape.primary_image_url || '',
-                        sourceUrl: heroShape.page_url || '',
-                        tmdbId: heroShape.tmdbId || undefined,
-                        mediaType: heroShape.mediaType || undefined,
-                        pageId: it.pageId || it.page_id || undefined
-                    };
-                }).filter(function (it) { return it && it.title; });
-                if (carouselItems.length > 0) {
-                    var carousel = PosterCarouselWheel(carouselItems, 0, function () {}, { visibleWindow: 2 });
-                    sectionEl.appendChild(carousel);
-                }
-            } else if (type === 'scenes') {
-                var seenSceneUrls = {};
-                var uniqueItems = items.filter(function (it) {
-                    var url = (it.imageUrl && String(it.imageUrl).trim()) || '';
-                    if (!url || seenSceneUrls[url]) return false;
-                    seenSceneUrls[url] = true;
-                    return true;
-                }).map(function (it) { var o = {}; for (var k in it) o[k] = it[k]; o.kind = 'scene'; return o; });
-                if (uniqueItems.length > 0) {
-                    var scenesCarousel = createHeroAndScenesCarousel(uniqueItems);
-                    if (scenesCarousel) sectionEl.appendChild(scenesCarousel);
-                }
-            } else {
-                var carouselItemsOther = items.map(function (it) {
-                    var heroShape = attachmentItemToHeroShape(it);
-                    if (!heroShape) return null;
-                    return {
-                        title: heroShape.movie_title || '',
-                        year: heroShape.year,
-                        imageUrl: heroShape.primary_image_url || '',
-                        sourceUrl: heroShape.page_url || ''
-                    };
-                }).filter(function (it) { return it && it.title; });
-                if (carouselItemsOther.length > 0) {
-                    var carouselOther = PosterCarouselWheel(carouselItemsOther, 0, function () {}, { visibleWindow: 2 });
-                    sectionEl.appendChild(carouselOther);
+                var sectionHasScenes = items.some(function (it) { return (it.kind && String(it.kind).trim()) === 'scene'; });
+                if (sectionHasScenes) {
+                    hasScenes = true;
+                    items.forEach(function (it) { heroSceneItems.push(it); });
+                    return;
                 }
             }
-            wrap.appendChild(sectionEl);
+
+            items.forEach(function (it) {
+                var ci = _attachmentItemToCarouselItem(it);
+                if (ci) allMovieItems.push(ci);
+            });
         });
+
+        /* Deduplicate by title (case-insensitive), keep first occurrence. */
+        var seenTitles = {};
+        var uniqueMovieItems = allMovieItems.filter(function (it) {
+            var key = it.title.toLowerCase();
+            if (seenTitles[key]) return false;
+            seenTitles[key] = true;
+            return true;
+        });
+
+        if (hasScenes && heroSceneItems.length > 0) {
+            var sectionEl = document.createElement('div');
+            sectionEl.className = 'attachments-section attachments-section-primary-movie';
+            sectionEl.setAttribute('data-section-type', 'primary_movie');
+            var heroScenesCarousel = createHeroAndScenesCarousel(heroSceneItems);
+            if (heroScenesCarousel) sectionEl.appendChild(heroScenesCarousel);
+            wrap.appendChild(sectionEl);
+        }
+
+        if (uniqueMovieItems.length > 0) {
+            var movieSection = document.createElement('div');
+            movieSection.className = 'attachments-section attachments-section-primary-movie';
+            movieSection.setAttribute('data-section-type', 'primary_movie');
+            var carousel = PosterCarouselWheel(uniqueMovieItems, 0, function () {}, { visibleWindow: 2 });
+            movieSection.appendChild(carousel);
+            wrap.appendChild(movieSection);
+        }
+
+        if (sceneItems.length > 0) {
+            var sceneSectionEl = document.createElement('div');
+            sceneSectionEl.className = 'attachments-section attachments-section-scenes';
+            sceneSectionEl.setAttribute('data-section-type', 'scenes');
+            var scenesCarousel = createHeroAndScenesCarousel(sceneItems);
+            if (scenesCarousel) sceneSectionEl.appendChild(scenesCarousel);
+            wrap.appendChild(sceneSectionEl);
+        }
+
         if (wrap.children.length === 0) return null;
         return wrap;
     }
@@ -2215,7 +2281,9 @@
                         }
                     }
                 }
-                if (movieStrip) bubble.appendChild(movieStrip);
+                if (movieStrip) {
+                    content.appendChild(movieStrip);
+                }
                 bubble.appendChild(document.createTextNode(displayContent));
 
                 content.appendChild(bubble);

@@ -33,13 +33,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Add src to path so we can import cinemind
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from tests.playground_runner import run_playground
-from tests.playground_projects_store import (
+from tests.playground.runner import run_playground
+from tests.playground.projects_store import (
     list_all as projects_list_all,
     get_by_id as projects_get_by_id,
     create as projects_create,

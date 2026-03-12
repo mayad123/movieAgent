@@ -101,6 +101,8 @@ def _build_candidate_from_tmdb(c: Any, token: str = "") -> dict[str, Any]:
         "movie_title": (c.title or "").strip() or "Unknown",
         "page_url": _tmdb_movie_url(c.id) if c.id else "#",
     }
+    if getattr(c, "id", None) is not None:
+        out["tmdb_id"] = int(c.id)
     if c.year is not None:
         out["year"] = c.year
     poster_path = getattr(c, "poster_path", None) or (c.get("poster_path") if isinstance(c, dict) else None)
@@ -114,6 +116,19 @@ def _build_candidate_from_tmdb(c: Any, token: str = "") -> dict[str, Any]:
         except Exception:
             pass
     return out
+
+
+def _same_movie_as_strip(card: dict[str, Any], strip: dict[str, Any]) -> bool:
+    """True if card is the same movie as strip (by tmdb_id, or by normalized title+year)."""
+    sid = strip.get("tmdb_id")
+    cid = card.get("tmdb_id")
+    if sid is not None and cid is not None:
+        return int(sid) == int(cid)
+    st = (strip.get("movie_title") or "").strip().lower()
+    sy = strip.get("year")
+    ct = (card.get("movie_title") or "").strip().lower()
+    cy = card.get("year")
+    return bool(st and ct and st == ct and sy == cy)
 
 
 def _should_show_gallery_tmdb(tr: Any) -> bool:
@@ -237,10 +252,12 @@ def enrich(
             payloads = [_build_candidate_from_tmdb(c, token) for c in (tr.candidates or [])[:MAX_GALLERY_CANDIDATES]]
             if not payloads:
                 payloads = [dict(media_strip)]
-            show_gallery = _should_show_gallery_tmdb(tr) and len(payloads) > 1
+            # Invariant: hero must not appear in did_you_mean; exclude strip from candidates.
+            candidates_no_hero = [p for p in payloads if not _same_movie_as_strip(p, media_strip)]
+            show_gallery = _should_show_gallery_tmdb(tr) and len(candidates_no_hero) > 0
             result = MediaEnrichmentResult(
                 media_strip=media_strip,
-                media_candidates=payloads if show_gallery else [],
+                media_candidates=candidates_no_hero if show_gallery else [],
                 poster_debug=poster_debug,
             )
             if use_enrich_cache and query_key:
@@ -337,10 +354,10 @@ def _movie_card_item(card: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
-    """Build attachments.sections from media_strip and media_candidates."""
+    """Build attachments.sections from media_strip and media_candidates. Excludes hero from candidates."""
     sections: list[dict[str, Any]] = []
     strip = result.get("media_strip") or {}
-    candidates = result.get("media_candidates") or []
+    raw_candidates = result.get("media_candidates") or []
     gallery_label = (result.get("media_gallery_label") or "").strip()
 
     if strip and (strip.get("movie_title") or "").strip():
@@ -350,6 +367,8 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
             "items": [_movie_card_item(strip)],
         })
 
+    # Invariant: hero must not appear in did_you_mean; filter again at build time.
+    candidates = [c for c in raw_candidates if not _same_movie_as_strip(c, strip)]
     if candidates:
         if gallery_label.lower().startswith("did you mean") or gallery_label == "":
             section_type = SECTION_DID_YOU_MEAN
@@ -366,6 +385,41 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
     return {"sections": sections}
 
 
+def _attach_single(
+    title: str,
+    result: dict[str, Any],
+    cache: Optional[MediaCache],
+) -> None:
+    """Enrich a single title and attach to result."""
+    enrichment = enrich(
+        title,
+        fallback_title=title,
+        fallback_from_result=result,
+        cache=cache,
+    )
+    if enrichment.media_strip.get("movie_title"):
+        result["media_strip"] = enrichment.media_strip
+        if enrichment.media_candidates:
+            result["media_candidates"] = enrichment.media_candidates
+    result["attachments"] = build_attachments_from_media(result)
+
+
+def _attach_batch(
+    batch_titles: list[str],
+    result: dict[str, Any],
+    gallery_label: Optional[str],
+    cache: Optional[MediaCache],
+) -> None:
+    """Enrich multiple titles via batch and attach to result."""
+    cards = enrich_batch(batch_titles, cache=cache)
+    if cards:
+        result["media_strip"] = cards[0]
+        if len(cards) > 1:
+            result["media_candidates"] = cards[1:]
+        result["media_gallery_label"] = gallery_label or "Similar movies"
+    result["attachments"] = build_attachments_from_media(result)
+
+
 def attach_media_to_result(
     user_query: str,
     result: dict[str, Any],
@@ -376,29 +430,38 @@ def attach_media_to_result(
 ) -> None:
     """
     Attach media_strip (and optional media_candidates) to result using TMDB only.
+
+    Title sources (in priority order):
+      1. Explicit titles= parameter
+      2. result["recommended_movies"] (from LLM metadata)
+      3. Parsed from result["response"] via response_movie_extractor
+      4. Fallback: user_query
     """
     batch_titles = titles if titles is not None else result.get("recommended_movies")
-    from_extraction = False
-    if not batch_titles or len(batch_titles) <= 1:
-        extracted = extract_movie_titles(user_query)
-        if extracted.intent == "compare" and len(extracted.titles) >= 2:
-            batch_titles = list(extracted.titles)
-            from_extraction = True
+    if batch_titles:
+        batch_titles = [t for t in batch_titles if (t or "").strip()]
+
+    # Priority 1-2: explicit titles or recommended_movies
     if batch_titles and len(batch_titles) > 1:
-        cards = enrich_batch(batch_titles, cache=cache)
-        if cards:
-            result["media_strip"] = cards[0]
-            if len(cards) > 1:
-                result["media_candidates"] = cards[1:]
-            if gallery_label is not None:
-                result["media_gallery_label"] = gallery_label
-            elif not from_extraction:
-                result["media_gallery_label"] = "Similar movies"
-            else:
-                result["media_gallery_label"] = "Movies"
-        result["attachments"] = build_attachments_from_media(result)
+        _attach_batch(batch_titles, result, gallery_label, cache)
+        return
+    if batch_titles and len(batch_titles) == 1:
+        _attach_single(batch_titles[0], result, cache)
         return
 
+    # Priority 3: parse movie titles from agent response text
+    response_text = (result.get("response") or result.get("answer") or "").strip()
+    if response_text:
+        from .response_movie_extractor import extract_titles_for_enrichment
+        extracted = extract_titles_for_enrichment(response_text)
+        if len(extracted) > 1:
+            _attach_batch(extracted, result, gallery_label, cache)
+            return
+        if len(extracted) == 1:
+            _attach_single(extracted[0], result, cache)
+            return
+
+    # Priority 4: user query as final fallback
     enrichment = enrich(
         user_query,
         fallback_from_result=result,

@@ -28,9 +28,9 @@ from tests.fixtures.scenario_loader import (
     build_evidence_bundle,
     get_expected_checks,
 )
-from tests.report_generator import get_collector
-from tests.failure_artifact_writer import write_failure_artifact, remove_failure_artifact
-from tests.violation_artifact_writer import write_violation_artifact
+from tests.helpers.report_generator import get_collector
+from tests.helpers.failure_artifact_writer import write_failure_artifact, remove_failure_artifact
+from tests.helpers.violation_artifact_writer import write_violation_artifact
 
 
 def get_enforce_clean_policy(scenario: Dict[str, Any]) -> bool:

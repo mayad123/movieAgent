@@ -50,8 +50,8 @@ def remove_failure_artifact(
         True if file was removed (or didn't exist), False if removal failed
     """
     if artifacts_dir is None:
-        artifacts_dir = Path(__file__).parent / "test_reports" / "failures"
-    
+        artifacts_dir = Path(__file__).parent.parent / "test_reports" / "failures"
+
     # Sanitize scenario name for filename
     safe_name = sanitize_filename(scenario_name)
     artifact_file = artifacts_dir / f"{safe_name}.json"
@@ -101,7 +101,7 @@ def write_failure_artifact(
     """
     if artifacts_dir is None:
         # Default to tests/test_reports/failures/
-        artifacts_dir = Path(__file__).parent / "test_reports" / "failures"
+        artifacts_dir = Path(__file__).parent.parent / "test_reports" / "failures"
     
     # Create directory if it doesn't exist
     try:

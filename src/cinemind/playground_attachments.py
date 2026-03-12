@@ -40,6 +40,7 @@ from .media_enrichment import (
     SECTION_MOVIE_LIST,
     SECTION_DID_YOU_MEAN,
     _movie_card_item,
+    _same_movie_as_strip,
 )
 from .title_extraction import get_search_phrases, extract_movie_titles
 from .scenes_provider import get_scenes_provider
@@ -230,10 +231,12 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
             "items": primary_items,
         })
         if result["media_candidates"]:
+            # Invariant: hero must not appear in did_you_mean.
+            candidates_no_hero = [c for c in result["media_candidates"] if not _same_movie_as_strip(c, strip)]
             sections.append({
                 "type": SECTION_DID_YOU_MEAN,
                 "title": result.get("media_gallery_label") or "Did you mean?",
-                "items": [_movie_card_item(c) for c in result["media_candidates"] if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
+                "items": [_movie_card_item(c) for c in candidates_no_hero if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
             })
 
         result["attachments"] = {"sections": sections}

@@ -6,7 +6,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from lib.env import find_dotenv_path
+from config.env import find_dotenv_path
 
 _env_path = find_dotenv_path()
 if _env_path:

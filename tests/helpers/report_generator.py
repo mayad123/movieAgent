@@ -211,7 +211,7 @@ class ScenarioReportCollector:
         """Write the report to test_reports/latest.json and generate violations index."""
         if report_dir is None:
             # Default to tests/test_reports/
-            report_dir = Path(__file__).parent / "test_reports"
+            report_dir = Path(__file__).parent.parent / "test_reports"
         
         # Create directory if it doesn't exist
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -227,7 +227,7 @@ class ScenarioReportCollector:
             
             # Generate violations index after writing report
             try:
-                from tests.violation_artifact_writer import generate_violations_index
+                from tests.helpers.violation_artifact_writer import generate_violations_index
                 violations_dir = report_dir / "violations"
                 index_path = generate_violations_index(violations_dir)
                 if index_path:

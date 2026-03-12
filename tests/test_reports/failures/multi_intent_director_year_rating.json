@@ -87,6 +87,6 @@
   "failures": [
     "Prompt must contain 'director' but doesn't"
   ],
-  "timing_ms": 0.1201629638671875,
-  "timestamp": "2026-02-17T21:31:23"
+  "timing_ms": 0.15473365783691406,
+  "timestamp": "2026-03-11T17:53:31"
 }

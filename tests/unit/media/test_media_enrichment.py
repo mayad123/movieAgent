@@ -105,8 +105,8 @@ def test_build_attachments_from_media_did_you_mean():
 
 
 def test_attach_media_to_result_mutates_in_place():
-    """attach_media_to_result mutates result dict in place and sets attachments."""
-    result = {"response": "test", "query": "The Matrix"}
+    """attach_media_to_result mutates result when result has recommended_movies (non-playground: no user_query seed)."""
+    result = {"response": "test", "query": "The Matrix", "recommended_movies": ["The Matrix"]}
     attach_media_to_result("The Matrix", result)
     assert "media_strip" in result
     assert result["media_strip"].get("movie_title")
@@ -165,9 +165,104 @@ def test_enrich_batch_returns_cards():
         assert c["page_url"].startswith("https://") or c["page_url"] == "#"
 
 
+def test_attach_media_to_result_fallback_from_user_query():
+    """Without recommended_movies or response titles, falls back to user_query."""
+    result = {"response": "Here is some info.", "query": "Inception"}
+    attach_media_to_result("Inception", result)
+    assert "media_strip" in result
+    assert result["media_strip"].get("movie_title")
+    assert "attachments" in result
+    assert isinstance(result["attachments"].get("sections"), list)
+
+
+def test_attach_media_extracts_from_response_bullets_with_year():
+    """When response has bullet-listed movies with years, extracts and batch-enriches them."""
+    response = (
+        "Here are some movies you might enjoy:\n"
+        '- "Interstellar" (2014) - A sci-fi film by Christopher Nolan\n'
+        '- "The Matrix" (1999) - A classic about reality\n'
+        '- "Primer" (2004) - A low-budget time travel film'
+    )
+    result = {"response": response, "query": "movies like Inception"}
+    attach_media_to_result("movies like Inception", result)
+    assert "media_strip" in result
+    assert result["media_strip"].get("movie_title")
+    assert "attachments" in result
+    sections = result["attachments"].get("sections", [])
+    assert len(sections) >= 1
+    all_titles = []
+    for s in sections:
+        for item in s.get("items", []):
+            all_titles.append(item.get("title", ""))
+    assert len(all_titles) >= 2, f"Expected >=2 movie posters, got {all_titles}"
+
+
+def test_attach_media_extracts_from_response_bold_with_year():
+    """Bold titles with years after the bold markers are extracted."""
+    response = (
+        "Top picks:\n"
+        "- **Inception** (2010) - A mind-bending thriller\n"
+        "- **Interstellar** (2014) - Space exploration epic\n"
+        "- **The Dark Knight** (2008) - Superhero drama"
+    )
+    result = {"response": response}
+    attach_media_to_result("recommend Christopher Nolan movies", result)
+    assert "media_strip" in result
+    strip_title = result["media_strip"].get("movie_title", "")
+    assert strip_title, "Expected a movie title in media_strip"
+    sections = result["attachments"].get("sections", [])
+    all_titles = [item.get("title", "") for s in sections for item in s.get("items", [])]
+    assert len(all_titles) >= 2
+
+
+def test_attach_media_extracts_from_response_numbered_list():
+    """Numbered list format is parsed correctly."""
+    response = (
+        "1. The Shawshank Redemption (1994) - A tale of hope\n"
+        "2. The Godfather (1972) - Crime family saga\n"
+        "3. Pulp Fiction (1994) - Non-linear storytelling"
+    )
+    result = {"response": response}
+    attach_media_to_result("best movies of all time", result)
+    assert "media_strip" in result
+    sections = result["attachments"].get("sections", [])
+    all_titles = [item.get("title", "") for s in sections for item in s.get("items", [])]
+    assert len(all_titles) >= 2
+
+
+def test_attach_media_response_extraction_not_garbage():
+    """Prose sentences in the response are NOT extracted as titles."""
+    response = (
+        "Here are some great films:\n"
+        "- Inception (2010) - A mind-bending thriller\n"
+        "- The Matrix (1999) - A classic sci-fi film\n"
+        "\n"
+        "These movies offer intricate plots and visual spectacles."
+    )
+    result = {"response": response}
+    attach_media_to_result("movie recommendations", result)
+    sections = result.get("attachments", {}).get("sections", [])
+    all_titles = [item.get("title", "") for s in sections for item in s.get("items", [])]
+    for title in all_titles:
+        assert len(title) < 60, f"Garbage title extracted: {title!r}"
+
+
+def test_attach_media_prefers_recommended_movies_over_response():
+    """Explicit recommended_movies takes priority over response parsing."""
+    response = (
+        "- Inception (2010) - A mind-bending thriller\n"
+        "- The Matrix (1999) - A classic sci-fi film"
+    )
+    result = {"response": response, "recommended_movies": ["Dune"]}
+    attach_media_to_result("movie recs", result)
+    assert result["media_strip"].get("movie_title")
+    title = result["media_strip"]["movie_title"].lower()
+    assert "dune" in title
+
+
 def test_attach_media_x_and_y_uses_batch():
-    """'Matrix and Inception' produces media_strip + media_candidates (both movies)."""
-    result = {"response": "test"}
+    """When recommended_movies has 2+ titles, attach_media uses enrich_batch (no user_query seed)."""
+    result = {"response": "test", "recommended_movies": ["Matrix", "Inception"]}
     attach_media_to_result("Matrix and Inception", result)
     assert "media_strip" in result
     assert result["media_strip"].get("movie_title")

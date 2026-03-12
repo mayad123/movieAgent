@@ -2,7 +2,11 @@
 Pytest configuration and fixtures for CineMind tests.
 """
 import pytest
-from tests.report_generator import get_collector
+from freezegun import freeze_time
+from tests.helpers.report_generator import get_collector
+
+from cinemind.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.prompting.prompt_builder import EvidenceBundle
 
 
 def pytest_configure(config):
@@ -41,3 +45,75 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception as e:
         # Don't fail the test run if report writing fails
         print(f"\n[WARNING] Failed to write test report: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def minimal_request_plan():
+    """A minimal ``RequestPlan`` suitable for most unit tests."""
+    return RequestPlan(
+        intent="general_info",
+        request_type="info",
+        original_query="Tell me about movies",
+    )
+
+
+@pytest.fixture()
+def minimal_evidence_bundle():
+    """An empty ``EvidenceBundle`` (no search results)."""
+    return EvidenceBundle(search_results=[])
+
+
+@pytest.fixture()
+def request_plan_factory():
+    """Factory fixture — call with keyword overrides to build a ``RequestPlan``.
+
+    Usage::
+
+        plan = request_plan_factory(intent="director_info", request_type="info")
+    """
+
+    def _factory(**overrides) -> RequestPlan:
+        defaults = dict(
+            intent="general_info",
+            request_type="info",
+            original_query="",
+        )
+        defaults.update(overrides)
+        return RequestPlan(**defaults)
+
+    return _factory
+
+
+@pytest.fixture()
+def evidence_bundle_factory():
+    """Factory fixture — call with keyword overrides to build an ``EvidenceBundle``."""
+
+    def _factory(**overrides) -> EvidenceBundle:
+        defaults = dict(search_results=[])
+        defaults.update(overrides)
+        return EvidenceBundle(**defaults)
+
+    return _factory
+
+
+@pytest.fixture()
+def sample_search_result():
+    """A single realistic search-result dict for use in evidence bundles."""
+    return {
+        "title": "Sample Movie Title",
+        "url": "https://www.imdb.com/title/tt0000001/",
+        "content": "A sample movie entry used for testing purposes.",
+        "source": "kaggle_imdb",
+        "tier": "A",
+    }
+
+
+@pytest.fixture()
+def frozen_time():
+    """Freeze time to 2024-01-01 12:00:00 UTC for deterministic tests."""
+    with freeze_time("2024-01-01 12:00:00") as ft:
+        yield ft

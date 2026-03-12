@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 from cinemind.response_movie_extractor import (
     normalize_title,
     parse_response,
+    extract_titles_for_enrichment,
     ResponseParseResult,
     ExtractedMovie,
     ParseStructure,
@@ -195,3 +196,115 @@ class TestToDict:
         d = r.to_dict()
         assert d["movies"] == []
         assert d["structure"]["hasBullets"] is False
+
+
+class TestExtractTitlesForEnrichment:
+    """extract_titles_for_enrichment: clean titles for TMDB, filtered by confidence."""
+
+    RECOMMENDATION_RESPONSE = (
+        'To give you recommendations similar to "Inception," here are some movies:\n'
+        '\n'
+        '- "Interstellar" (2014) - Directed by Christopher Nolan\n'
+        '- "The Matrix" (1999) - A classic sci-fi film\n'
+        '- "Donnie Darko" (2001) - A psychological thriller\n'
+        '- "Eternal Sunshine of the Spotless Mind" (2004) - Romantic sci-fi\n'
+        '- "Primer" (2004) - An intricate time travel plot\n'
+        '\n'
+        'These movies offer intricate plots, much like "Inception."\n'
+        '\n'
+        '(Source: IMDb)'
+    )
+
+    def test_quoted_titles_with_years(self):
+        titles = extract_titles_for_enrichment(self.RECOMMENDATION_RESPONSE)
+        assert len(titles) >= 5
+        lower = [t.lower() for t in titles]
+        assert any("interstellar" in t for t in lower)
+        assert any("matrix" in t for t in lower)
+        assert any("donnie darko" in t for t in lower)
+        assert any("eternal sunshine" in t for t in lower)
+        assert any("primer" in t for t in lower)
+
+    def test_no_garbage_sentences(self):
+        titles = extract_titles_for_enrichment(self.RECOMMENDATION_RESPONSE)
+        for t in titles:
+            assert len(t) < 60, f"Garbage extracted: {t!r}"
+            assert "intricate plots" not in t.lower()
+            assert "source:" not in t.lower()
+
+    def test_bold_titles_with_year_after_markers(self):
+        response = (
+            "Top picks:\n"
+            "- **Inception** (2010) - Mind-bending\n"
+            "- **Interstellar** (2014) - Space epic\n"
+            "- **The Dark Knight** (2008) - Superhero thriller"
+        )
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 3
+        lower = [t.lower() for t in titles]
+        assert any("inception" in t for t in lower)
+        assert any("interstellar" in t for t in lower)
+        assert any("dark knight" in t for t in lower)
+
+    def test_bold_titles_without_years(self):
+        response = (
+            "Recommendations:\n"
+            "- **The Matrix** - A reality-bending classic\n"
+            "- **Inception** - A dream within a dream\n"
+            "- **Tenet** - Time inversion thriller"
+        )
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 3
+        lower = [t.lower() for t in titles]
+        assert any("matrix" in t for t in lower)
+        assert any("inception" in t for t in lower)
+        assert any("tenet" in t for t in lower)
+
+    def test_numbered_list(self):
+        response = (
+            "1. The Shawshank Redemption (1994)\n"
+            "2. The Godfather (1972)\n"
+            "3. Pulp Fiction (1994)"
+        )
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 3
+
+    def test_mixed_bold_and_year(self):
+        """Bold title with (Year) inside the bold markers."""
+        response = "- **Inception (2010)** - Great movie"
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 1
+        assert any("inception" in t.lower() for t in titles)
+
+    def test_inline_title_year_in_prose(self):
+        response = "You should watch The Matrix (1999) and Inception (2010)."
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 2
+
+    def test_empty_response_returns_empty(self):
+        assert extract_titles_for_enrichment("") == []
+
+    def test_no_movies_in_response(self):
+        assert extract_titles_for_enrichment("The weather is nice today.") == []
+
+    def test_quoted_titles_no_years(self):
+        response = (
+            "Check out these films:\n"
+            '- "The Matrix" - A classic\n'
+            '- "Inception" - Mind-bending\n'
+            '- "Tenet" - Time bending'
+        )
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 3
+        lower = [t.lower() for t in titles]
+        assert any("matrix" in t for t in lower)
+        assert any("inception" in t for t in lower)
+
+    def test_bold_colon_format(self):
+        """Format: **Title**: description"""
+        response = (
+            "- **The Matrix**: A reality-bending classic\n"
+            "- **Inception**: Dream heist thriller"
+        )
+        titles = extract_titles_for_enrichment(response)
+        assert len(titles) >= 2

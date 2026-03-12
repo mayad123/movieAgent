@@ -8,7 +8,7 @@ import json
 import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from tests.failure_artifact_writer import sanitize_filename
+from tests.helpers.failure_artifact_writer import sanitize_filename
 
 
 def write_violation_artifact(
@@ -40,8 +40,8 @@ def write_violation_artifact(
     """
     if artifacts_dir is None:
         # Default to tests/test_reports/violations/
-        artifacts_dir = Path(__file__).parent / "test_reports" / "violations"
-    
+        artifacts_dir = Path(__file__).parent.parent / "test_reports" / "violations"
+
     # Don't write if there are no violations
     if not violations:
         return None
@@ -143,8 +143,8 @@ def generate_violations_index(artifacts_dir: Optional[Path] = None) -> Optional[
         Path to the written index file, or None if writing failed
     """
     if artifacts_dir is None:
-        artifacts_dir = Path(__file__).parent / "test_reports" / "violations"
-    
+        artifacts_dir = Path(__file__).parent.parent / "test_reports" / "violations"
+
     index_file = artifacts_dir.parent / "violations_index.json"
     
     # Check if violations directory exists

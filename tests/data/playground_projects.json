@@ -1,0 +1,16 @@
+[
+  {
+    "id": "f70bdab1-71ba-41bc-b493-7ff566c24d31",
+    "name": "Project 1",
+    "createdAt": "2026-03-12T00:51:41.161202+00:00",
+    "description": "Default project",
+    "assets": []
+  },
+  {
+    "id": "3096212b-0413-4ed2-a819-fac9a6ee10c1",
+    "name": "Project 2",
+    "createdAt": "2026-03-12T00:51:41.161264+00:00",
+    "description": "Default project",
+    "assets": []
+  }
+]
