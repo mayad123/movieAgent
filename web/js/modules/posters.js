@@ -10,6 +10,7 @@ import { escapeHtml } from './normalize.js';
 /* ── Callback registry (breaks circular deps with layout/chat modules) ── */
 
 let _openWhereToWatch = null;
+let _openMovieDetails = null;
 let _addSubConversation = null;
 let _openRightPanelToCollection = null;
 let _showSavedToCollectionToast = null;
@@ -20,12 +21,13 @@ let _loadProjectAssets = null;
 let _updateRightPanelScope = null;
 
 export function setPosterCallbacks({
-    openWhereToWatch, addSubConversation, openRightPanelToCollection,
+    openWhereToWatch, openMovieDetails, addSubConversation, openRightPanelToCollection,
     showSavedToCollectionToast, showSavedToProjectToast,
     showAlreadyAddedToast, showFallbackToast,
     loadProjectAssets, updateRightPanelScope
 }) {
     _openWhereToWatch = openWhereToWatch;
+    _openMovieDetails = openMovieDetails;
     _addSubConversation = addSubConversation;
     _openRightPanelToCollection = openRightPanelToCollection;
     _showSavedToCollectionToast = showSavedToCollectionToast;
@@ -34,6 +36,39 @@ export function setPosterCallbacks({
     _showFallbackToast = showFallbackToast;
     _loadProjectAssets = loadProjectAssets;
     _updateRightPanelScope = updateRightPanelScope;
+}
+
+function buildMovieDetailsPayloadFromItem(item, title, imgUrl, href) {
+    const pageUrl = (href && String(href).trim()) || (item.page_url && String(item.page_url).trim()) || '';
+    const tmdbId = item.tmdbId || item.tmdb_id || undefined;
+    const mediaType = item.mediaType || item.media_type || undefined;
+    const runtime = item.runtime_minutes || item.runtimeMinutes || item.runtime;
+    const genres = Array.isArray(item.genres)
+        ? item.genres
+        : Array.isArray(item.genre_names) ? item.genre_names : undefined;
+    const overview = item.overview || item.summary || item.plot;
+    const rating = item.rating || item.vote_average || item.voteAverage;
+    const voteCount = item.vote_count || item.voteCount;
+    const language = item.language || item.original_language;
+    const country = item.country || item.production_country;
+    return {
+        title: title,
+        movie_title: item.movie_title || item.title || title,
+        year: item.year != null ? item.year : undefined,
+        primary_image_url: imgUrl || '',
+        page_url: pageUrl || '',
+        pageUrl: pageUrl || '',
+        pageId: pageIdFromUrl(pageUrl || '') || undefined,
+        tmdbId: tmdbId,
+        mediaType: mediaType,
+        runtime_minutes: runtime,
+        genres: genres,
+        overview: overview,
+        rating: rating,
+        vote_count: voteCount,
+        language: language,
+        country: country
+    };
 }
 
 /* ── SVG icon constants ── */
@@ -448,21 +483,24 @@ export function createHeroCard(item, options) {
     if (!noOverlay) {
         const topRightOverlay = document.createElement('div');
         topRightOverlay.className = 'media-strip-card-overlay media-strip-card-overlay--top-right';
-        if (href) {
-            const infoBtn = document.createElement('button');
-            infoBtn.type = 'button';
-            infoBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below media-strip-card-action--info';
-            infoBtn.setAttribute('data-tooltip', 'More info');
-            infoBtn.setAttribute('title', 'More info');
-            infoBtn.setAttribute('aria-label', 'More info');
-            infoBtn.innerHTML = infoIconSvg;
-            infoBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
+        const infoBtn = document.createElement('button');
+        infoBtn.type = 'button';
+        infoBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below media-strip-card-action--info';
+        infoBtn.setAttribute('data-tooltip', 'More info');
+        infoBtn.setAttribute('title', 'More info');
+        infoBtn.setAttribute('aria-label', 'More info');
+        infoBtn.innerHTML = infoIconSvg;
+        infoBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof _openMovieDetails === 'function') {
+                const payload = buildMovieDetailsPayloadFromItem(item, title, imgUrl, href);
+                _openMovieDetails(payload);
+            } else if (href) {
                 window.open(href, '_blank', 'noopener');
-            });
-            topRightOverlay.appendChild(infoBtn);
-        }
+            }
+        });
+        topRightOverlay.appendChild(infoBtn);
         const whereToWatchBtn = document.createElement('button');
         whereToWatchBtn.type = 'button';
         whereToWatchBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
@@ -700,21 +738,24 @@ export function PosterCarouselWheel(items, activeIndex, onChangeIndex, options) 
         const isInCollection = isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
         const topRightOverlayCarousel = document.createElement('div');
         topRightOverlayCarousel.className = 'poster-carousel-wheel-overlay poster-carousel-wheel-overlay--top-right';
-        if (href) {
-            const infoBtnCarousel = document.createElement('button');
-            infoBtnCarousel.type = 'button';
-            infoBtnCarousel.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below poster-carousel-wheel-action--info';
-            infoBtnCarousel.setAttribute('data-tooltip', 'More info');
-            infoBtnCarousel.setAttribute('title', 'More info');
-            infoBtnCarousel.setAttribute('aria-label', 'More info');
-            infoBtnCarousel.innerHTML = infoIconSvg;
-            infoBtnCarousel.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
+        const infoBtnCarousel = document.createElement('button');
+        infoBtnCarousel.type = 'button';
+        infoBtnCarousel.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below poster-carousel-wheel-action--info';
+        infoBtnCarousel.setAttribute('data-tooltip', 'More info');
+        infoBtnCarousel.setAttribute('title', 'More info');
+        infoBtnCarousel.setAttribute('aria-label', 'More info');
+        infoBtnCarousel.innerHTML = infoIconSvg;
+        infoBtnCarousel.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof _openMovieDetails === 'function') {
+                const payload = buildMovieDetailsPayloadFromItem(it, title, imgUrl, href);
+                _openMovieDetails(payload);
+            } else if (href) {
                 window.open(href, '_blank', 'noopener');
-            });
-            topRightOverlayCarousel.appendChild(infoBtnCarousel);
-        }
+            }
+        });
+        topRightOverlayCarousel.appendChild(infoBtnCarousel);
         const whereToWatchEl = document.createElement('button');
         whereToWatchEl.type = 'button';
         whereToWatchEl.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';

@@ -9,6 +9,7 @@ import * as dom from './modules/dom.js';
 
 // Features
 import { initWhereToWatch, openWhereToWatchDrawer, onWhereToWatch } from './modules/where-to-watch.js';
+import { openMovieDetails, initMovieDetails } from './modules/movie-details.js';
 import { setPosterCallbacks, renderCollectionPanel, addToCollection, createHeroCard, createCandidateCard, createAttachmentsFromSections, createUnifiedMovieStrip, captureAssetsForProjectScope } from './modules/posters.js';
 import { setMessageCallbacks, renderMessages, appendMessage, sendMessage } from './modules/messages.js';
 import { setLayoutCallbacks, initLayout, addConversation, updateConversationList, updateHeaderForView, updateRightPanelScope, loadProjects, loadProjectAssets, updateHeaderRealAgentIndicator, showRetrieving, hideRetrieving, openRightPanelToCollection, showSavedToCollectionToast, showSavedToProjectToast, showAlreadyAddedToast, showFallbackToast, addSubConversationFromPoster } from './modules/layout.js';
@@ -22,6 +23,7 @@ setLayoutCallbacks({
 
 setPosterCallbacks({
     openWhereToWatch: openWhereToWatchDrawer,
+    openMovieDetails: openMovieDetails,
     addSubConversation: addSubConversationFromPoster,
     openRightPanelToCollection,
     showSavedToCollectionToast,
@@ -48,6 +50,7 @@ setMessageCallbacks({
 
 // Initialize
 initWhereToWatch();
+initMovieDetails();
 initLayout();
 
 // Boot

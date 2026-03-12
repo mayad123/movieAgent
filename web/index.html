@@ -74,6 +74,62 @@
                 </div>
             </div>
         </main>
+        <section class="movie-details-view hidden" id="movieDetailsView" aria-hidden="true" role="dialog" aria-label="Movie details">
+            <div class="movie-details-inner">
+                <header class="movie-details-header">
+                    <button type="button" class="movie-details-close" id="movieDetailsCloseBtn" aria-label="Close details">×</button>
+                    <div class="movie-details-title-block">
+                        <h2 class="movie-details-title" id="movieDetailsTitle"></h2>
+                        <span class="movie-details-year" id="movieDetailsYear"></span>
+                        <p class="movie-details-tagline" id="movieDetailsTagline"></p>
+                    </div>
+                </header>
+                <div class="movie-details-body">
+                    <section class="movie-details-hero" id="movieDetailsHero">
+                        <div class="movie-details-hero-poster-wrap" id="movieDetailsPosterWrap"></div>
+                        <div class="movie-details-hero-meta" id="movieDetailsHeroMeta"></div>
+                    </section>
+                    <section class="movie-details-section" id="movieDetailsStorySection">
+                        <h3 class="movie-details-section-title">Story</h3>
+                        <p class="movie-details-story" id="movieDetailsStory"></p>
+                    </section>
+                    <section class="movie-details-section" id="movieDetailsCreditsSection">
+                        <h3 class="movie-details-section-title">Credits</h3>
+                        <div class="movie-details-credits">
+                            <div class="movie-details-credits-group" id="movieDetailsDirectorsGroup">
+                                <h4 class="movie-details-credits-label">Directors</h4>
+                                <ul class="movie-details-list" id="movieDetailsDirectorsList"></ul>
+                            </div>
+                            <div class="movie-details-credits-group" id="movieDetailsCastGroup">
+                                <h4 class="movie-details-credits-label">Cast</h4>
+                                <ul class="movie-details-list" id="movieDetailsCastList"></ul>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="movie-details-section" id="movieDetailsMetaSection">
+                        <h3 class="movie-details-section-title">Details</h3>
+                        <dl class="movie-details-meta-list" id="movieDetailsMetaList"></dl>
+                    </section>
+                    <section class="movie-details-section" id="movieDetailsWhereToWatchSection">
+                        <h3 class="movie-details-section-title">Where to Watch</h3>
+                        <div class="movie-details-where-content">
+                            <div class="movie-details-where-loading hidden" id="movieDetailsWhereToWatchLoading">
+                                <div class="movie-details-skeleton movie-details-skeleton--line"></div>
+                                <div class="movie-details-skeleton movie-details-skeleton--line"></div>
+                                <div class="movie-details-skeleton movie-details-skeleton--line short"></div>
+                            </div>
+                            <div class="movie-details-where-results hidden" id="movieDetailsWhereToWatchResults"></div>
+                            <div class="movie-details-where-empty hidden" id="movieDetailsWhereToWatchEmpty">
+                                <p class="movie-details-where-empty-text">No streaming information available.</p>
+                            </div>
+                            <div class="movie-details-where-error hidden" id="movieDetailsWhereToWatchError">
+                                <p class="movie-details-where-error-text" id="movieDetailsWhereToWatchErrorText"></p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </section>
         <aside class="where-to-watch-drawer" id="whereToWatchDrawer" aria-label="Where to watch" aria-hidden="true">
             <div class="where-to-watch-drawer-header">
                 <h2 class="where-to-watch-drawer-title" id="whereToWatchDrawerTitle">Where to watch</h2>
