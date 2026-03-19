@@ -4,14 +4,18 @@ import {
     sidebar, sidebarToggle, rightPanel, rightPanelToggle,
     conversationList, conversationTitle, headerMainView, headerSubView,
     headerBreadcrumb, subConversationMovieBadge, mainEl,
-    chatColumn, composerInput, retrievingRow, newChatBtn,
+    movieHubView, movieHubSelectedPoster, movieHubSelectedTitle, movieHubSelectedTagline,
+    movieHubAskBtn, movieHubSimilarByGenre, movieHubSimilarByTone, movieHubSimilarByCast,
+    chatColumn, messageList, composerInput, retrievingRow, newChatBtn,
     useRealAgentToggle, modeBadge, app,
     headerBackBtn, headerSubRenameBtn, headerSubCloseBtn
 } from './dom.js';
 
 import {
-    appState, getActiveConversation, getActiveThread, nextId, API_BASE
+    appState, getActiveConversation, getActiveThread, nextId, API_BASE, getActiveMovieContext
 } from './state.js';
+import { renderSimilarCluster, createHeroCard } from './posters.js';
+import { sendQuery, prefixMovieHubContextQuery, fetchSimilarMovies } from './api.js';
 
 /* ── Callback registry (breaks circular deps with chat/collection modules) ── */
 
@@ -165,7 +169,10 @@ export function addSubConversationFromPoster(movie) {
         year: movie.year,
         pageUrl: (movie.pageUrl && String(movie.pageUrl).trim()) || undefined,
         pageId: (movie.pageId && String(movie.pageId).trim()) || undefined,
-        imageUrl: (movie.imageUrl && String(movie.imageUrl).trim()) || undefined
+        imageUrl: (movie.imageUrl && String(movie.imageUrl).trim()) || undefined,
+        tmdbId: movie.tmdbId || movie.tmdb_id || undefined,
+        mediaType: movie.mediaType || movie.media_type || undefined,
+        relatedMovies: Array.isArray(movie.relatedMovies) ? movie.relatedMovies : undefined
     };
     const sub = {
         id: nextId(),
@@ -186,7 +193,253 @@ export function addSubConversationFromPoster(movie) {
     if (_renderCollectionPanel) _renderCollectionPanel();
     updateHeaderForView();
     updateRightPanelScope();
+
+    // Auto-load hub clusters (LLM-driven) for this sub-context.
+    // This keeps the hub aligned with the design goal: 20+ similar titles grouped by genre.
+    void maybeAutoLoadMovieHubClusters(sub);
+
     if (composerInput) composerInput.focus();
+}
+
+function getHubContextLabel(movie) {
+    if (!movie) return '';
+    const title = movie.title && String(movie.title).trim();
+    const year = movie.year != null ? String(movie.year) : '';
+    return year ? (title || '') + ' (' + year + ')' : (title || '');
+}
+
+function clearHubContainers() {
+    if (movieHubSimilarByGenre) movieHubSimilarByGenre.classList.add('hidden');
+    if (movieHubSimilarByTone) movieHubSimilarByTone.classList.add('hidden');
+    if (movieHubSimilarByCast) movieHubSimilarByCast.classList.add('hidden');
+    if (movieHubSelectedTagline) movieHubSelectedTagline.classList.remove('hidden');
+}
+
+async function maybeAutoLoadMovieHubClusters(sub) {
+    if (!sub || !sub.contextMovie) return;
+    if (sub._hubClustersLoading || sub._hubClustersLoaded) return;
+
+    // If the context changes while the request is in-flight, ignore stale results.
+    const requestedSubId = sub.id;
+    sub._hubClustersLoading = true;
+    const shouldShowLoadingPlaceholder = !sub._hubClustersHasRendered;
+    if (shouldShowLoadingPlaceholder) {
+        clearHubContainers();
+        if (movieHubSimilarByGenre) {
+            // Keep the genre section visible so the user sees it's loading.
+            movieHubSimilarByGenre.classList.remove('hidden');
+            movieHubSimilarByGenre.innerHTML = '';
+            const titleEl = document.createElement('h3');
+            titleEl.className = 'movie-hub-cluster-title';
+            titleEl.textContent = 'Loading similar movies...';
+            movieHubSimilarByGenre.appendChild(titleEl);
+        }
+    }
+
+    const contextLabel = getHubContextLabel(sub.contextMovie);
+    const anchorText = contextLabel ? contextLabel : 'this movie';
+
+    const maxAttempts = 3;
+    const minRequiredGenreMovies = 20; // show loading until at least 20 VALID genre movies render
+    const targetGenreMovies = 20; // prefer full set
+    sub._hubClustersAttempts = (sub._hubClustersAttempts || 0) + 1;
+    const attempt = sub._hubClustersAttempts;
+
+    const priorMovies = (sub._hubClustersLastPayload && Array.isArray(sub._hubClustersLastPayload) ? sub._hubClustersLastPayload : []);
+    const priorAvoidSet = new Set();
+    const priorTmdbSet = new Set();
+    (priorMovies || []).forEach(function (c) {
+        if (!c || String(c.kind || '').toLowerCase() !== 'genre') return;
+        const movies = c.movies;
+        if (!Array.isArray(movies)) return;
+        movies.forEach(function (m) {
+            if (!m) return;
+            const t = (m.title || m.movie_title || '').toString().trim();
+            if (!t) return;
+            const key = t.toLowerCase();
+            if (!priorAvoidSet.has(key) && priorAvoidSet.size < 20) priorAvoidSet.add(key);
+
+            const tmdbIdRaw = (m.tmdbId != null ? m.tmdbId : (m.tmdb_id != null ? m.tmdb_id : null));
+            if (tmdbIdRaw != null) {
+                const tmdbIdNum = parseInt(String(tmdbIdRaw), 10);
+                if (!isNaN(tmdbIdNum) && tmdbIdNum > 0) priorTmdbSet.add(tmdbIdNum);
+            }
+        });
+    });
+
+    const avoidLine = (attempt > 1 && priorAvoidSet.size > 0)
+        ? ('Avoid repeating any of these titles from previous attempts: ' + Array.from(priorAvoidSet).slice(0, 20).join('; '))
+        : '';
+
+    const prompt = [
+        'Show 20 movies similar to ' + anchorText + ' grouped by genre.',
+        'Return exactly 4 genre categories.',
+        'Return ONLY the genre blocks. No extra commentary. No markdown.',
+        'Prefer variety across genres and themes.',
+        avoidLine,
+        'For each category:',
+        '- Start with a line: Genre: <GenreName>',
+        '- Then provide 5 numbered lines formatted exactly as: "1. Title (Year)"',
+        'Total titles: 20.'
+    ].filter(Boolean).join('\n');
+
+    const outgoingText = prefixMovieHubContextQuery(prompt, sub.contextMovie);
+    let didApply = false;
+    let markLoaded = false;
+
+    // Count movie cards that should render in the genre cluster.
+    // We count by non-empty title (not unique tmdbId) so the "20+ titles" UX
+    // stays consistent even when some titles don't resolve cleanly or include
+    // repeated movies.
+    function countValidGenreMovies(movieHubClusters) {
+        let genreMovies = 0;
+        (movieHubClusters || []).forEach(function (c) {
+            if (!c) return;
+            if (String(c.kind || '').toLowerCase() !== 'genre') return;
+            if (!Array.isArray(c.movies)) return;
+            c.movies.forEach(function (m) {
+                if (!m) return;
+                const title = (m.title || m.movie_title || '').toString().trim();
+                if (!title) return;
+                genreMovies += 1;
+            });
+        });
+        return genreMovies;
+    }
+
+    function showHubEmptyState() {
+        if (!movieHubSimilarByGenre) return;
+        movieHubSimilarByGenre.classList.remove('hidden');
+        movieHubSimilarByGenre.innerHTML = '';
+        const h = document.createElement('h3');
+        h.className = 'movie-hub-cluster-title';
+        h.textContent = 'No similar movies found.';
+        movieHubSimilarByGenre.appendChild(h);
+    }
+
+    function showHubLoadingMoreIndicator() {
+        if (!movieHubSimilarByGenre) return;
+        movieHubSimilarByGenre.classList.remove('hidden');
+        const el = document.createElement('div');
+        el.className = 'movie-hub-loading-more';
+        el.textContent = 'Loading more similar movies...';
+        movieHubSimilarByGenre.appendChild(el);
+    }
+
+        try {
+            // Fast path: use PLAYGROUND for the automatic hub population to keep latency low.
+            // If we fail to get usable `movieHubClusters`, retry with the Real Agent (when enabled)
+            // so the LLM can reliably follow the genre-bucket formatting contract.
+            const hubTimeoutMs = parseInt((typeof HUB_AUTO_QUERY_TIMEOUT_MS !== 'undefined' && HUB_AUTO_QUERY_TIMEOUT_MS) || '90000', 10);
+            // Real Agent hub retries can be expensive; only try it once (on the first retry)
+            // to avoid starving other UI features like "Where to Watch".
+            const useRealAgentForHub = (attempt === 2 && appState && appState.useRealAgent) ? true : false;
+            const result = await sendQuery(outgoingText, useRealAgentForHub, { timeoutMs: hubTimeoutMs > 0 ? hubTimeoutMs : 90000 });
+        // Only apply if user is still on the same sub-conversation.
+        if (appState.activeSubConversationId !== requestedSubId) return;
+        if (!(result && Array.isArray(result.movieHubClusters))) {
+            throw new Error('movieHubClusters missing or invalid');
+        }
+
+        // On retries, enforce "next set differs from original" by filtering out
+        // anything already returned in the previous attempt.
+        let clustersForApply = result.movieHubClusters;
+        if (attempt > 1 && priorAvoidSet.size > 0) {
+            clustersForApply = (result.movieHubClusters || []).map(function (cl) {
+                if (!cl || String(cl.kind || '').toLowerCase() !== 'genre') return cl;
+                const movies = Array.isArray(cl.movies) ? cl.movies : [];
+                const filteredMovies = movies.filter(function (m) {
+                    if (!m) return false;
+                    const title = (m.title || m.movie_title || '').toString().trim();
+                    const titleKey = title ? title.toLowerCase() : '';
+                    const tmdbIdRaw = (m.tmdbId != null ? m.tmdbId : (m.tmdb_id != null ? m.tmdb_id : null));
+                    const tmdbIdNum = tmdbIdRaw != null ? parseInt(String(tmdbIdRaw), 10) : NaN;
+                    const tmdbAlreadyUsed = !isNaN(tmdbIdNum) && tmdbIdNum > 0 && priorTmdbSet.has(tmdbIdNum);
+                    const titleAlreadyUsed = titleKey && priorAvoidSet.has(titleKey);
+                    return !(tmdbAlreadyUsed || titleAlreadyUsed);
+                });
+                return Object.assign({}, cl, { movies: filteredMovies });
+            });
+        }
+
+        // Keep last payload so we can render partial results if threshold isn't met.
+        sub._hubClustersLastPayload = clustersForApply;
+
+        // Must satisfy the hub contract: 20+ titles grouped by genre.
+        const validGenreMovies = countValidGenreMovies(clustersForApply);
+
+        if (validGenreMovies >= minRequiredGenreMovies) {
+            // Threshold met: replace loading sign with actual movie posters.
+            applyMovieHubClusters(clustersForApply);
+            didApply = true;
+            sub._hubClustersHasRendered = true;
+
+            if (validGenreMovies >= targetGenreMovies) {
+                markLoaded = true;
+            } else if (attempt < maxAttempts) {
+                // Backfill: retry in background to try to reach the preferred target.
+                showHubLoadingMoreIndicator();
+                setTimeout(function () {
+                    if (sub && appState.activeSubConversationId === requestedSubId && !sub._hubClustersLoading && !sub._hubClustersLoaded) {
+                        void maybeAutoLoadMovieHubClusters(sub);
+                    }
+                }, 1200);
+            } else {
+                // Retries exhausted: render whatever we have.
+                markLoaded = true;
+            }
+        } else if (attempt < maxAttempts) {
+            // Keep loading sign active; retry until threshold is met or attempts complete.
+            throw new Error('hub too few valid movies: ' + String(validGenreMovies));
+        } else {
+            // Retries exhausted: stop loading and render partial results.
+            applyMovieHubClusters(sub._hubClustersLastPayload || result.movieHubClusters);
+            didApply = true;
+            sub._hubClustersHasRendered = true;
+            markLoaded = true;
+
+            // If we ended up with no usable genre movies, show an empty state.
+            if (countValidGenreMovies(sub._hubClustersLastPayload || result.movieHubClusters) === 0) {
+                showHubEmptyState();
+            }
+        }
+    } catch (e) {
+        // Silent failure; mini-hero remains visible.
+        if (attempt < maxAttempts) {
+            // Retry after a short delay; transient LLM/network/TMDB timing issues are expected.
+            setTimeout(function () {
+                // Re-check: if we've switched to another sub, do nothing.
+                if (sub && appState.activeSubConversationId === requestedSubId) {
+                    // Reset per-attempt flags; keep _hubClustersLoaded false so we can retry.
+                    sub._hubClustersLoading = false;
+                    void maybeAutoLoadMovieHubClusters(sub);
+                }
+            }, 800);
+        } else {
+            // Retries exhausted: prefer TMDB similar-movies fallback (more posters),
+            // otherwise fall back to local relatedMovies.
+            const thread = getActiveThread();
+            const tmdbId = sub && sub.contextMovie ? (sub.contextMovie.tmdbId || sub.contextMovie.tmdb_id) : null;
+            if (thread && thread.sub && thread.sub.id === requestedSubId && tmdbId != null) {
+                try {
+                    const sim = await fetchSimilarMovies(tmdbId, { timeoutMs: 12000 });
+                    const clusters = sim && (sim.clusters || sim.movieHubClusters);
+                    if (Array.isArray(clusters) && clusters.length) {
+                        applyMovieHubClusters(clusters);
+                        sub._hubClustersHasRendered = true;
+                        sub._hubClustersLoaded = true;
+                        return;
+                    }
+                } catch (_) { /* ignore */ }
+            }
+            if (thread && thread.sub && thread.sub.id === requestedSubId) {
+                updateMovieHub(thread);
+            }
+        }
+    } finally {
+        sub._hubClustersLoading = false;
+        if (didApply && markLoaded) sub._hubClustersLoaded = true;
+    }
 }
 
 /* ── Header ── */
@@ -209,6 +462,7 @@ export function updateHeaderForView() {
             ? (thread.sub.contextMovie.title || '') + (thread.sub.contextMovie.year != null ? ' (' + thread.sub.contextMovie.year + ')' : '')
             : (thread.title || '');
         if (headerBreadcrumb) headerBreadcrumb.textContent = parentName + ' \u2192 ' + (movieLabel || 'Sub');
+        updateMovieHub(thread);
         if (subConversationMovieBadge) {
             subConversationMovieBadge.classList.remove('hidden');
             subConversationMovieBadge.setAttribute('aria-hidden', 'false');
@@ -242,11 +496,184 @@ export function updateHeaderForView() {
         headerSubView.classList.add('hidden');
         const t = getActiveThread();
         if (conversationTitle) conversationTitle.textContent = t.title || 'New conversation';
+        if (movieHubView) movieHubView.classList.add('hidden');
+        if (messageList) messageList.classList.remove('hidden');
         if (subConversationMovieBadge) {
             subConversationMovieBadge.classList.add('hidden');
             subConversationMovieBadge.setAttribute('aria-hidden', 'true');
         }
     }
+}
+
+/**
+ * Apply backend-produced Movie Hub clusters to the active sub-conversation.
+ * This is used for question-driven narrowing within the same context movie anchor.
+ *
+ * @param {Array} movieHubClusters - Array of { kind, label, movies } clusters (same shape as /api/movies/{id}/similar)
+ */
+export function applyMovieHubClusters(movieHubClusters) {
+    if (!Array.isArray(movieHubClusters)) return;
+    if (appState.conversationView !== 'sub') return;
+
+    const thread = getActiveThread();
+    const sub = thread && thread.sub ? thread.sub : null;
+    if (!sub) return;
+
+    // Replace the clusters used to render the hub.
+    sub.similarClusters = movieHubClusters;
+
+    renderMovieHubCluster(movieHubSimilarByGenre, movieHubClusters, 'genre');
+    renderMovieHubCluster(movieHubSimilarByTone, movieHubClusters, 'tone');
+    renderMovieHubCluster(movieHubSimilarByCast, movieHubClusters, 'cast');
+
+    if (movieHubView) movieHubView.classList.remove('hidden');
+}
+
+function getRelatedMoviesForHub(movie) {
+    if (!movie) return [];
+    if (Array.isArray(movie.relatedMovies)) return movie.relatedMovies;
+    if (Array.isArray(movie.similar)) return movie.similar;
+    return [];
+}
+
+function updateMovieHub(thread) {
+    if (!movieHubView) return;
+    const sub = thread && thread.sub;
+    const movie = sub && sub.contextMovie;
+    if (!sub || !movie) {
+        movieHubView.classList.add('hidden');
+        if (chatColumn) chatColumn.classList.remove('hidden');
+        return;
+    }
+
+    const title = (movie.title && String(movie.title).trim()) || '';
+    const year = movie.year != null ? String(movie.year) : '';
+    const label = year ? (title + ' (' + year + ')') : title;
+    if (movieHubSelectedTitle) {
+        movieHubSelectedTitle.textContent = label || 'This movie';
+    }
+    if (movieHubSelectedPoster) {
+        movieHubSelectedPoster.innerHTML = '';
+        const imgUrl = movie.imageUrl && String(movie.imageUrl).trim();
+        if (imgUrl) {
+            const img = document.createElement('img');
+            img.src = imgUrl;
+            img.alt = label || 'Movie';
+            img.loading = 'lazy';
+            movieHubSelectedPoster.appendChild(img);
+        }
+    }
+    if (movieHubSelectedTagline) {
+        const tagline = (movie.tagline && String(movie.tagline).trim()) || '';
+        movieHubSelectedTagline.textContent = tagline;
+        movieHubSelectedTagline.classList.toggle('hidden', !tagline);
+    }
+    if (movieHubAskBtn && composerInput) {
+        movieHubAskBtn.onclick = function () {
+            const prompt = label ? ('Tell me more about ' + label) : 'Tell me more about this movie';
+            composerInput.value = prompt;
+            composerInput.focus();
+        };
+    }
+
+    // Keep the chat column active but marked as non-empty so the hub sits above it.
+    if (chatColumn) {
+        chatColumn.classList.remove('empty');
+    }
+
+    // First try to reuse any related/similar movies already on the contextMovie.
+    const hubMovies = getRelatedMoviesForHub(movie);
+    if (hubMovies.length > 0) {
+        const baseLabel = label && String(label).trim() ? label : 'This movie';
+        sub.similarClusters = [{
+            kind: 'genre',
+            label: 'Similar by genre to ' + baseLabel,
+            movies: hubMovies
+        }];
+        renderMovieHubCluster(movieHubSimilarByGenre, sub.similarClusters, 'genre');
+        // Tone/cast clusters are reserved for richer future data.
+        if (movieHubSimilarByTone) movieHubSimilarByTone.classList.add('hidden');
+        if (movieHubSimilarByCast) movieHubSimilarByCast.classList.add('hidden');
+    } else if (!sub.similarClusters) {
+        // No local related data yet; genre/tone/cast will be populated by the
+        // LLM-driven auto-fetch on sub-context entry.
+        if (movieHubSimilarByGenre) movieHubSimilarByGenre.classList.add('hidden');
+        if (movieHubSimilarByTone) movieHubSimilarByTone.classList.add('hidden');
+        if (movieHubSimilarByCast) movieHubSimilarByCast.classList.add('hidden');
+    } else {
+        const clusters = Array.isArray(sub.similarClusters) ? sub.similarClusters : [];
+        renderMovieHubCluster(movieHubSimilarByGenre, clusters, 'genre');
+        renderMovieHubCluster(movieHubSimilarByTone, clusters, 'tone');
+        renderMovieHubCluster(movieHubSimilarByCast, clusters, 'cast');
+    }
+
+    movieHubView.classList.remove('hidden');
+}
+
+function renderMovieHubCluster(container, clusters, kind) {
+    if (!container) return;
+    container.innerHTML = '';
+    const matchingClusters = (clusters || []).filter(function (c) {
+        return (c && String(c.kind || '').toLowerCase()) === kind;
+    });
+
+    if (!matchingClusters.length) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    let anyRendered = false;
+
+    matchingClusters.forEach(function (cluster) {
+        if (!cluster || !Array.isArray(cluster.movies) || cluster.movies.length === 0) return;
+
+        const titleText = cluster.label && String(cluster.label).trim()
+            ? cluster.label
+            : (kind === 'genre'
+                ? 'Similar by genre'
+                : kind === 'tone'
+                    ? 'Similar by tone or theme'
+                    : 'Similar by cast or crew');
+
+        const titleEl = document.createElement('h3');
+        titleEl.className = 'movie-hub-cluster-title';
+        titleEl.textContent = titleText;
+        container.appendChild(titleEl);
+
+        const strip = document.createElement('div');
+        strip.className = 'movie-hub-cluster-strip';
+
+        cluster.movies.forEach(function (movie) {
+            if (!movie) return;
+            const card = createHeroCard({
+                movie_title: movie.movie_title || movie.title,
+                title: movie.title,
+                year: movie.year,
+                primary_image_url: movie.primary_image_url || movie.imageUrl,
+                page_url: movie.page_url || movie.pageUrl,
+                tmdbId: movie.tmdbId || movie.tmdb_id,
+                mediaType: movie.mediaType || movie.media_type,
+                // Ensure "Talk More About This" stays anchored to the same hub universe.
+                relatedMovies: cluster.movies
+            }, { link: true });
+            if (card) strip.appendChild(card);
+        });
+
+        if (strip.children.length) {
+            container.appendChild(strip);
+            anyRendered = true;
+        } else {
+            // If a given cluster rendered no cards, remove its heading.
+            if (titleEl && titleEl.parentNode === container) container.removeChild(titleEl);
+        }
+    });
+
+    if (!anyRendered) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
 }
 
 /* ── Scope ── */

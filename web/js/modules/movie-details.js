@@ -1,5 +1,6 @@
 import {
     chatColumn,
+    composerInput,
     movieDetailsView,
     movieDetailsCloseBtn,
     movieDetailsTitle,
@@ -16,6 +17,8 @@ import {
     movieDetailsCastList,
     movieDetailsMetaSection,
     movieDetailsMetaList,
+    movieDetailsRelatedSection,
+    movieDetailsRelatedList,
     movieDetailsWhereToWatchSection,
     movieDetailsWhereToWatchLoading,
     movieDetailsWhereToWatchResults,
@@ -23,10 +26,13 @@ import {
     movieDetailsWhereToWatchError,
     movieDetailsWhereToWatchErrorText
 } from './dom.js';
+import { createCandidateCard } from './posters.js';
 import { fetchWhereToWatch } from './api.js';
+import { API_BASE, SEND_TIMEOUT_MS } from './state.js';
 
 let currentMovie = null;
 let previousScrollTop = null;
+let tmdbDetailsAbortController = null;
 
 function safeTrim(value) {
     return value == null ? '' : String(value).trim();
@@ -64,6 +70,16 @@ function renderHero(movie) {
     clearElement(movieDetailsHeroMeta);
     if (!movieDetailsPosterWrap || !movieDetailsHeroMeta) return;
 
+    const backdropUrl = safeTrim(movie.backdrop_url || movie.backdropUrl);
+    const hasBackdrop = !!backdropUrl;
+    if (hasBackdrop) {
+        movieDetailsPosterWrap.classList.add('has-backdrop');
+        movieDetailsPosterWrap.style.setProperty('--hero-backdrop-url', 'url("' + backdropUrl + '")');
+    } else {
+        movieDetailsPosterWrap.classList.remove('has-backdrop');
+        movieDetailsPosterWrap.style.removeProperty('--hero-backdrop-url');
+    }
+
     const title = safeTrim(movie.movie_title || movie.title);
     const imgUrl = safeTrim(
         movie.primary_image_url
@@ -94,21 +110,26 @@ function renderHero(movie) {
     const metaPrimary = document.createElement('div');
     metaPrimary.className = 'movie-details-hero-meta-primary';
     const pieces = [];
-    if (movie.year != null) pieces.push(String(movie.year));
+    if (movie.year != null) {
+        pieces.push(String(movie.year));
+    }
     const genres = Array.isArray(movie.genres)
         ? movie.genres
         : Array.isArray(movie.genre_names) ? movie.genre_names : [];
-    if (genres.length) pieces.push(genres.slice(0, 3).join(', '));
+    if (genres.length) {
+        pieces.push(genres.slice(0, 3).join(', '));
+    }
     const runtimeMinutes = movie.runtime_minutes || movie.runtimeMinutes || movie.runtime;
     if (runtimeMinutes) {
         const mins = Number(runtimeMinutes);
         if (!isNaN(mins) && mins > 0) {
             const hours = Math.floor(mins / 60);
             const minsR = mins % 60;
-            pieces.push((hours ? hours + 'h ' : '') + (minsR ? minsR + 'm' : ''));
+            const text = (hours ? hours + 'h ' : '') + (minsR ? minsR + 'm' : '');
+            if (text) pieces.push(text);
         }
     }
-    metaPrimary.textContent = pieces.join(' • ');
+    metaPrimary.textContent = pieces.join(' \u2022 ');
     movieDetailsHeroMeta.appendChild(metaPrimary);
 
     const chipsWrap = document.createElement('div');
@@ -143,7 +164,12 @@ function renderHero(movie) {
 
 function renderStory(movie) {
     if (!movieDetailsStorySection || !movieDetailsStory) return;
-    const story = safeTrim(movie.overview || movie.summary || movie.plot || movie.description);
+    const story = safeTrim(
+        movie.overview
+        || movie.summary
+        || movie.plot
+        || movie.description
+    );
     movieDetailsStory.textContent = story;
     setHidden(movieDetailsStorySection, !story);
 }
@@ -188,7 +214,8 @@ function renderCredits(movie) {
         li.textContent = name;
         movieDetailsDirectorsList.appendChild(li);
     });
-    cast.forEach(function (name) {
+    const maxCast = 12;
+    cast.slice(0, maxCast).forEach(function (name) {
         const li = document.createElement('li');
         li.textContent = name;
         movieDetailsCastList.appendChild(li);
@@ -238,8 +265,72 @@ function renderMeta(movie) {
     const country = safeTrim(movie.country || movie.production_country);
     if (country) addMetaRow('Country', country);
 
+    const certification = safeTrim(
+        movie.content_rating
+        || movie.certification
+        || movie.rated
+    );
+    if (certification) addMetaRow('Rating', certification);
+
     const hasRows = movieDetailsMetaList.children.length > 0;
     setHidden(movieDetailsMetaSection, !hasRows);
+}
+
+function getRelatedMoviesFromMovie(movie) {
+    if (!movie) return [];
+    if (Array.isArray(movie.relatedMovies)) return movie.relatedMovies;
+    if (Array.isArray(movie.similar)) return movie.similar;
+    return [];
+}
+
+function renderRelatedMovies(movie) {
+    if (!movieDetailsRelatedSection || !movieDetailsRelatedList) return;
+    clearElement(movieDetailsRelatedList);
+    const related = getRelatedMoviesFromMovie(movie);
+    if (!related.length) {
+        setHidden(movieDetailsRelatedSection, true);
+        return;
+    }
+    related.forEach(function (item) {
+        const li = document.createElement('li');
+        li.className = 'movie-details-related-item';
+
+        if (item && typeof item === 'object') {
+            const title = safeTrim(item.movie_title || item.title);
+            const year = item.year != null ? Number(item.year) : undefined;
+
+            const card = createCandidateCard({
+                movie_title: title,
+                title: item.title || item.movie_title || title,
+                year: Number.isFinite(year) ? year : undefined,
+                primary_image_url: item.primary_image_url || item.imageUrl || item.primaryImageUrl,
+                page_url: item.page_url || item.pageUrl || '',
+                tmdbId: item.tmdbId || item.tmdb_id,
+                mediaType: item.mediaType || item.media_type
+            }, { link: false });
+
+            if (card) li.appendChild(card);
+            else li.textContent = title || '';
+
+            if (title) {
+                li.classList.add('movie-details-related-item--interactive');
+                li.tabIndex = 0;
+                li.addEventListener('click', function () {
+                    openMovieDetails(item);
+                });
+                li.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openMovieDetails(item);
+                    }
+                });
+            }
+        } else {
+            li.textContent = safeTrim(String(item));
+        }
+        movieDetailsRelatedList.appendChild(li);
+    });
+    setHidden(movieDetailsRelatedSection, false);
 }
 
 function clearWhereToWatch() {
@@ -382,6 +473,90 @@ function renderWhereToWatchResults(data) {
     setHidden(movieDetailsWhereToWatchResults, false);
 }
 
+async function fetchMovieDetails(tmdbId, controller, timeoutMs) {
+    const tmdbIdStr = safeTrim(tmdbId);
+    if (!tmdbIdStr) throw new Error('tmdbId is required');
+    const url = API_BASE + '/api/movies/' + encodeURIComponent(tmdbIdStr) + '/details';
+    let timeoutId = null;
+    try {
+        timeoutId = setTimeout(function () {
+            try { controller.abort(); } catch (_) { /* ignore */ }
+        }, timeoutMs);
+        const res = await fetch(url, { method: 'GET', signal: controller.signal });
+        if (!res.ok) {
+            let msg = res.statusText || 'Request failed';
+            try {
+                const body = await res.json();
+                msg = (body && (body.detail || body.message)) ? (body.detail || body.message) : msg;
+            } catch (_) { /* ignore */ }
+            throw new Error(msg);
+        }
+        const data = await res.json();
+        return data;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+}
+
+function setStoryLoading() {
+    if (!movieDetailsStorySection || !movieDetailsStory) return;
+    if (!movieDetailsStorySection.classList.contains('hidden')) {
+        // leave existing visible state alone
+    }
+    movieDetailsStory.textContent = 'Loading details...';
+    setHidden(movieDetailsStorySection, false);
+}
+
+async function maybeLoadTmdbDetails(movie) {
+    if (!movie) return;
+    const tmdbId = movie.tmdbId || movie.tmdb_id;
+    const tmdbIdStr = safeTrim(tmdbId);
+    if (!tmdbIdStr) return;
+    if (!movieDetailsView || movieDetailsView.classList.contains('hidden')) return;
+
+    // Abort any previous in-flight fetch for the modal.
+    if (tmdbDetailsAbortController) {
+        try { tmdbDetailsAbortController.abort(); } catch (_) { /* ignore */ }
+    }
+    tmdbDetailsAbortController = new AbortController();
+
+    const requestTmdbId = tmdbIdStr;
+    const timeoutMs = Math.min(SEND_TIMEOUT_MS, 12000);
+
+    // If we don't have an overview yet, show a small non-stuck loading state.
+    if (!safeTrim(movie.overview) && !safeTrim(movie.summary) && !safeTrim(movie.plot)) {
+        setStoryLoading();
+    }
+
+    try {
+        const details = await fetchMovieDetails(requestTmdbId, tmdbDetailsAbortController, timeoutMs);
+        if (!details || typeof details !== 'object') return;
+
+        const activeTmdbId = safeTrim((currentMovie && (currentMovie.tmdbId || currentMovie.tmdb_id)) || '');
+        if (activeTmdbId !== requestTmdbId) return; // modal switched movies
+
+        const hasExistingRelated = Array.isArray(currentMovie && currentMovie.relatedMovies) && currentMovie.relatedMovies.length > 0;
+        const merged = Object.assign({}, currentMovie, details, { tmdbId: requestTmdbId });
+        // Prefer poster-derived related movies when present; only use backend enrichment as fallback.
+        if (hasExistingRelated) {
+            merged.relatedMovies = currentMovie.relatedMovies;
+        }
+        currentMovie = merged;
+
+        renderHeader(currentMovie);
+        renderHero(currentMovie);
+        renderStory(currentMovie);
+        renderCredits(currentMovie);
+        renderMeta(currentMovie);
+        renderRelatedMovies(currentMovie);
+    } catch (err) {
+        // Ignore aborts (e.g., modal closed or another movie opened).
+        if (err && err.name === 'AbortError') return;
+        // Re-render with the optimistic payload so we don't leave loading text.
+        renderStory(currentMovie);
+    }
+}
+
 function loadWhereToWatch(movie) {
     if (!movieDetailsWhereToWatchSection) return;
     const title = safeTrim(movie.movie_title || movie.title);
@@ -416,6 +591,11 @@ function loadWhereToWatch(movie) {
 
 export function openMovieDetails(movie) {
     if (!movieDetailsView || !movie) return;
+    if (tmdbDetailsAbortController) {
+        try { tmdbDetailsAbortController.abort(); } catch (_) { /* ignore */ }
+    }
+    tmdbDetailsAbortController = null;
+
     currentMovie = movie;
     previousScrollTop = chatColumn ? chatColumn.scrollTop : null;
 
@@ -424,14 +604,22 @@ export function openMovieDetails(movie) {
     renderStory(movie);
     renderCredits(movie);
     renderMeta(movie);
+    renderRelatedMovies(movie);
     loadWhereToWatch(movie);
 
     movieDetailsView.classList.remove('hidden');
     movieDetailsView.setAttribute('aria-hidden', 'false');
+
+    // Enrich with TMDB details when available (no blocking UI).
+    maybeLoadTmdbDetails(movie).catch(function () { /* ignore; optimistic UI remains */ });
 }
 
 export function closeMovieDetails() {
     if (!movieDetailsView) return;
+    if (tmdbDetailsAbortController) {
+        try { tmdbDetailsAbortController.abort(); } catch (_) { /* ignore */ }
+    }
+    tmdbDetailsAbortController = null;
     movieDetailsView.classList.add('hidden');
     movieDetailsView.setAttribute('aria-hidden', 'true');
     currentMovie = null;
@@ -446,6 +634,18 @@ export function initMovieDetails() {
     if (movieDetailsCloseBtn) {
         movieDetailsCloseBtn.addEventListener('click', function () {
             closeMovieDetails();
+        });
+    }
+    const askBtn = document.getElementById('movieDetailsAskBtn');
+    if (askBtn && composerInput) {
+        askBtn.addEventListener('click', function () {
+            if (!currentMovie) return;
+            const title = safeTrim(currentMovie.movie_title || currentMovie.title);
+            const year = currentMovie.year != null ? String(currentMovie.year) : '';
+            const label = year ? (title + ' (' + year + ')') : title;
+            const prompt = label ? ('Tell me more about ' + label) : 'Tell me more about this movie';
+            composerInput.value = prompt;
+            composerInput.focus();
         });
     }
     document.addEventListener('keydown', function (e) {

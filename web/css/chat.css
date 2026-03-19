@@ -74,6 +74,126 @@
 .empty-state p { font-size: 14px; line-height: 1.5; }
 .chat-column:not(.empty) .empty-state { display: none; }
 
+/* --- Movie Hub (sub-context view) --- */
+.movie-hub {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto 16px auto;
+    padding: 16px 12px 12px 12px;
+    border-radius: 12px;
+    border: 1px solid #e5e5e5;
+    background: #f9fafb;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+.movie-hub.hidden {
+    display: none;
+}
+.sub-conversation-view .movie-hub.hidden {
+    display: none;
+}
+.sub-conversation-view .movie-hub {
+    display: block;
+}
+.movie-hub-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.movie-hub-selected {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.movie-hub-selected-poster {
+    width: calc(var(--hero-poster-width, 6rem) * 0.8);
+    aspect-ratio: var(--poster-aspect-ratio, 2 / 3);
+    border-radius: var(--poster-radius, 0.375rem);
+    background: #e5e7eb;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.movie-hub-selected-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.movie-hub-selected-meta {
+    min-width: 0;
+}
+.movie-hub-selected-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 4px 0;
+}
+.movie-hub-selected-tagline {
+    font-size: 13px;
+    color: #4b5563;
+    margin: 0 0 8px 0;
+}
+.movie-hub-selected-tagline.hidden {
+    display: none;
+}
+.movie-hub-selected-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.movie-hub-selected-action {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #0d0d0d;
+    background: #0d0d0d;
+    color: #fff;
+    cursor: pointer;
+}
+.movie-hub-selected-action:hover {
+    background: #111827;
+}
+.movie-hub-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.movie-hub-cluster {
+    padding-top: 4px;
+}
+.movie-hub-cluster.hidden {
+    display: none;
+}
+.movie-hub-cluster-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    margin: 0 0 6px 0;
+}
+.movie-hub-cluster-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+}
+.movie-hub-cluster-strip::-webkit-scrollbar {
+    height: 4px;
+}
+.movie-hub-cluster-strip::-webkit-scrollbar-track {
+    background: transparent;
+}
+.movie-hub-cluster-strip::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.8);
+    border-radius: 999px;
+}
+
+.movie-hub-loading-more {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-top: 6px;
+}
+
 /* --- Messages (ChatGPT-like) --- */
 .message { padding: 24px 0; display: flex; gap: 16px; width: 100%; }
 .message.user { flex-direction: row-reverse; }
@@ -100,6 +220,20 @@
     line-height: 1.6;
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+.message-bubble p {
+    margin: 0 0 0.5rem 0;
+}
+.message-bubble p:last-child {
+    margin-bottom: 0;
+}
+.message-bubble ul,
+.message-bubble ol {
+    margin: 0 0 0.5rem 1.25rem;
+    padding: 0;
+}
+.message-bubble li {
+    margin: 0.125rem 0;
 }
 .message.assistant .message-bubble { background: #f7f7f8; color: #0d0d0d; border: 1px solid #e5e5e5; }
 .message.user .message-bubble { background: #0d0d0d; color: #fff; }
@@ -138,6 +272,48 @@
     overflow-y: auto;
 }
 .message-metadata.hidden { display: none; }
+
+/* --- Sub-conversation layout with Movie Hub --- */
+.sub-conversation-view .chat-column {
+    padding-top: 16px;
+    /* Poster hover tooltips extend slightly outside the poster bounds.
+       In sub-context, allow horizontal overflow so tooltip labels aren't clipped. */
+    overflow-x: visible;
+}
+.sub-conversation-view .media-strip-layout {
+    /* Tooltips on poster action icons are positioned with `left: 50%` + `translateX(-50%)`.
+       When the hosting strip is a horizontal scroll container, `overflow-x: auto` can clip
+       the tooltip background near the right edge. */
+    overflow-x: visible;
+}
+.sub-conversation-view .movie-hub-cluster-strip {
+    /* Same reason as above, but for hub clusters. */
+    overflow-x: visible;
+}
+.sub-conversation-view .movie-hub-selected-poster {
+    /* Hide the small "context" poster thumbnail in the hub header.
+       Keep the selected title + tagline + clusters unchanged. */
+    display: none;
+}
+.sub-conversation-view .movie-hub-selected {
+    /* Remove the gap reserved for the hidden poster. */
+    gap: 0;
+}
+.sub-conversation-view #movieHubView + #emptyState {
+    display: none;
+}
+.sub-conversation-view #messageList {
+    margin-top: 24px;
+    margin-bottom: 96px;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    opacity: 0.9;
+}
+.sub-conversation-view .message-bubble {
+    max-width: 70%;
+    font-size: 14px;
+}
 
 /*
  * Poster sizes: hero 3× base, candidates 1.5× base, Did you mean 1.25× base.

@@ -47,6 +47,27 @@
                         <div class="sub-conversation-badge hidden" id="subConversationMovieBadge" aria-hidden="true" role="img" aria-label="Movie context">
                             <span class="sub-conversation-badge-placeholder">🎬</span>
                         </div>
+                        <section class="movie-hub hidden" id="movieHubView" aria-label="Movie hub view">
+                            <header class="movie-hub-header">
+                                <div class="movie-hub-selected" id="movieHubSelectedMovie">
+                                    <div class="movie-hub-selected-poster" id="movieHubSelectedPoster"></div>
+                                    <div class="movie-hub-selected-meta">
+                                        <h2 class="movie-hub-selected-title" id="movieHubSelectedTitle"></h2>
+                                        <p class="movie-hub-selected-tagline" id="movieHubSelectedTagline"></p>
+                                        <div class="movie-hub-selected-actions">
+                                            <button type="button" class="movie-hub-selected-action" id="movieHubAskBtn">
+                                                Ask a question about this movie
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </header>
+                            <div class="movie-hub-body">
+                                <section class="movie-hub-cluster" id="movieHubSimilarByGenre" aria-label="Similar by genre"></section>
+                                <section class="movie-hub-cluster" id="movieHubSimilarByTone" aria-label="Similar by tone or theme"></section>
+                                <section class="movie-hub-cluster" id="movieHubSimilarByCast" aria-label="Similar by cast or crew"></section>
+                            </div>
+                        </section>
                         <div class="empty-state" id="emptyState">
                             <h2>CineMind</h2>
                             <p>Ask anything about movies — cast, directors, recommendations, or trivia.</p>
@@ -82,33 +103,47 @@
                         <h2 class="movie-details-title" id="movieDetailsTitle"></h2>
                         <span class="movie-details-year" id="movieDetailsYear"></span>
                         <p class="movie-details-tagline" id="movieDetailsTagline"></p>
+                        <div class="movie-details-actions">
+                            <button type="button" class="movie-details-action-btn" id="movieDetailsAskBtn">
+                                Ask about this movie
+                            </button>
+                        </div>
                     </div>
                 </header>
                 <div class="movie-details-body">
-                    <section class="movie-details-hero" id="movieDetailsHero">
-                        <div class="movie-details-hero-poster-wrap" id="movieDetailsPosterWrap"></div>
-                        <div class="movie-details-hero-meta" id="movieDetailsHeroMeta"></div>
-                    </section>
-                    <section class="movie-details-section" id="movieDetailsStorySection">
-                        <h3 class="movie-details-section-title">Story</h3>
-                        <p class="movie-details-story" id="movieDetailsStory"></p>
-                    </section>
-                    <section class="movie-details-section" id="movieDetailsCreditsSection">
-                        <h3 class="movie-details-section-title">Credits</h3>
-                        <div class="movie-details-credits">
-                            <div class="movie-details-credits-group" id="movieDetailsDirectorsGroup">
-                                <h4 class="movie-details-credits-label">Directors</h4>
-                                <ul class="movie-details-list" id="movieDetailsDirectorsList"></ul>
-                            </div>
-                            <div class="movie-details-credits-group" id="movieDetailsCastGroup">
-                                <h4 class="movie-details-credits-label">Cast</h4>
-                                <ul class="movie-details-list" id="movieDetailsCastList"></ul>
-                            </div>
+                    <div class="movie-details-top">
+                        <section class="movie-details-hero" id="movieDetailsHero">
+                            <div class="movie-details-hero-poster-wrap" id="movieDetailsPosterWrap"></div>
+                        </section>
+                        <div class="movie-details-right-column">
+                            <div class="movie-details-hero-meta" id="movieDetailsHeroMeta"></div>
+
+                            <section class="movie-details-section" id="movieDetailsStorySection">
+                                <h3 class="movie-details-section-title">Story</h3>
+                                <p class="movie-details-story" id="movieDetailsStory"></p>
+                            </section>
+                            <section class="movie-details-section" id="movieDetailsCreditsSection">
+                                <h3 class="movie-details-section-title">Credits</h3>
+                                <div class="movie-details-credits">
+                                    <div class="movie-details-credits-group" id="movieDetailsDirectorsGroup">
+                                        <h4 class="movie-details-credits-label">Directors</h4>
+                                        <ul class="movie-details-list" id="movieDetailsDirectorsList"></ul>
+                                    </div>
+                                    <div class="movie-details-credits-group" id="movieDetailsCastGroup">
+                                        <h4 class="movie-details-credits-label">Cast</h4>
+                                        <ul class="movie-details-list" id="movieDetailsCastList"></ul>
+                                    </div>
+                                </div>
+                            </section>
+                            <section class="movie-details-section" id="movieDetailsMetaSection">
+                                <h3 class="movie-details-section-title">Details</h3>
+                                <dl class="movie-details-meta-list" id="movieDetailsMetaList"></dl>
+                            </section>
                         </div>
-                    </section>
-                    <section class="movie-details-section" id="movieDetailsMetaSection">
-                        <h3 class="movie-details-section-title">Details</h3>
-                        <dl class="movie-details-meta-list" id="movieDetailsMetaList"></dl>
+                    </div>
+                    <section class="movie-details-section" id="movieDetailsRelatedSection">
+                        <h3 class="movie-details-section-title">Related titles</h3>
+                        <ul class="movie-details-list" id="movieDetailsRelatedList"></ul>
                     </section>
                     <section class="movie-details-section" id="movieDetailsWhereToWatchSection">
                         <h3 class="movie-details-section-title">Where to Watch</h3>
