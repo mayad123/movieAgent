@@ -7,13 +7,13 @@ sizes, and provides a centralized URL builder for posters vs backdrops/scenes.
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+from .http_client import tmdb_request_json
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,6 @@ PREFERRED_POSTER_GALLERY_SIZES = ["w500", "w342", "w780", "original"]
 
 # Default TTL 24 hours (TMDB configuration rarely changes).
 DEFAULT_CONFIG_TTL_SECONDS = 86400
-
-
-def _bearer_headers(token: str) -> dict[str, str]:
-    return {"Accept": "application/json", "Authorization": f"Bearer {token}"}
 
 
 @dataclass
@@ -89,14 +85,17 @@ def fetch_config(access_token: str, timeout: float = 10.0) -> TMDBImageConfig:
     Call TMDB GET /configuration and return parsed image config.
     Does not use cache; for cached access use get_config().
     """
+    t0 = time.perf_counter()
     config = TMDBImageConfig()
     if not access_token:
         return config
     try:
         url = f"{BASE_URL}{CONFIG_PATH}"
-        req = urllib.request.Request(url, headers=_bearer_headers(access_token))
-        with urllib.request.urlopen(req, timeout=max(1.0, timeout)) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        data = tmdb_request_json(url, access_token, timeout=timeout, log_label="TMDB_config")
+        if not isinstance(data, dict):
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            logger.debug("TMDB fetch_config empty response ms=%.1f", elapsed_ms)
+            return config
         images = (data or {}).get("images") or {}
         base = (images.get("secure_base_url") or images.get("base_url") or "").strip()
         if base and not base.endswith("/"):
@@ -109,6 +108,8 @@ def fetch_config(access_token: str, timeout: float = 10.0) -> TMDBImageConfig:
         posts = images.get("poster_sizes")
         if isinstance(posts, list) and posts:
             config.poster_sizes = [str(s) for s in posts]
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.debug("TMDB fetch_config ok ms=%.1f", elapsed_ms)
     except Exception as e:
         logger.debug("TMDB configuration fetch failed: %s", e)
     return config
@@ -129,9 +130,13 @@ def get_config(
         if _cache is not None:
             cached_config, cached_at = _cache
             if (now - cached_at) < ttl_seconds:
+                logger.debug("TMDB get_config cache_hit age_s=%.1f", now - cached_at)
                 return cached_config
+        logger.debug("TMDB get_config cache_miss fetching")
+        t_fetch = time.perf_counter()
         config = fetch_config(access_token, timeout=timeout)
         _cache = (config, now)
+        logger.debug("TMDB get_config cache_miss total_ms=%.1f", (time.perf_counter() - t_fetch) * 1000)
     return config
 
 

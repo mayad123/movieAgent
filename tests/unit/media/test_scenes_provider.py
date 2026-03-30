@@ -17,6 +17,15 @@ from integrations.tmdb.scenes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clear_tmdb_resolve_cache():
+    from integrations.tmdb.resolver import clear_resolve_cache
+
+    clear_resolve_cache()
+    yield
+    clear_resolve_cache()
+
+
 class TestSceneItem:
     def test_to_attachment_item(self):
         item = SceneItem(image_url="https://img.example/a.jpg", caption="Backdrop", source_url="https://tmdb.org/movie/1")
@@ -45,24 +54,31 @@ class TestScenesProviderTMDB:
 
     def test_search_failure_returns_empty(self):
         p = ScenesProviderTMDB(access_token="test-token")
-        with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+        with patch("integrations.tmdb.resolver.tmdb_request_json", return_value=None):
             assert p.fetch_scenes("Inception") == []
 
     def test_returns_normalized_items_on_mock_response(self):
-        from integrations.tmdb.image_config import TMDBImageConfig, get_config, clear_config_cache
+        from integrations.tmdb.image_config import TMDBImageConfig, clear_config_cache
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=2)
-        search_response = b'{"results":[{"id":27205,"title":"Inception","release_date":"2010-07-16"}]}'
+        search_payload = {"results": [{"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}]}
         images_response = b'{"backdrops":[{"file_path":"/abc.jpg","vote_average":7.5,"vote_count":10},{"file_path":"/def.jpg","vote_average":6,"vote_count":2}]}'
         fixed_config = TMDBImageConfig(
             secure_base_url="https://image.tmdb.org/t/p/",
             backdrop_sizes=["w300", "w780", "w1280", "original"],
             poster_sizes=["w92", "w185", "w500", "original"],
         )
-        with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
-            with patch("urllib.request.urlopen") as m:
-                m.return_value.__enter__.return_value.read.side_effect = [search_response, images_response]
-                items = p.fetch_scenes("Inception")
+
+        def fake_resolve_http(url: str, token: str, **_kwargs):
+            if "search/movie" in url:
+                return search_payload
+            return None
+
+        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http):
+            with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
+                with patch("urllib.request.urlopen") as m:
+                    m.return_value.__enter__.return_value.read.return_value = images_response
+                    items = p.fetch_scenes("Inception")
         assert len(items) == 2
         assert items[0].image_url == "https://image.tmdb.org/t/p/w780/abc.jpg"
         assert items[0].source_url == "https://www.themoviedb.org/movie/27205"
@@ -75,10 +91,10 @@ class TestScenesProviderTMDB:
 
     def test_low_resolution_backdrops_filtered_out(self):
         """Backdrops below MIN_BACKDROP_WIDTH/MIN_BACKDROP_HEIGHT are excluded."""
-        from integrations.tmdb.image_config import TMDBImageConfig, get_config, clear_config_cache
+        from integrations.tmdb.image_config import TMDBImageConfig, clear_config_cache
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=5)
-        search_response = b'{"results":[{"id":1,"title":"X","release_date":"2020-01-01"}]}'
+        search_payload = {"results": [{"id": 1, "title": "X", "release_date": "2020-01-01", "popularity": 10, "vote_count": 100}]}
         # One valid (w780), one too narrow (width 200), one too short (height 100)
         images_response = b'{"backdrops":[' \
             b'{"file_path":"/good.jpg","vote_average":8,"vote_count":100,"width":780,"height":439},' \
@@ -90,10 +106,17 @@ class TestScenesProviderTMDB:
             backdrop_sizes=["w780"],
             poster_sizes=["w185"],
         )
-        with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
-            with patch("urllib.request.urlopen") as m:
-                m.return_value.__enter__.return_value.read.side_effect = [search_response, images_response]
-                items = p.fetch_scenes("X")
+
+        def fake_resolve_http(url: str, token: str, **_kwargs):
+            if "search/movie" in url:
+                return search_payload
+            return None
+
+        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http):
+            with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
+                with patch("urllib.request.urlopen") as m:
+                    m.return_value.__enter__.return_value.read.return_value = images_response
+                    items = p.fetch_scenes("X")
         # Only the first (good) backdrop passes the filter
         assert len(items) == 1
         assert "good.jpg" in items[0].image_url

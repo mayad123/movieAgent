@@ -28,7 +28,7 @@ class ResponseTemplate:
     citation_examples: List[str] = field(default_factory=list)  # e.g., "according to IMDb", "per Wikipedia"
     
     # Structure requirements
-    structure_hints: List[str] = field(default_factory=list)  # e.g., "direct answer", "list format"
+    structure_hints: List[str] = field(default_factory=list)  # e.g., "direct_answer", "list_format"
     
     def to_instructions(self) -> str:
         """Convert template to instruction text for RESPONSE INSTRUCTIONS block."""
@@ -73,7 +73,9 @@ class ResponseTemplate:
                 if hint == "direct_answer":
                     instructions.append("Structure: Lead with direct answer, then brief context if needed.")
                 elif hint == "list_format":
-                    instructions.append("Structure: Use list format (numbered or bulleted).")
+                    instructions.append(
+                        "Structure: Use short paragraphs for explanations and bullet or numbered lists for multi-item outputs."
+                    )
                 elif hint == "comparison_table":
                     instructions.append("Structure: Use comparison format, clearly distinguishing between items.")
                 else:
@@ -91,6 +93,11 @@ class ResponseTemplate:
         if self.forbidden_terms:
             forbidden_text = ", ".join([f'"{term}"' for term in self.forbidden_terms])
             instructions.append(f"Forbidden terms: Never use these terms in the response: {forbidden_text}.")
+        
+        instructions.append(
+            "Plain text only: do not use markdown emphasis or dividers (no **, ***, __, or lines of only * or -). "
+            "For lists use lines starting with 1. or 2. or with - ."
+        )
         
         return "\n".join(instructions)
 

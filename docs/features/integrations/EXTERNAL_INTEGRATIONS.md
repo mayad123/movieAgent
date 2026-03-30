@@ -11,6 +11,8 @@
 | TMDB image URL building | [Image Configuration](#image-configuration-image_configpy) |
 | How movie titles resolve to TMDB data | [Movie Resolver](#movie-resolver-resolverpy) |
 | How scenes/backdrops work | [Scenes Provider](#scenes-provider-scenespy) |
+| Movie Details modal payload | [Movie Details](#movie-details-movie_detailspy) |
+| Hub filtering metadata helpers | [Movie Hub Metadata](#movie-hub-metadata-movie_metadatapy) |
 | Streaming availability lookup | [Client](#client-clientpy) |
 | How raw API responses are shaped | [Normalizer](#normalizer-normalizerpy) |
 | Which tests to run | [Test Coverage](#test-coverage) |
@@ -31,9 +33,13 @@
 
 | Module | Role | Lines |
 |--------|------|-------|
+| `http_client.py` | Shared **`httpx.Client`** (connection pooling) for TMDB GET JSON | ~90 |
+| `resolve_cache.py` | TTL + LRU cache for **`resolve_movie`** outputs | ~95 |
 | `image_config.py` | Fetch and cache TMDB image configuration | ~194 |
 | `resolver.py` | Search → score → resolve movie titles | ~246 |
 | `scenes.py` | Pluggable scenes/backdrops provider | ~215 |
+| `movie_details.py` | Deterministic Movie Details payload (+ relatedMovies) | ~200 |
+| `movie_metadata.py` | Hub filtering metadata (`append_to_response` bundle + thin list helpers) | ~200 |
 
 ### Watchmode Integration (`integrations/watchmode/`)
 
@@ -57,6 +63,8 @@ flowchart TD
         IMG["image_config<br/>URL building"]
         RES["resolver<br/>Title → ID → Details"]
         SCN["scenes<br/>Backdrops provider"]
+        MD["movie_details<br/>Movie Details modal payload"]
+        META["movie_metadata<br/>Hub filtering helpers"]
     end
 
     subgraph WM["integrations.watchmode"]
@@ -67,6 +75,8 @@ flowchart TD
     MEDIA --> RES
     MEDIA --> IMG
     MEDIA --> SCN
+    API --> MD
+    API --> META
     API --> CLI
     API --> NORM
 ```
@@ -122,7 +132,7 @@ sequenceDiagram
 
 ### Movie Resolver (`resolver.py`)
 
-Resolves a movie title string into structured TMDB data using search, scoring, and disambiguation.
+Resolves a movie title string into structured TMDB data using search, scoring, and disambiguation. HTTP uses the shared **`http_client.tmdb_request_json`** pool (not one-off `urllib` calls). Results are cached in **`resolve_cache`** (see `CINEMIND_TMDB_RESOLVE_CACHE_*` in [Media Enrichment](../media/MEDIA_ENRICHMENT.md#tmdb-resolve-cache-integrationstmdbresolve_cachepy)).
 
 ```mermaid
 flowchart TD
@@ -178,8 +188,8 @@ classDiagram
 
 | Provider | When Used | Behavior |
 |----------|-----------|----------|
-| `ScenesProviderTMDB` | TMDB API key present | Fetches backdrop images from TMDB |
-| `ScenesProviderEmpty` | No API key / disabled | Returns empty list (graceful fallback) |
+| `ScenesProviderTMDB` | TMDB enabled + token present (`ENABLE_TMDB_SCENES` + `TMDB_READ_ACCESS_TOKEN`) | Fetches backdrop images from TMDB |
+| `ScenesProviderEmpty` | TMDB not enabled / token missing | Returns empty list (graceful fallback) |
 
 **Factory:** `get_scenes_provider()` selects the appropriate implementation based on config.
 
@@ -188,6 +198,38 @@ classDiagram
 | Type | Fields |
 |------|--------|
 | `SceneItem` | `image_url`, `caption`, `aspect_ratio` |
+
+---
+
+### Movie Details (`movie_details.py`)
+
+Deterministic normalization helpers for the full-screen Movie Details modal.
+
+Key properties:
+- Never raise: if TMDB is disabled/misconfigured or any TMDB/network failure occurs, the helper returns a minimal payload `{"tmdbId": <int>}` so the frontend never gets stuck.
+- Provides UI-friendly fields for details: title/year/tagline/overview/runtime/genres/release_date/language/country/rating/vote_count plus `primary_image_url` and `backdrop_url`.
+- Credit normalization extracts `directors` and `cast` into simple string lists.
+- Optionally includes related movies via TMDB `/movie/{id}/similar` as `relatedMovies`.
+
+Primary helper:
+- `build_movie_details_payload(tmdb_id, token=None, timeout=6.0, include_related=True)` → `MovieDetailsResponse`-compatible dict.
+
+---
+
+### Movie Hub Metadata (`movie_metadata.py`)
+
+Deterministic TMDB metadata helpers used by `cinemind.media.movie_hub_filtering` to apply natural-language constraints to an anchored hub candidate set.
+
+Key properties:
+- Never raise: returns empty lists on any failure or missing token.
+- **`fetch_movie_filter_bundle(movie_id, token)`** — single **`GET /movie/{id}?append_to_response=credits,keywords`**; returns **`genres`**, **`cast`**, and **`keywords`** name lists (one round trip per id). Hub filtering calls this directly.
+- **`fetch_movie_genre_names` / `fetch_movie_cast_names` / `fetch_movie_keyword_names`** — convenience wrappers around the same bundle (with a short in-process memo so back-to-back calls for the same id reuse one fetch).
+
+Helper functions:
+- `fetch_movie_filter_bundle(movie_id, token)` → combined credits + keywords + base movie fields
+- `fetch_movie_cast_names(movie_id, token)` → cast names (from bundle)
+- `fetch_movie_genre_names(movie_id, token)` → genre names (from bundle)
+- `fetch_movie_keyword_names(movie_id, token)` → keyword names (from bundle)
 
 ---
 
@@ -265,6 +307,8 @@ graph TD
             IC["image_config"]
             RES["resolver"]
             SCN["scenes"]
+            MD["movie_details"]
+            META["movie_metadata"]
         end
         subgraph watchmode["integrations.watchmode"]
             WC["client"]
@@ -286,6 +330,8 @@ graph TD
     ME --> IC
     PA --> SCN
     MC --> RES
+    API --> MD
+    API --> META
     API --> WC
     API --> WN
 ```
@@ -303,7 +349,7 @@ graph TD
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `TMDB_API_KEY` | — | All TMDB modules |
+| `ENABLE_TMDB_SCENES` | `false` | Enables TMDB-backed enrichment/details (requires `TMDB_READ_ACCESS_TOKEN`) |
 | `TMDB_READ_ACCESS_TOKEN` | — | TMDB modules (alternative auth) |
 | `WATCHMODE_API_KEY` | — | `client.py` |
 
@@ -316,7 +362,7 @@ graph TD
 3. **Factory Functions** — `get_watchmode_client()`, `get_scenes_provider()` centralize construction
 4. **Response Normalization** — raw API responses are shaped at the integration boundary, not in domain code
 5. **Cached Configuration** — TMDB image config and Watchmode source catalogs are fetched once and cached
-6. **Graceful Degradation** — missing API keys produce empty providers, not crashes
+6. **Graceful Degradation** — missing TMDB token / disabled TMDB produces empty providers, not crashes
 
 ---
 
@@ -358,4 +404,4 @@ python -m pytest tests/unit/media/ -v
 | `SceneItem` fields | Frontend `js/modules/messages.js` |
 | Watchmode response shape | `normalizer.py`, frontend `where-to-watch.js` |
 | Image size constants | Frontend CSS for poster/backdrop display |
-| API key env var names | `.env.example`, Docker configs, CI secrets |
+| TMDB env var names | `.env.example`, Docker configs, CI secrets |

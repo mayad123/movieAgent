@@ -10,6 +10,7 @@
     <div class="app" id="app" data-poster-scale="comfortable">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
+                <button type="button" class="projects-nav-btn" id="projectsPageBtn" aria-label="Open Projects page" title="Projects">📁</button>
                 <button type="button" class="new-chat" id="newChatBtn">+ New chat</button>
             </div>
             <div class="conversation-list-label">Conversations</div>
@@ -49,16 +50,17 @@
                         </div>
                         <section class="movie-hub hidden" id="movieHubView" aria-label="Movie hub view">
                             <header class="movie-hub-header">
+                                <div class="movie-hub-header-actions">
+                                    <div class="movie-hub-retrieving hidden" id="movieHubRetrieving" aria-live="polite">
+                                        <span class="movie-hub-retrieving-label">Updating hub</span><span class="movie-hub-retrieving-dots"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                                    </div>
+                                    <button type="button" class="movie-hub-reset-btn" id="movieHubResetBtn" title="Restore the original similar-movies hub for this movie" aria-label="Reset hub to original list">Reset hub</button>
+                                </div>
                                 <div class="movie-hub-selected" id="movieHubSelectedMovie">
                                     <div class="movie-hub-selected-poster" id="movieHubSelectedPoster"></div>
                                     <div class="movie-hub-selected-meta">
                                         <h2 class="movie-hub-selected-title" id="movieHubSelectedTitle"></h2>
                                         <p class="movie-hub-selected-tagline" id="movieHubSelectedTagline"></p>
-                                        <div class="movie-hub-selected-actions">
-                                            <button type="button" class="movie-hub-selected-action" id="movieHubAskBtn">
-                                                Ask a question about this movie
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             </header>
@@ -66,6 +68,11 @@
                                 <section class="movie-hub-cluster" id="movieHubSimilarByGenre" aria-label="Similar by genre"></section>
                                 <section class="movie-hub-cluster" id="movieHubSimilarByTone" aria-label="Similar by tone or theme"></section>
                                 <section class="movie-hub-cluster" id="movieHubSimilarByCast" aria-label="Similar by cast or crew"></section>
+                            </div>
+                            <div class="movie-hub-filter-history-wrap hidden" id="movieHubFilterHistoryWrap" aria-label="Hub filter history">
+                                <h3 class="movie-hub-filter-history-heading">Filter history</h3>
+                                <p class="movie-hub-filter-history-hint">Questions below narrowed the hub above. Use the composer to add another filter.</p>
+                                <div class="movie-hub-filter-history" id="movieHubFilterHistory" role="list"></div>
                             </div>
                         </section>
                         <div class="empty-state" id="emptyState">

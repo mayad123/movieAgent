@@ -10,21 +10,18 @@ Resolves a user/title string to a TMDB movie_id using:
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import re
+import time
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from .http_client import tmdb_request_json
+from .resolve_cache import cache_key, clear_resolve_cache as _clear_resolve_cache, get_cached, set_cached
+
 logger = logging.getLogger(__name__)
-
-
-def _bearer_headers(token: str) -> dict[str, str]:
-    """Build request headers with Bearer auth. Token must not be logged."""
-    return {"Accept": "application/json", "Authorization": f"Bearer {token}"}
 
 BASE_URL = "https://api.themoviedb.org/3"
 
@@ -151,6 +148,55 @@ class TMDBResolveResult:
         return out
 
 
+def _resolve_from_results(
+    results: list[dict[str, Any]],
+    title: str,
+    year: Optional[int],
+    min_confidence: float,
+    min_score_gap: float,
+    max_candidates: int,
+) -> TMDBResolveResult:
+    """Score TMDB search results into a TMDBResolveResult (no I/O)."""
+    if not results:
+        return TMDBResolveResult(status="not_found")
+
+    scored = [(r, _score_candidate(r, title, year)) for r in results]
+    scored.sort(key=lambda x: (-x[1], x[0].get("id") or 0))
+
+    top_result, top_score = scored[0]
+    second_score = scored[1][1] if len(scored) > 1 else 0.0
+    gap = top_score - second_score
+
+    candidates = [
+        TMDBCandidate(
+            id=int(r.get("id") or 0),
+            title=(r.get("title") or r.get("original_title") or "").strip() or "Unknown",
+            year=_extract_year(r.get("release_date")),
+            poster_path=(r.get("poster_path") or "").strip() or None,
+        )
+        for r, _ in scored[:max_candidates]
+    ]
+    candidates = [c for c in candidates if c.id > 0]
+
+    confidence = min(1.0, top_score)
+    poster_path = (top_result.get("poster_path") or "").strip() or None
+
+    if confidence >= min_confidence and gap >= min_score_gap:
+        return TMDBResolveResult(
+            status="resolved",
+            movie_id=int(top_result.get("id") or 0),
+            poster_path=poster_path,
+            confidence=confidence,
+            candidates=candidates[:1],
+        )
+    return TMDBResolveResult(
+        status="ambiguous",
+        poster_path=poster_path,
+        confidence=confidence,
+        candidates=candidates,
+    )
+
+
 def resolve_movie(
     title: str,
     year: Optional[int] = None,
@@ -174,70 +220,72 @@ def resolve_movie(
     if not title or not access_token:
         return TMDBResolveResult(status="not_found")
 
+    key = cache_key(title, year, min_confidence, min_score_gap, max_candidates)
+    cached = get_cached(key)
+    if cached is not None:
+        logger.debug(
+            "TMDB resolve_movie cache_hit title=%r year=%s",
+            title[:60] if title else "",
+            year,
+        )
+        return cached
+
+    t0 = time.perf_counter()
     logger.debug("TMDB resolve_movie attempt title=%r year=%s", title[:60] if title else "", year)
     try:
         qs: dict[str, str] = {"query": title, "page": "1"}
         if year is not None:
             qs["year"] = str(year)
         url = f"{BASE_URL}/search/movie?{urllib.parse.urlencode(qs)}"
-        req = urllib.request.Request(url, headers=_bearer_headers(access_token))
-        with urllib.request.urlopen(req, timeout=max(1.0, timeout)) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        results = (data or {}).get("results") or []
+        data = tmdb_request_json(url, access_token, timeout=timeout, log_label="TMDB_resolve")
+        if not isinstance(data, dict):
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            logger.debug("TMDB resolve_movie not_found ms=%.1f (no data)", elapsed_ms)
+            out = TMDBResolveResult(status="not_found")
+            set_cached(key, out)
+            return out
+        results = data.get("results") or []
         logger.debug("TMDB resolve_movie response title=%r results_count=%s", title[:60] if title else "", len(results))
     except Exception as e:
         logger.debug("TMDB resolve_movie failed for %r: %s", title[:60] if title else "", e)
         return TMDBResolveResult(status="not_found")
 
     if not results:
-        return TMDBResolveResult(status="not_found")
+        out = TMDBResolveResult(status="not_found")
+        set_cached(key, out)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.debug("TMDB resolve_movie not_found ms=%.1f", elapsed_ms)
+        return out
 
-    # Score and sort deterministically (descending score; tie-break by id for stability)
-    scored = [(r, _score_candidate(r, title, year)) for r in results]
-    scored.sort(key=lambda x: (-x[1], x[0].get("id") or 0))
-
-    top_result, top_score = scored[0]
-    second_score = scored[1][1] if len(scored) > 1 else 0.0
-    gap = top_score - second_score
-
-    # Build candidate list for "Did you mean?" (include poster_path for each)
-    candidates = [
-        TMDBCandidate(
-            id=int(r.get("id") or 0),
-            title=(r.get("title") or r.get("original_title") or "").strip() or "Unknown",
-            year=_extract_year(r.get("release_date")),
-            poster_path=(r.get("poster_path") or "").strip() or None,
-        )
-        for r, _ in scored[:max_candidates]
-    ]
-    candidates = [c for c in candidates if c.id > 0]
-
-    # Normalize top_score into a 0–1 confidence (heuristic: cap by 1.0)
-    confidence = min(1.0, top_score)
-
-    # Top result's poster (for hero image) in both resolved and ambiguous
-    poster_path = (top_result.get("poster_path") or "").strip() or None
-
-    # Strict rule: low confidence or close top-two → do not auto-select
-    if confidence >= min_confidence and gap >= min_score_gap:
-        return TMDBResolveResult(
-            status="resolved",
-            movie_id=int(top_result.get("id") or 0),
-            poster_path=poster_path,
-            confidence=confidence,
-            candidates=candidates[:1],
-        )
-    # Ambiguous: still expose top result's poster for hero image
-    return TMDBResolveResult(
-        status="ambiguous",
-        poster_path=poster_path,
-        confidence=confidence,
-        candidates=candidates,
+    out = _resolve_from_results(
+        results,
+        title,
+        year,
+        min_confidence=min_confidence,
+        min_score_gap=min_score_gap,
+        max_candidates=max_candidates,
     )
+    set_cached(key, out)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    logger.debug(
+        "TMDB resolve_movie done status=%s ms=%.1f title=%r",
+        out.status,
+        elapsed_ms,
+        title[:60] if title else "",
+    )
+    return out
 
+
+clear_resolve_cache = _clear_resolve_cache
 
 __all__ = [
     "TMDBCandidate",
     "TMDBResolveResult",
     "resolve_movie",
+    "clear_resolve_cache",
+    "_normalize_title",
+    "_extract_year",
+    "_score_candidate",
+    "MIN_CONFIDENCE_AUTO_SELECT",
+    "MIN_SCORE_GAP_AUTO_SELECT",
 ]

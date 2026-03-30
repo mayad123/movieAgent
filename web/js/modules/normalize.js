@@ -15,15 +15,23 @@ export function normalizeMeta(meta) {
     out.toolsUsed = Array.isArray(meta.toolsUsed) ? meta.toolsUsed : null;
     if (meta.media_strip != null && typeof meta.media_strip === 'object') {
         const title = String(meta.media_strip.movie_title != null ? meta.media_strip.movie_title : '').trim();
-        out.media_strip = title ? {
-            movie_title: title,
-            primary_image_url: meta.media_strip.primary_image_url && String(meta.media_strip.primary_image_url).trim(),
-            page_url: meta.media_strip.page_url && String(meta.media_strip.page_url).trim(),
-            year: typeof meta.media_strip.year === 'number' ? meta.media_strip.year : undefined,
-            thumbnail_urls: Array.isArray(meta.media_strip.thumbnail_urls)
-                ? meta.media_strip.thumbnail_urls.slice(0, 3).map(function (u) { return u != null ? String(u).trim() : ''; }).filter(Boolean)
-                : []
-        } : null;
+        const primaryImageUrl = meta.media_strip.primary_image_url && String(meta.media_strip.primary_image_url).trim();
+        const pageUrl = meta.media_strip.page_url && String(meta.media_strip.page_url).trim();
+        const year = typeof meta.media_strip.year === 'number' ? meta.media_strip.year : undefined;
+        const thumbnailUrls = Array.isArray(meta.media_strip.thumbnail_urls)
+            ? meta.media_strip.thumbnail_urls.slice(0, 3).map(function (u) { return u != null ? String(u).trim() : ''; }).filter(Boolean)
+            : [];
+        let strip = null;
+        if (title) {
+            strip = {
+                movie_title: title,
+                primary_image_url: primaryImageUrl || undefined,
+                page_url: pageUrl || undefined,
+                year: year,
+                thumbnail_urls: thumbnailUrls
+            };
+        }
+        out.media_strip = strip;
     } else {
         out.media_strip = null;
     }

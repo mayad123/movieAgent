@@ -1,11 +1,12 @@
 /** @module posters — Poster/card rendering, carousel, and collection management. */
 
-import { app, rightPanel } from './dom.js';
+import { app, rightPanel, composerInput } from './dom.js';
 import {
     appState, getActiveConversation, getAssetKey, collectionHasKey,
-    isPosterInActiveCollection, normalizeTitle, pageIdFromUrl, API_BASE
+    isPosterInActiveCollection, normalizeTitle, pageIdFromUrl
 } from './state.js';
 import { escapeHtml } from './normalize.js';
+import { addProjectAssets } from './api.js';
 
 /* ── Callback registry (breaks circular deps with layout/chat modules) ── */
 
@@ -108,15 +109,7 @@ export function addToCollection(title, imageUrl, pageUrl, pageId) {
             assetPayload.subConversationId = appState.activeSubConversationId;
         }
         const payload = { assets: [assetPayload] };
-        fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId) + '/assets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-            .then(function (res) {
-                if (!res.ok) return Promise.reject(new Error('Failed to save'));
-                return res.json();
-            })
+        addProjectAssets(projectId, payload.assets, { timeoutMs: 12000 })
             .then(function (result) {
                 const proj = appState.projects.filter(function (p) { return p.id === projectId; })[0];
                 if (_showSavedToProjectToast) _showSavedToProjectToast(proj ? proj.name : null);
@@ -415,12 +408,7 @@ export function captureAssetsForProjectScope(conversationId, msgIndex, norm) {
     }
     if (batch.length === 0) return;
 
-    fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId) + '/assets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assets: batch })
-    })
-        .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('Failed to save assets')); })
+    addProjectAssets(projectId, batch, { timeoutMs: 12000 })
         .then(function (result) {
             keysToMark.forEach(function (k) { appState.savedAssetKeys.add(k); });
             const added = (result && result.added) || 0;
@@ -483,24 +471,6 @@ export function createHeroCard(item, options) {
     if (!noOverlay) {
         const topRightOverlay = document.createElement('div');
         topRightOverlay.className = 'media-strip-card-overlay media-strip-card-overlay--top-right';
-        const infoBtn = document.createElement('button');
-        infoBtn.type = 'button';
-        infoBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below media-strip-card-action--info';
-        infoBtn.setAttribute('data-tooltip', 'More info');
-        infoBtn.setAttribute('title', 'More info');
-        infoBtn.setAttribute('aria-label', 'More info');
-        infoBtn.innerHTML = infoIconSvg;
-        infoBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (typeof _openMovieDetails === 'function') {
-                const payload = buildMovieDetailsPayloadFromItem(item, title, imgUrl, href);
-                _openMovieDetails(payload);
-            } else if (href) {
-                window.open(href, '_blank', 'noopener');
-            }
-        });
-        topRightOverlay.appendChild(infoBtn);
         const whereToWatchBtn = document.createElement('button');
         whereToWatchBtn.type = 'button';
         whereToWatchBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
@@ -549,6 +519,26 @@ export function createHeroCard(item, options) {
             isInCollection = true;
             return false;
         });
+        // Swap positions: put "Add to Collection" in the top-right overlay with "Where to watch"
+        topRightOverlay.appendChild(addBtn);
+
+        const infoBtn = document.createElement('button');
+        infoBtn.type = 'button';
+        infoBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below media-strip-card-action--info';
+        infoBtn.setAttribute('data-tooltip', 'More info');
+        infoBtn.setAttribute('title', 'More info');
+        infoBtn.setAttribute('aria-label', 'More info');
+        infoBtn.innerHTML = infoIconSvg;
+        infoBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof _openMovieDetails === 'function') {
+                const payload = buildMovieDetailsPayloadFromItem(item, title, imgUrl, href);
+                _openMovieDetails(payload);
+            } else if (href) {
+                window.open(href, '_blank', 'noopener');
+            }
+        });
         const msgBtn = document.createElement('button');
         msgBtn.type = 'button';
         msgBtn.className = 'media-strip-card-action media-strip-card-action--tooltip-below';
@@ -559,17 +549,32 @@ export function createHeroCard(item, options) {
         msgBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            // In sub-context view, keep the current hub anchor/conversation stable.
+            // "Talk More About This" should simply pre-fill the composer (minimal UX),
+            // rather than spawning a new sub-conversation.
+            if (appState && appState.conversationView === 'sub' && composerInput) {
+                const promptLabel = labelText && String(labelText).trim()
+                    ? String(labelText).trim()
+                    : (title && String(title).trim() ? String(title).trim() : 'this movie');
+                composerInput.value = 'Tell me more about ' + promptLabel;
+                composerInput.focus();
+                return;
+            }
             if (_addSubConversation) {
                 _addSubConversation({
                     title: title,
                     year: item.year,
                     pageUrl: pageUrl || undefined,
                     pageId: pageId || undefined,
-                    imageUrl: imgUrl || undefined
+                    imageUrl: imgUrl || undefined,
+                    tmdbId: item.tmdbId || item.tmdb_id || undefined,
+                    mediaType: item.mediaType || item.media_type || undefined,
+                    relatedMovies: Array.isArray(item.relatedMovies) ? item.relatedMovies : undefined
                 });
             }
         });
-        overlay.appendChild(addBtn);
+        // Bottom overlay now holds "More info" alongside the message action
+        overlay.appendChild(infoBtn);
         overlay.appendChild(msgBtn);
         if (isInCollection) {
             const addedLabel = document.createElement('span');
@@ -639,7 +644,8 @@ export function attachmentItemToHeroShape(item) {
         primary_image_url: (item.imageUrl && String(item.imageUrl).trim()) || '',
         page_url: (item.sourceUrl && String(item.sourceUrl).trim()) || '',
         tmdbId: item.tmdbId || item.tmdb_id || undefined,
-        mediaType: item.mediaType || item.media_type || undefined
+        mediaType: item.mediaType || item.media_type || undefined,
+        relatedMovies: Array.isArray(item.relatedMovies) ? item.relatedMovies : undefined
     };
 }
 
@@ -738,24 +744,6 @@ export function PosterCarouselWheel(items, activeIndex, onChangeIndex, options) 
         const isInCollection = isPosterInActiveCollection({ title: title, imageUrl: imgUrl, pageUrl: pageUrl, pageId: pageId });
         const topRightOverlayCarousel = document.createElement('div');
         topRightOverlayCarousel.className = 'poster-carousel-wheel-overlay poster-carousel-wheel-overlay--top-right';
-        const infoBtnCarousel = document.createElement('button');
-        infoBtnCarousel.type = 'button';
-        infoBtnCarousel.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below poster-carousel-wheel-action--info';
-        infoBtnCarousel.setAttribute('data-tooltip', 'More info');
-        infoBtnCarousel.setAttribute('title', 'More info');
-        infoBtnCarousel.setAttribute('aria-label', 'More info');
-        infoBtnCarousel.innerHTML = infoIconSvg;
-        infoBtnCarousel.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (typeof _openMovieDetails === 'function') {
-                const payload = buildMovieDetailsPayloadFromItem(it, title, imgUrl, href);
-                _openMovieDetails(payload);
-            } else if (href) {
-                window.open(href, '_blank', 'noopener');
-            }
-        });
-        topRightOverlayCarousel.appendChild(infoBtnCarousel);
         const whereToWatchEl = document.createElement('button');
         whereToWatchEl.type = 'button';
         whereToWatchEl.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
@@ -801,6 +789,8 @@ export function PosterCarouselWheel(items, activeIndex, onChangeIndex, options) 
                 btn.disabled = true;
             });
         })(addBtn, title, imgUrl, pageUrl, pageId, isInCollection);
+        // Swap positions: put "Add to Collection" in the top-right overlay with "Where to watch"
+        topRightOverlayCarousel.appendChild(addBtn);
         const msgBtn = document.createElement('button');
         msgBtn.type = 'button';
         msgBtn.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below';
@@ -808,22 +798,51 @@ export function PosterCarouselWheel(items, activeIndex, onChangeIndex, options) 
         msgBtn.setAttribute('title', 'Talk More About This');
         msgBtn.setAttribute('aria-label', 'Talk More About This');
         msgBtn.innerHTML = messageIconSvg;
-        (function (itemTitle, itemYear, itemPageUrl, itemPageId, itemImgUrl) {
+        (function (itemTitle, itemYear, itemPageUrl, itemPageId, itemImgUrl, itemRelatedMovies) {
             msgBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
+                // Same sub-context behavior as `createHeroCard`:
+                // pre-fill composer instead of switching sub-conversations.
+                if (appState && appState.conversationView === 'sub' && composerInput) {
+                    const promptLabel = itemYear != null
+                        ? String(itemTitle || '').trim() + ' (' + itemYear + ')'
+                        : String(itemTitle || '').trim();
+                    composerInput.value = 'Tell me more about ' + (promptLabel || 'this movie');
+                    composerInput.focus();
+                    return;
+                }
                 if (_addSubConversation) {
                     _addSubConversation({
                         title: itemTitle,
                         year: itemYear,
                         pageUrl: itemPageUrl || undefined,
                         pageId: itemPageId || undefined,
-                        imageUrl: itemImgUrl || undefined
+                        imageUrl: itemImgUrl || undefined,
+                        relatedMovies: Array.isArray(itemRelatedMovies) ? itemRelatedMovies : undefined
                     });
                 }
             });
-        })(title, typeof it.year === 'number' ? it.year : undefined, pageUrl, pageId, imgUrl);
-        overlay.appendChild(addBtn);
+        })(title, typeof it.year === 'number' ? it.year : undefined, pageUrl, pageId, imgUrl, it.relatedMovies);
+        const infoBtnCarousel = document.createElement('button');
+        infoBtnCarousel.type = 'button';
+        infoBtnCarousel.className = 'poster-carousel-wheel-action poster-carousel-wheel-action--tooltip-below poster-carousel-wheel-action--info';
+        infoBtnCarousel.setAttribute('data-tooltip', 'More info');
+        infoBtnCarousel.setAttribute('title', 'More info');
+        infoBtnCarousel.setAttribute('aria-label', 'More info');
+        infoBtnCarousel.innerHTML = infoIconSvg;
+        infoBtnCarousel.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof _openMovieDetails === 'function') {
+                const payload = buildMovieDetailsPayloadFromItem(it, title, imgUrl, href);
+                _openMovieDetails(payload);
+            } else if (href) {
+                window.open(href, '_blank', 'noopener');
+            }
+        });
+        // Bottom overlay now holds "More info" alongside the message action
+        overlay.appendChild(infoBtnCarousel);
         overlay.appendChild(msgBtn);
         posterWrap.appendChild(overlay);
         el.appendChild(posterWrap);
@@ -1116,6 +1135,10 @@ export function createAttachmentsFromSections(sections) {
     wrap.className = 'attachments';
 
     const allMovieItems = [];
+    // Universe of "related movies" (non-hero) to anchor sub-context hubs.
+    // These items are attached onto each carousel element so the click handler
+    // can propagate a bounded candidate set into the created sub-conversation.
+    const relatedMoviesUniverseItems = [];
     const sceneItems = [];
     let hasScenes = false;
     const heroSceneItems = [];
@@ -1149,7 +1172,14 @@ export function createAttachmentsFromSections(sections) {
 
         items.forEach(function (it) {
             const ci = _attachmentItemToCarouselItem(it);
-            if (ci) allMovieItems.push(ci);
+            if (!ci) return;
+            allMovieItems.push(ci);
+            // Only non-hero movie lists become the hub universe.
+            // `primary_movie` is the clicked/anchored context; `movie_list` / `did_you_mean`
+            // are the candidate universe for related titles.
+            if (type === 'movie_list' || type === 'did_you_mean') {
+                relatedMoviesUniverseItems.push(ci);
+            }
         });
     });
 
@@ -1160,6 +1190,46 @@ export function createAttachmentsFromSections(sections) {
         seenTitles[key] = true;
         return true;
     });
+
+    // Convert candidate universe items into the shape expected by the Movie Hub.
+    // (The hub/mini-hero rendering tolerates `imageUrl` and `pageUrl` shorthands.)
+    const relatedSeen = {};
+    const relatedMoviesUniverse = relatedMoviesUniverseItems
+        .filter(function (it) {
+            if (!it || !it.title) return false;
+            const key = String(it.title).toLowerCase();
+            if (relatedSeen[key]) return false;
+            relatedSeen[key] = true;
+            return true;
+        })
+        .map(function (it) {
+            const pageUrl = (it.sourceUrl && String(it.sourceUrl).trim()) || '';
+            return {
+                title: it.title,
+                year: it.year,
+                imageUrl: it.imageUrl,
+                // Provide both keys so hub rendering + where-to-watch can pick either.
+                primary_image_url: it.imageUrl,
+                pageUrl: pageUrl || undefined,
+                page_url: pageUrl || undefined,
+                pageId: it.pageId,
+                tmdbId: it.tmdbId,
+                mediaType: it.mediaType
+            };
+        })
+        .filter(function (it) {
+            return it && it.title;
+        });
+
+    // Attach the parent reply’s candidate universe to each carousel item (legacy / optional).
+    // Sub-conversation hub **display** must not use this as `contextMovie.relatedMovies` —
+    // that list is the same for every poster and is not “similar to the clicked title.”
+    // `layout.addSubConversationFromPoster` ignores it when building the sub anchor.
+    if (uniqueMovieItems.length && relatedMoviesUniverse.length) {
+        uniqueMovieItems.forEach(function (it) {
+            it.relatedMovies = relatedMoviesUniverse;
+        });
+    }
 
     if (hasScenes && heroSceneItems.length > 0) {
         const sectionEl = document.createElement('div');
@@ -1200,6 +1270,24 @@ export function createUnifiedMovieStrip(norm) {
     const hasCandidates = candidates.length > 0;
     if (!hasStrip && !hasCandidates) return null;
 
+    // When a hero strip and candidates are present, attach relatedMovies to the hero.
+    // This lets sub-conversations reuse the same list for the Movie Hub without
+    // another backend lookup.
+    if (hasStrip && hasCandidates && !Array.isArray(norm.media_strip.relatedMovies)) {
+        norm.media_strip.relatedMovies = candidates.map(function (c) {
+            if (!c || typeof c !== 'object') return null;
+            const title = String(c.movie_title != null ? c.movie_title : '').trim();
+            if (!title) return null;
+            const item = {
+                title: title,
+                year: typeof c.year === 'number' ? c.year : undefined
+            };
+            if (c.primary_image_url) item.primary_image_url = String(c.primary_image_url).trim();
+            if (c.page_url) item.page_url = String(c.page_url).trim();
+            return item;
+        }).filter(function (m) { return m !== null; });
+    }
+
     const wrap = document.createElement('div');
     wrap.className = 'media-strip';
     const layout = document.createElement('div');
@@ -1216,4 +1304,42 @@ export function createUnifiedMovieStrip(norm) {
 
     wrap.appendChild(layout);
     return wrap;
+}
+
+export function renderSimilarCluster(container, movies, options) {
+    if (!container) return;
+    container.innerHTML = '';
+    options = options || {};
+    const titleText = (options.title && String(options.title).trim())
+        ? options.title.trim()
+        : 'Similar titles';
+    if (!Array.isArray(movies) || movies.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+    const heading = document.createElement('h3');
+    heading.className = 'movie-hub-cluster-title';
+    heading.textContent = titleText;
+    container.appendChild(heading);
+    const strip = document.createElement('div');
+    strip.className = 'movie-hub-cluster-strip';
+    movies.forEach(function (m) {
+        if (!m) return;
+        const card = createHeroCard({
+            movie_title: m.movie_title || m.title,
+            title: m.title,
+            year: m.year,
+            primary_image_url: m.primary_image_url || m.imageUrl,
+            page_url: m.page_url || m.pageUrl,
+            tmdbId: m.tmdbId || m.tmdb_id,
+            mediaType: m.mediaType || m.media_type
+        }, { link: true });
+        if (card) strip.appendChild(card);
+    });
+    if (!strip.children.length) {
+        container.classList.add('hidden');
+        return;
+    }
+    container.appendChild(strip);
+    container.classList.remove('hidden');
 }

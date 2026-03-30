@@ -78,9 +78,9 @@ class TestFetchConfig:
         assert config.backdrop_sizes
 
     def test_parses_valid_response(self):
-        payload = b'{"images":{"secure_base_url":"https://cdn.tmdb.org/t/p/","backdrop_sizes":["w300","w780"],"poster_sizes":["w92","w185"]}}'
-        with patch("urllib.request.urlopen") as m:
-            m.return_value.__enter__.return_value.read.return_value = payload
+        payload_dict = {"images": {"secure_base_url": "https://cdn.tmdb.org/t/p/", "backdrop_sizes": ["w300", "w780"], "poster_sizes": ["w92", "w185"]}}
+        with patch("integrations.tmdb.image_config.tmdb_request_json") as m:
+            m.return_value = payload_dict
             config = fetch_config("token")
         assert config.secure_base_url == "https://cdn.tmdb.org/t/p/"
         assert "w780" in config.backdrop_sizes

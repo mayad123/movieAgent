@@ -1,0 +1,16 @@
+---
+description: Documentation and planning update discipline
+globs: docs/**/*.md
+alwaysApply: false
+---
+
+# Docs And Planning Flow
+
+- Keep feature docs aligned with behavior in `src/`, especially integration contracts and fallbacks.
+- Update planning docs when scope or priorities shift (`ROADMAP`, `BACKLOG`, `STATE`, `SUMMARY`).
+- When planning files exceed the archive line budget or content is superseded, use `docs/planning/archive/`: snapshot with YAML front matter, append `archive/MANIFEST.md`, stub + **History** link in the live file (`docs/planning/archive/README.md`).
+- After substantive cross-cutting planning + implementation work, consider a short session summary under `docs/session_logs/entries/` and a row in `docs/session_logs/MANIFEST.md` (`docs/session_logs/README.md`, [`docs/AIbuilding/SESSION_LOGS.md`](../../docs/AIbuilding/SESSION_LOGS.md)). Cursor’s `track-scoped-work` hook (see [`docs/AIbuilding/CURSOR_TEST_HOOKS.md`](../../docs/AIbuilding/CURSOR_TEST_HOOKS.md)) appends **path signals** for tracked prefixes (including `tests/fixtures/scenarios/` YAML); draft from the queue with `python scripts/session_log_draft_from_signals.py`. For manifest + `rg` lookup across planning archive and session logs, see [`docs/AIbuilding/QUERYING.md`](../../docs/AIbuilding/QUERYING.md).
+- Prefer concise, actionable sections with explicit "when to use this" guidance for contributors.
+- Use stable terminology across docs (`CineMind`, feature names, request types, endpoint labels).
+- When introducing config or env vars, document defaults and purpose in config-related docs.
+- For new frontend/backend workflows, add links from the nearest index or README for discoverability.

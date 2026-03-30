@@ -1,0 +1,66 @@
+{
+  "debounce_seconds": 30,
+  "skip_prefixes": [
+    "docs/",
+    "data/",
+    "tests/test_reports/",
+    ".cursor/"
+  ],
+  "entries": [
+    {
+      "prefix": "src/cinemind/extraction/",
+      "pytest_targets": ["tests/unit/extraction/"]
+    },
+    {
+      "prefix": "src/cinemind/media/",
+      "pytest_targets": ["tests/unit/media/"]
+    },
+    {
+      "prefix": "src/cinemind/planning/",
+      "pytest_targets": ["tests/unit/planning/"]
+    },
+    {
+      "prefix": "src/cinemind/prompting/",
+      "pytest_targets": ["tests/unit/prompting/", "tests/test_scenarios_offline.py"]
+    },
+    {
+      "prefix": "src/cinemind/search/",
+      "pytest_targets": ["tests/unit/search/"]
+    },
+    {
+      "prefix": "src/cinemind/workflows/",
+      "pytest_targets": ["tests/unit/workflows/"]
+    },
+    {
+      "prefix": "src/cinemind/infrastructure/",
+      "pytest_targets": ["tests/unit/infrastructure/"]
+    },
+    {
+      "prefix": "src/cinemind/agent/",
+      "pytest_targets": [
+        "tests/integration/test_agent_offline_e2e.py",
+        "tests/test_scenarios_offline.py"
+      ]
+    },
+    {
+      "prefix": "src/integrations/",
+      "pytest_targets": ["tests/unit/integrations/"]
+    },
+    {
+      "prefix": "src/api/",
+      "pytest_targets": ["tests/unit/integrations/", "tests/integration/"]
+    },
+    {
+      "prefix": "src/schemas/",
+      "pytest_targets": ["tests/unit/integrations/", "tests/integration/"]
+    },
+    {
+      "prefix": "tests/test_cases/",
+      "pytest_targets": ["tests/test_scenarios_offline.py"]
+    },
+    {
+      "prefix": "web/",
+      "pytest_targets": ["tests/smoke/"]
+    }
+  ]
+}

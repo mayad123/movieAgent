@@ -208,8 +208,12 @@ Messages are rendered by building DOM fragments and appending to `#messageList`:
 
 ```javascript
 const bubble = document.createElement('div');
-bubble.className = 'message assistant';
-bubble.innerHTML = formatContent(text);
+bubble.className = 'message-bubble';
+if (role === 'assistant') {
+    renderAssistantContent(text, bubble); // creates <p>, <ul>, <ol>, <li> with textContent
+} else {
+    bubble.appendChild(document.createTextNode(text));
+}
 dom.messageList.appendChild(bubble);
 ```
 
@@ -308,10 +312,16 @@ try {
 
 ---
 
+## Visual consistency (look and feel)
+
+- **Design tokens** for the light shell live in [`web/css/base.css`](../web/css/base.css). Prefer `var(--token)` over new hex values in regional CSS. See [`docs/features/web/WEB_DESIGN_TOKENS.md`](../features/web/WEB_DESIGN_TOKENS.md).
+- **Manual pass** when changing layout or styling: main chat, sub-hub, Projects page, movie details modal, where-to-watch drawer — borders, background grays, button styles, and header density should feel like one product.
+
 ## Anti-Patterns to Avoid
 
 | Anti-Pattern | Instead Do |
 |-------------|-----------|
+| Hard-coded `#rrggbb` in `web/css/*.css` for chrome that already has a token | Add or reuse a variable in `base.css`, then `var(--…)` in the component sheet |
 | Direct cross-module imports | Use callback wiring via `app.js` |
 | `document.getElementById()` in feature modules | Use `dom.js` cached refs |
 | State in DOM attributes | Use `appState` |

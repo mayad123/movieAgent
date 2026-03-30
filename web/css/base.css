@@ -1,28 +1,213 @@
-/* CineMind — production app styles (from playground UI) */
+/* CineMind — production app styles (from playground UI)
+ * Global design tokens: use these in component CSS instead of one-off hex values.
+ */
 
 /* --- Reset & base --- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    font-size: 15px;
-    line-height: 1.6;
-    color: #0d0d0d;
-    background: #fff;
-    overflow: hidden;
-}
-.hidden { display: none !important; }
 
-/* --- Sub-conversation screen: light gray tokens (single surface) --- */
+/* --- Global design tokens (light shell: chat, sidebar, projects, drawers) --- */
 :root {
+    /* Typography */
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    --font-mono: ui-monospace, monospace;
+    --text-title: 1.125rem;      /* 18px — page / empty-state titles */
+    --text-body: 0.9375rem;      /* 15px — body (matches body font-size) */
+    --text-sm: 0.875rem;         /* 14px */
+    --text-xs: 0.8125rem;        /* 13px */
+    --text-2xs: 0.75rem;         /* 12px */
+    --text-3xs: 0.6875rem;       /* 11px */
+    --text-micro: 0.625rem;      /* 10px */
+    --line-height-ui: 1.5;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+
+    /* Text colors */
+    --text-primary: #0d0d0d;
+    --text-body-tone: #374151;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+    --text-subtle: #9ca3af;
+    --text-heading: #111827;
+    --text-inverse: #ffffff;
+    --text-error: #b91c1c;
+
+    /* Dark chrome (carousel panels, overlays on light app) */
+    --surface-dark-chrome: #374151;
+    --surface-dark-chrome-soft: #4b5563;
+    --text-on-dark-muted: #d1d5db;
+
+    /* Surfaces */
+    --surface-page: #ffffff;
+    --surface-sidebar: #f7f7f8;
+    --surface-muted: #f9fafb;
+    --surface-bubble: #f7f7f8;
+    --surface-hover: #f3f4f6;
+    --surface-row-hover: #eeeeee;
+    --surface-active: #e5e7eb;
+    --surface-placeholder: #e5e7eb;
+    --surface-panel-glaze: rgba(247, 247, 248, 0.55);
+    --surface-panel-glaze-solid: rgba(247, 247, 248, 0.9);
+
+    /* Borders */
+    --border-default: #e5e7eb;
+    --border-hairline: #e5e5e5;
+    --border-strong: #d1d5db;
+    --border-emphasis: #9ca3af;
+    --border-subtle-alpha: rgba(0, 0, 0, 0.1);
+    --border-glass: rgba(229, 231, 235, 0.7);
+    --border-dark-ui: rgba(0, 0, 0, 0.2);
+
+    /* Accents */
+    --accent-primary: #0d0d0d;
+    --accent-primary-hover: #262626;
+    --accent-primary-pressed: #111827;
+    --accent-user: #4a90e2;
+    --accent-toggle-track-on: #4b5563;
+    --accent-hush-hover: #333333;
+    --accent-indigo-bg: #eef2ff;
+    --accent-indigo-border: #a5b4fc;
+    --accent-indigo-text: #3730a3;
+    --accent-warm-bg: #fef3c7;
+    --accent-warm-text: #92400e;
+    --accent-toast: #b45309;
+    --focus-ring: #4b5563;
+
+    /* Elevation */
+    --shadow-card: 0 6px 18px rgba(15, 23, 42, 0.04);
+    --shadow-popover: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
+    --shadow-modal: 0 0.5rem 2rem rgba(0, 0, 0, 0.15);
+    --shadow-toggle-raised: 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-toggle-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+
+    /* Radii */
+    --radius-xs: 3px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 10px;
+    --radius-2xl: 12px;
+    --radius-pill: 999px;
+
+    /* Spacing scale */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 48px;
+
+    /* Motion */
+    --duration-fast: 150ms;
+    --duration-normal: 200ms;
+    --ease-standard: ease;
+
+    /* Layout chrome */
+    --chrome-header-min-height: 52px;
+    --chrome-header-padding-y: 12px;
+    --chrome-header-padding-x: 16px;
+
+    /* Scrollbars */
+    --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+
+    /* Sub-conversation screen (Movie Hub): align with app neutrals */
     --sub-surface-bg: #e8e8ec;
     --sub-surface-elevated: #e8e8ec;
     --sub-surface-soft: #d8d8de;
-    --sub-text-primary: #0d0d0d;
-    --sub-text-secondary: #4b5563;
-    --sub-border: rgba(0, 0, 0, 0.1);
+    --sub-text-primary: var(--text-primary);
+    --sub-text-secondary: var(--text-secondary);
+    --sub-border: var(--border-subtle-alpha);
     --sub-poster-width: clamp(3rem, 9vw, 5.5rem);
     --sub-badge-ring: rgba(0, 0, 0, 0.12);
     --sub-header-min-height: clamp(2.75rem, 8vh, 3.5rem);
     --sub-content-padding: clamp(0.75rem, 2vw, 1rem);
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--surface-page);
+    overflow: hidden;
+}
+.hidden { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Shared interactive chrome — use in HTML where appropriate; patterns also applied via tokens in component CSS */
+.app-btn {
+    font-family: inherit;
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-standard),
+        border-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
+}
+.app-btn--primary {
+    border: 1px solid var(--accent-primary);
+    background: var(--accent-primary);
+    color: var(--text-inverse);
+    border-radius: var(--radius-md);
+    padding: 7px 12px;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+}
+.app-btn--primary:hover:not(:disabled) {
+    background: var(--accent-primary-hover);
+    border-color: var(--accent-primary-hover);
+}
+.app-btn--secondary {
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+}
+.app-btn--secondary:hover:not(:disabled) {
+    background: var(--surface-row-hover);
+}
+.app-btn--quiet {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: var(--font-weight-medium);
+    padding: 4px 8px;
+}
+.app-btn--quiet:hover:not(:disabled) {
+    background: var(--accent-indigo-bg);
+    border-color: var(--accent-indigo-border);
+    color: var(--accent-indigo-text);
+}
+.app-btn:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+/* List row hover/active — conversation list, filter history, project lists */
+.app-list-row--interactive {
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.app-list-row--interactive:hover {
+    background: var(--surface-row-hover);
+}
+.app-list-row--interactive.is-active,
+.app-list-row--interactive.active {
+    background: var(--surface-active);
+    font-weight: var(--font-weight-medium);
 }

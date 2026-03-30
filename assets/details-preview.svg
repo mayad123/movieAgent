@@ -1,0 +1,132 @@
+<svg width="960" height="600" viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" aria-label="CineMind Movie Details — full-screen dark view showing cast, story, credits, and streaming availability">
+  <defs>
+    <!-- Poster gradient -->
+    <linearGradient id="dp1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e2d4a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <!-- Subtle background radial glow -->
+    <radialGradient id="bglow" cx="0.35" cy="0.4" r="0.55">
+      <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#020617" stop-opacity="0"/>
+    </radialGradient>
+    <!-- App + poster clips -->
+    <clipPath id="app3"><rect width="960" height="600" rx="12"/></clipPath>
+    <clipPath id="pclip"><rect x="32" y="130" width="296" height="366" rx="14"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#app3)">
+
+    <!-- ── Full dark background ── -->
+    <rect width="960" height="600" fill="#020617"/>
+    <ellipse cx="340" cy="320" rx="480" ry="320" fill="url(#bglow)"/>
+
+    <!-- ── HEADER ── -->
+
+    <!-- × Close button -->
+    <rect x="910" y="14" width="30" height="30" rx="15" fill="rgba(15,23,42,0.95)" stroke="rgba(148,163,184,0.45)" stroke-width="1"/>
+    <text x="925" y="34" text-anchor="middle" font-size="17" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">×</text>
+
+    <!-- Title block -->
+    <text x="32" y="46" font-size="23" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#f9fafb">Inception</text>
+    <text x="32" y="64" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">2010</text>
+    <text x="32" y="81" font-size="13" font-style="italic" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#d1d5db">Your mind is the scene of the crime.</text>
+
+    <!-- Action button -->
+    <rect x="32" y="93" width="162" height="24" rx="12" fill="rgba(15,23,42,0.95)" stroke="rgba(148,163,184,0.80)" stroke-width="1"/>
+    <text x="113" y="109" text-anchor="middle" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Ask about this movie</text>
+
+    <!-- ── POSTER (left column) ── -->
+    <g clip-path="url(#pclip)">
+      <rect x="32" y="130" width="296" height="366" fill="url(#dp1)"/>
+      <!-- Dreamy orbital rings (Inception aesthetic) -->
+      <circle cx="180" cy="310" r="112" fill="none" stroke="rgba(96,165,250,0.09)" stroke-width="1.5"/>
+      <circle cx="180" cy="310" r="76"  fill="none" stroke="rgba(96,165,250,0.11)" stroke-width="1.5"/>
+      <circle cx="180" cy="310" r="40"  fill="rgba(96,165,250,0.04)"/>
+      <ellipse cx="180" cy="310" rx="96" ry="18" fill="none" stroke="rgba(148,163,184,0.14)" stroke-width="1" transform="rotate(-18, 180, 310)"/>
+      <ellipse cx="180" cy="310" rx="66" ry="11" fill="none" stroke="rgba(148,163,184,0.11)" stroke-width="1" transform="rotate(14, 180, 310)"/>
+      <!-- City reflected / tilted floor hint -->
+      <line x1="80" y1="370" x2="280" y2="340" stroke="rgba(148,163,184,0.07)" stroke-width="1"/>
+      <line x1="80" y1="385" x2="280" y2="355" stroke="rgba(148,163,184,0.05)" stroke-width="1"/>
+    </g>
+    <!-- Poster border -->
+    <rect x="32" y="130" width="296" height="366" rx="14" fill="none" stroke="rgba(75,85,99,0.45)" stroke-width="1"/>
+
+    <!-- ── RIGHT COLUMN ── -->
+
+    <!-- META row -->
+    <text x="346" y="148" font-size="14" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#f9fafb">★ 8.8</text>
+    <text x="390" y="148" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">/ 10</text>
+    <text x="416" y="148" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#4b5563">·</text>
+    <text x="428" y="148" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">148 min</text>
+    <text x="496" y="148" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#4b5563">·</text>
+    <text x="508" y="148" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">English</text>
+
+    <!-- Genre chips -->
+    <rect x="346" y="158" width="56" height="18" rx="9" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.8)" stroke-width="1"/>
+    <text x="374" y="171" text-anchor="middle" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Sci-Fi</text>
+
+    <rect x="410" y="158" width="64" height="18" rx="9" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.8)" stroke-width="1"/>
+    <text x="442" y="171" text-anchor="middle" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Thriller</text>
+
+    <rect x="482" y="158" width="54" height="18" rx="9" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.8)" stroke-width="1"/>
+    <text x="509" y="171" text-anchor="middle" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Action</text>
+
+    <!-- STORY section -->
+    <text x="346" y="202" font-size="10.5" font-weight="600" letter-spacing="0.06em" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">STORY</text>
+    <line x1="346" y1="208" x2="926" y2="208" stroke="rgba(75,85,99,0.28)" stroke-width="1"/>
+
+    <text x="346" y="226" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">A skilled thief who steals secrets through dream-sharing</text>
+    <text x="346" y="243" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">technology is given the inverse task of planting an idea</text>
+    <text x="346" y="260" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">into the mind of a C.E.O. — all before he can wake up.</text>
+
+    <!-- CREDITS section -->
+    <text x="346" y="288" font-size="10.5" font-weight="600" letter-spacing="0.06em" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">CREDITS</text>
+    <line x1="346" y1="294" x2="926" y2="294" stroke="rgba(75,85,99,0.28)" stroke-width="1"/>
+
+    <text x="346" y="314" font-size="10.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Director</text>
+    <text x="346" y="330" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Christopher Nolan</text>
+
+    <text x="346" y="355" font-size="10.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Cast</text>
+    <text x="346" y="371" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Leonardo DiCaprio · Joseph Gordon-Levitt · Elliot Page</text>
+    <text x="346" y="388" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Tom Hardy · Ken Watanabe · Cillian Murphy</text>
+
+    <!-- DETAILS section -->
+    <text x="346" y="414" font-size="10.5" font-weight="600" letter-spacing="0.06em" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">DETAILS</text>
+    <line x1="346" y1="420" x2="926" y2="420" stroke="rgba(75,85,99,0.28)" stroke-width="1"/>
+
+    <text x="346" y="438" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Runtime</text>
+    <text x="432" y="438" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">148 minutes</text>
+
+    <text x="346" y="456" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Released</text>
+    <text x="432" y="456" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">July 16, 2010</text>
+
+    <text x="620" y="438" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Budget</text>
+    <text x="680" y="438" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">$160 million</text>
+
+    <text x="620" y="456" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Revenue</text>
+    <text x="680" y="456" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">$836.8 million</text>
+
+    <!-- ── WHERE TO WATCH (full-width bottom) ── -->
+    <line x1="32" y1="512" x2="928" y2="512" stroke="rgba(75,85,99,0.28)" stroke-width="1"/>
+
+    <text x="32" y="532" font-size="10.5" font-weight="600" letter-spacing="0.06em" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">WHERE TO WATCH</text>
+
+    <!-- Streaming provider chips -->
+    <rect x="32" y="542" width="72" height="26" rx="6" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.6)" stroke-width="1"/>
+    <text x="68" y="559" text-anchor="middle" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Netflix</text>
+
+    <rect x="112" y="542" width="82" height="26" rx="6" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.6)" stroke-width="1"/>
+    <text x="153" y="559" text-anchor="middle" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Apple TV+</text>
+
+    <rect x="202" y="542" width="90" height="26" rx="6" fill="rgba(15,23,42,0.95)" stroke="rgba(75,85,99,0.6)" stroke-width="1"/>
+    <text x="247" y="559" text-anchor="middle" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#e5e7eb">Prime Video</text>
+
+    <!-- "Rent / buy" section hint -->
+    <text x="32" y="585" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#4b5563">Streaming availability via Watchmode API · updated in real time</text>
+
+  </g>
+
+  <!-- Frame border (subtle on dark) -->
+  <rect width="960" height="600" rx="12" fill="none" stroke="rgba(75,85,99,0.45)" stroke-width="1.5"/>
+</svg>

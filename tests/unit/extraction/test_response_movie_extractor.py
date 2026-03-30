@@ -39,6 +39,12 @@ class TestNormalizeTitle:
         assert "\u2013" not in normalize_title("Title\u2013Subtitle")
         assert "-" in normalize_title("Title\u2013Subtitle") or "Title" in normalize_title("Title\u2013Subtitle")
 
+    def test_strips_leading_numbered_list_markers(self):
+        assert normalize_title("1. Interstellar") == "Interstellar"
+        assert normalize_title("2) Inception") == "Inception"
+        assert normalize_title("(3) The Matrix") == "The Matrix"
+        assert normalize_title("• 1. Movie Title") == "Movie Title"
+
 
 class TestParseStructure:
     """Structure flags: bullets, numbered, bold, title-year, dash-blurb."""

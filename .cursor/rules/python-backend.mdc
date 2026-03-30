@@ -1,0 +1,14 @@
+---
+description: Python backend conventions for src modules
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Python Backend Flow
+
+- Keep API and workflow layers thin; move business logic to feature modules under `cinemind/`.
+- Prefer typed `@dataclass` contracts instead of passing raw dicts across module boundaries.
+- Preserve graceful degradation for external failures: log with context, return safe empties/fallbacks.
+- Use constructor injection and existing `get_`/`set_` factory patterns for replaceable dependencies.
+- Read configuration from environment variables with sensible defaults and explicit type parsing.
+- When behavior changes, add or update mirrored tests in `tests/unit/` for the touched feature.

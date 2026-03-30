@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""
+Cursor hook: afterFileEdit / afterTabFileEdit — run a focused pytest slice from path_map.json.
+
+Reads JSON from stdin (must include file_path). Always exits 0 so the agent is not blocked;
+failures appear in Cursor Output → Hooks.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def _repo_root(start: Path) -> Path | None:
+    for parent in [start, *start.parents]:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return None
+
+
+def _load_config(hooks_dir: Path) -> dict:
+    path = hooks_dir / "path_map.json"
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _should_skip(rel_posix: str, skip_prefixes: list[str]) -> bool:
+    for prefix in skip_prefixes:
+        if rel_posix == prefix.rstrip("/") or rel_posix.startswith(prefix):
+            return True
+    return False
+
+
+def _debounce_path(hooks_dir: Path) -> Path:
+    return hooks_dir / ".related_tests_last_run"
+
+
+def _debounced(hooks_dir: Path, key: str, seconds: int) -> bool:
+    """Return True if we should skip this run (within debounce window)."""
+    if seconds <= 0:
+        return False
+    p = _debounce_path(hooks_dir)
+    now = time.time()
+    data: dict = {}
+    if p.is_file():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+    last = data.get(key)
+    if isinstance(last, (int, float)) and (now - last) < seconds:
+        return True
+    data[key] = now
+    # prune very old keys (keep file small)
+    cutoff = now - seconds * 4
+    data = {k: v for k, v in data.items() if isinstance(v, (int, float)) and v > cutoff}
+    data[key] = now
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return False
+
+
+def _pytest_cmd(root: Path, targets: list[str]) -> list[str]:
+    # `python -m pytest` works when `pytest` is not on PATH (common in IDE hook subshells).
+    return [sys.executable, "-m", "pytest", "-q", *targets]
+
+
+def _resolve_targets_for_tests_file(root: Path, rel_posix: str) -> list[str] | None:
+    """Direct pytest on edited test module or package."""
+    p = root / rel_posix
+    if not rel_posix.startswith("tests/"):
+        return None
+    if rel_posix.startswith("tests/fixtures/scenarios/") or rel_posix == "tests/test_scenarios_offline.py":
+        return ["tests/test_scenarios_offline.py"]
+    if rel_posix.startswith("tests/unit/") and rel_posix.endswith(".py"):
+        return [rel_posix]
+    if rel_posix.startswith("tests/integration/") and rel_posix.endswith(".py"):
+        return [rel_posix]
+    if rel_posix.startswith("tests/contract/") and rel_posix.endswith(".py"):
+        return [rel_posix]
+    if rel_posix.startswith("tests/smoke/") and rel_posix.endswith(".py"):
+        return [rel_posix]
+    if rel_posix in ("tests/conftest.py",):
+        return ["tests/unit/"]
+    if rel_posix.startswith(("tests/helpers/", "tests/playground/", "tests/fixtures/")):
+        return ["tests/test_scenarios_offline.py", "tests/integration/"]
+    return None
+
+
+def _match_prefix_map(rel_posix: str, entries: list[dict]) -> list[str] | None:
+    # Longest prefix wins
+    best: tuple[int, list[str]] | None = None
+    for entry in entries:
+        prefix = entry.get("prefix", "")
+        targets = entry.get("pytest_targets")
+        if not prefix or not isinstance(targets, list):
+            continue
+        if rel_posix == prefix.rstrip("/") or rel_posix.startswith(prefix):
+            plen = len(prefix)
+            if best is None or plen > best[0]:
+                best = (plen, [str(t) for t in targets])
+    return None if best is None else best[1]
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return 0
+
+    file_path_raw = payload.get("file_path")
+    if not file_path_raw or not isinstance(file_path_raw, str):
+        return 0
+
+    edited = Path(file_path_raw).resolve()
+    root = _repo_root(edited)
+    if root is None:
+        return 0
+
+    try:
+        rel = edited.relative_to(root)
+    except ValueError:
+        return 0
+
+    rel_posix = rel.as_posix()
+    hooks_dir = (root / ".cursor" / "hooks").resolve()
+
+    cfg = _load_config(hooks_dir)
+    skip_prefixes = list(cfg.get("skip_prefixes", []))
+    debounce_s = int(cfg.get("debounce_seconds", 30))
+
+    if _should_skip(rel_posix, skip_prefixes):
+        print(f"[run-related-tests] skip (prefix): {rel_posix}", flush=True)
+        return 0
+
+    targets: list[str] | None = _resolve_targets_for_tests_file(root, rel_posix)
+    if targets is None:
+        entries = cfg.get("entries", [])
+        if not isinstance(entries, list):
+            entries = []
+        targets = _match_prefix_map(rel_posix, entries)
+
+    if not targets:
+        print(f"[run-related-tests] no mapped pytest targets for: {rel_posix}", flush=True)
+        return 0
+
+    cmd = _pytest_cmd(root, targets)
+    key = "|".join(cmd)
+    if _debounced(hooks_dir, key, debounce_s):
+        print(f"[run-related-tests] debounced: {' '.join(cmd)}", flush=True)
+        return 0
+
+    print(f"[run-related-tests] cwd={root} {' '.join(cmd)}", flush=True)
+    env = os.environ.copy()
+    proc = subprocess.run(
+        cmd,
+        cwd=root,
+        env=env,
+    )
+    if proc.returncode != 0:
+        print(
+            f"[run-related-tests] pytest exit {proc.returncode} (hook still exits 0)",
+            flush=True,
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

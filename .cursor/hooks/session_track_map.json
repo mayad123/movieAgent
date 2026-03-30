@@ -1,0 +1,20 @@
+{
+  "debounce_seconds": 90,
+  "skip_prefixes": [
+    "docs/session_logs/.tracking/",
+    "docs/session_logs/MANIFEST.md",
+    "docs/session_logs/entries/README.md",
+    "node_modules/"
+  ],
+  "tracked_prefixes": [
+    { "prefix": "src/", "topics": ["backend"] },
+    { "prefix": "web/", "topics": ["frontend"] },
+    { "prefix": "tests/fixtures/scenarios/", "topics": ["scenarios", "yaml"] },
+    { "prefix": "tests/test_scenarios_offline.py", "topics": ["scenarios"] },
+    { "prefix": "docs/planning/", "topics": ["planning"] },
+    { "prefix": "docs/session_logs/entries/", "topics": ["session_logs"] },
+    { "prefix": ".cursor/rules/", "topics": ["cursor", "tooling"] },
+    { "prefix": ".cursor/skills/", "topics": ["cursor", "tooling"] },
+    { "prefix": "docs/AIbuilding/", "topics": ["tooling", "docs"] }
+  ]
+}

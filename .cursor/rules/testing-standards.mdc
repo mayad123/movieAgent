@@ -1,0 +1,14 @@
+---
+description: Testing conventions for mirrored, deterministic coverage
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Testing Flow
+
+- Mirror `src/cinemind/` structure in `tests/unit/` when adding or moving backend modules.
+- Prefer deterministic tests using fakes or mocks; never depend on live network or API keys.
+- Name tests by behavior (`test_<behavior>`) and keep assertions focused on user-visible outcomes.
+- For integration helpers, include happy-path, no-credentials, and provider-failure contract cases.
+- If request routing, prompting, or extraction behavior changes, update scenario coverage as needed.
+- Keep tests fast and isolated; use fixtures to avoid shared mutable state between test functions.

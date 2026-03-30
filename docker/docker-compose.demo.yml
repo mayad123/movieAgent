@@ -1,0 +1,32 @@
+version: '3.8'
+
+# Zero-config demo — no API keys needed.
+# Runs CineMind in Playground mode: FakeLLMClient + offline Kaggle data.
+# Movie cards render as styled placeholders; add TMDB_READ_ACCESS_TOKEN for real posters.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.demo.yml up --build
+#   open http://localhost:8000
+
+services:
+  cinemind-demo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: cinemind-demo
+    ports:
+      - "8000:8000"
+    environment:
+      # No LLM keys → automatic Playground mode fallback
+      - CINEMIND_LLM_BASE_URL=
+      - CINEMIND_LLM_API_KEY=
+      - ENABLE_TMDB_SCENES=true
+      # Uncomment and add your free TMDB token for real poster images:
+      # - TMDB_READ_ACCESS_TOKEN=your_token_here
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

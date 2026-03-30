@@ -60,7 +60,7 @@ class OutputValidator:
         violations = []
         corrected_text = response_text
         
-        # Check forbidden terms
+        # Check forbidden terms and boilerplate
         forbidden_violations = self._check_forbidden_terms(response_text, template.forbidden_terms)
         violations.extend(forbidden_violations)
         
@@ -72,6 +72,13 @@ class OutputValidator:
         # Check verbosity (max sentences/words)
         verbosity_violations = self._check_verbosity(response_text, template)
         violations.extend(verbosity_violations)
+
+        # Check and normalize boilerplate/structure near the top of the response
+        boilerplate_violations, corrected_text = self._check_and_fix_boilerplate(corrected_text)
+        violations.extend(boilerplate_violations)
+
+        markdown_violations, corrected_text = self._normalize_markdown_artifacts(corrected_text)
+        violations.extend(markdown_violations)
         
         # Check freshness requirement
         freshness_violations = []
@@ -87,10 +94,13 @@ class OutputValidator:
             bool(freshness_violations)
         )
         
+        # Ship post-processed text whenever it differs (markdown/boilerplate/forbidden fix)
+        text_changed = corrected_text != response_text
+
         return ValidationResult(
             is_valid=len(violations) == 0,
             violations=violations,
-            corrected_text=corrected_text if self.enable_auto_fix and forbidden_violations else None,
+            corrected_text=corrected_text if text_changed else None,
             requires_reprompt=requires_reprompt
         )
     
@@ -216,7 +226,78 @@ class OutputValidator:
             )
         
         return violations
-    
+
+    def _check_and_fix_boilerplate(self, text: str) -> Tuple[List[str], str]:
+        """
+        Detect and lightly normalize common boilerplate and structural issues
+        near the beginning of the response (e.g., \"As an AI model...\", duplicated greetings).
+        """
+        violations: List[str] = []
+        corrected = text
+
+        # Work on a limited prefix to avoid unnecessary processing on long answers
+        head = corrected[:1000]
+
+        # Detect and remove common AI self-references at the very start
+        boilerplate_patterns = [
+            r"^\s*as an ai[^.]*\.\s*",
+            r"^\s*as an ai language model[^.]*\.\s*",
+            r"^\s*i am an ai[^.]*\.\s*",
+        ]
+        for pattern in boilerplate_patterns:
+            if re.search(pattern, head, flags=re.IGNORECASE):
+                violations.append("Boilerplate AI self-reference removed from response opening.")
+                corrected = re.sub(pattern, "", corrected, flags=re.IGNORECASE)
+                head = corrected[:1000]
+                break
+
+        # Normalize list bullets: convert leading \"* \" or \"• \" to \"- \" for consistency
+        lines = corrected.splitlines()
+        normalized_lines = []
+        list_bullet_changed = False
+        for line in lines:
+            stripped = line.lstrip()
+            prefix_len = len(line) - len(stripped)
+            if stripped.startswith("* "):
+                normalized_lines.append(line[:prefix_len] + "- " + stripped[2:])
+                list_bullet_changed = True
+            elif stripped.startswith("• "):
+                normalized_lines.append(line[:prefix_len] + "- " + stripped[2:])
+                list_bullet_changed = True
+            else:
+                normalized_lines.append(line)
+        if list_bullet_changed:
+            violations.append("Normalized list bullets (*, •) to '-' for frontend rendering consistency.")
+        corrected = "\n".join(normalized_lines)
+
+        # Collapse excessive blank lines (3+ → 2) to keep paragraph breaks tidy
+        collapsed = re.sub(r"\n{3,}", "\n\n", corrected)
+        if collapsed != corrected:
+            violations.append("Collapsed excessive blank lines in response.")
+            corrected = collapsed
+
+        return violations, corrected
+
+    def _normalize_markdown_artifacts(self, text: str) -> Tuple[List[str], str]:
+        """
+        Strip common markdown the chat UI does not render (**, ***, horizontal rules).
+        Unwraps **title**; removes decorative asterisks after list markers (e.g. 1. ***).
+        """
+        violations: List[str] = []
+        before = text
+        corrected = text
+
+        corrected = re.sub(r"(?m)^\s*\*{3,}\s*$", "", corrected)
+        corrected = re.sub(r"(?m)^\s*-{3,}\s*$", "", corrected)
+        corrected = re.sub(r"\*\*\*([^*]+?)\*\*\*", r"\1", corrected)
+        corrected = re.sub(r"\*\*([^*]+?)\*\*", r"\1", corrected)
+        corrected = re.sub(r"(?m)^(\s*\d+\.\s*)\*{2,}\s*", r"\1", corrected)
+        corrected = re.sub(r"(?m)^(\s*-\s*)\*{2,}\s*", r"\1", corrected)
+        corrected = re.sub(r"\n{3,}", "\n\n", corrected)
+
+        # Do not add violations (would trigger reprompt); this is a display/UX normalize only.
+        return [], corrected
+
     def build_correction_instruction(self, violations: List[str], template: ResponseTemplate) -> str:
         """
         Build a strict correction instruction for re-prompting.

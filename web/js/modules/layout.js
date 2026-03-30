@@ -5,17 +5,18 @@ import {
     conversationList, conversationTitle, headerMainView, headerSubView,
     headerBreadcrumb, subConversationMovieBadge, mainEl,
     movieHubView, movieHubSelectedPoster, movieHubSelectedTitle, movieHubSelectedTagline,
-    movieHubAskBtn, movieHubSimilarByGenre, movieHubSimilarByTone, movieHubSimilarByCast,
+    movieHubResetBtn, movieHubRetrieving, movieHubSimilarByGenre, movieHubSimilarByTone, movieHubSimilarByCast,
     chatColumn, messageList, composerInput, retrievingRow, newChatBtn,
-    useRealAgentToggle, modeBadge, app,
+    projectsPageBtn, useRealAgentToggle, modeBadge, app,
     headerBackBtn, headerSubRenameBtn, headerSubCloseBtn
 } from './dom.js';
 
 import {
-    appState, getActiveConversation, getActiveThread, nextId, API_BASE, getActiveMovieContext
+    appState, getActiveConversation, getActiveThread, nextId, getActiveMovieContext
 } from './state.js';
 import { renderSimilarCluster, createHeroCard } from './posters.js';
-import { sendQuery, prefixMovieHubContextQuery, fetchSimilarMovies } from './api.js';
+import { sendQuery, prefixMovieHubContextQuery, fetchSimilarMovies, getProjects, getProject, deleteProjectAsset } from './api.js';
+import { cloneMovieHubClusters, buildHubConversationHistory, candidateTitlesFromClusters, dedupeMovieHubClusters } from './hub-history.js';
 
 /* ── Callback registry (breaks circular deps with chat/collection modules) ── */
 
@@ -32,6 +33,30 @@ export function setLayoutCallbacks({ renderMessages, renderCollectionPanel, addS
 /* ── Module-level state ── */
 
 let stackNavigationState = null;
+let activeHubAutoLoadController = null;
+let activeHubFallbackController = null;
+
+function _cfgNumber(key, fallback) {
+    try {
+        const cfg = (window && window.CINEMIND_CONFIG) ? window.CINEMIND_CONFIG : {};
+        const raw = cfg[key];
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function abortActiveHubRequests() {
+    if (activeHubAutoLoadController) {
+        try { activeHubAutoLoadController.abort(); } catch (_) { /* ignore */ }
+        activeHubAutoLoadController = null;
+    }
+    if (activeHubFallbackController) {
+        try { activeHubFallbackController.abort(); } catch (_) { /* ignore */ }
+        activeHubFallbackController = null;
+    }
+}
 
 const filmIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>';
 
@@ -141,6 +166,7 @@ export function switchConversation(mainId, subId) {
         appState.mainScrollTopByConversationId[appState.activeConversationId] = chatColumn.scrollTop;
     }
     appState.activeConversationId = mainId;
+    abortActiveHubRequests();
     if (subId != null && subId !== '') {
         appState.activeSubConversationId = subId;
         appState.conversationView = 'sub';
@@ -149,6 +175,8 @@ export function switchConversation(mainId, subId) {
         appState.activeSubConversationId = null;
         appState.conversationView = 'main';
     }
+    // After active sub/main view is updated so hide/show targets the right thread.
+    hideRetrieving();
     appState.restoreScrollTop = (appState.conversationView === 'main')
         ? (appState.mainScrollTopByConversationId[mainId] != null ? appState.mainScrollTopByConversationId[mainId] : null)
         : null;
@@ -157,6 +185,14 @@ export function switchConversation(mainId, subId) {
     if (_renderCollectionPanel) _renderCollectionPanel();
     updateHeaderForView();
     updateRightPanelScope();
+    // Entering a sub from the sidebar does not run addSubConversationFromPoster; resume hub load if it never finished.
+    if (appState.conversationView === 'sub') {
+        const t = getActiveThread();
+        const s = t && t.sub;
+        if (s && s.contextMovie && !s._hubClustersLoaded && !s._hubClustersLoading) {
+            void maybeAutoLoadMovieHubClusters(s);
+        }
+    }
 }
 
 export function addSubConversationFromPoster(movie) {
@@ -164,6 +200,10 @@ export function addSubConversationFromPoster(movie) {
     if (!main || !movie || !String(movie.title || '').trim()) return;
     const title = String(movie.title).trim();
     const subTitle = 'Re: ' + title + (movie.year != null ? ' (' + movie.year + ')' : '');
+    // Do not pass `movie.relatedMovies` into the sub: attachment code attaches the *parent
+    // message’s full candidate universe* to every poster for hub filtering — that list is
+    // not “similar to the clicked movie.” Hub rows come from `maybeAutoLoadMovieHubClusters`
+    // / TMDB similar for this title’s `tmdbId` (see docs/errors/MOVIE_HUB_AND_SUBCONTEXT.md).
     const contextMovie = {
         title,
         year: movie.year,
@@ -171,8 +211,7 @@ export function addSubConversationFromPoster(movie) {
         pageId: (movie.pageId && String(movie.pageId).trim()) || undefined,
         imageUrl: (movie.imageUrl && String(movie.imageUrl).trim()) || undefined,
         tmdbId: movie.tmdbId || movie.tmdb_id || undefined,
-        mediaType: movie.mediaType || movie.media_type || undefined,
-        relatedMovies: Array.isArray(movie.relatedMovies) ? movie.relatedMovies : undefined
+        mediaType: movie.mediaType || movie.media_type || undefined
     };
     const sub = {
         id: nextId(),
@@ -186,6 +225,8 @@ export function addSubConversationFromPoster(movie) {
         appState.mainScrollTopByConversationId[main.id] = chatColumn.scrollTop;
     }
     appState.activeSubConversationId = sub.id;
+    abortActiveHubRequests();
+    hideRetrieving();
     appState.conversationView = 'sub';
     appState.lastViewByConversationId[main.id] = { view: 'sub', subId: sub.id };
     updateConversationList();
@@ -215,32 +256,49 @@ function clearHubContainers() {
     if (movieHubSelectedTagline) movieHubSelectedTagline.classList.remove('hidden');
 }
 
+/** Strip cluster poster rows only (context mini-hero unchanged). Used while hub loads. */
+function clearHubPosterStripsForLoading() {
+    if (movieHubSimilarByGenre) {
+        movieHubSimilarByGenre.innerHTML = '';
+        movieHubSimilarByGenre.classList.add('hidden');
+    }
+    if (movieHubSimilarByTone) {
+        movieHubSimilarByTone.innerHTML = '';
+        movieHubSimilarByTone.classList.add('hidden');
+    }
+    if (movieHubSimilarByCast) {
+        movieHubSimilarByCast.innerHTML = '';
+        movieHubSimilarByCast.classList.add('hidden');
+    }
+}
+
+function setMovieHubUpdating(isUpdating) {
+    if (!movieHubRetrieving) return;
+    movieHubRetrieving.classList.toggle('hidden', !isUpdating);
+    if (appState.conversationView !== 'sub') return;
+    if (isUpdating) {
+        clearHubPosterStripsForLoading();
+    } else {
+        const thread = getActiveThread();
+        if (thread && thread.sub) updateMovieHub(thread);
+    }
+}
+
 async function maybeAutoLoadMovieHubClusters(sub) {
     if (!sub || !sub.contextMovie) return;
     if (sub._hubClustersLoading || sub._hubClustersLoaded) return;
 
     // If the context changes while the request is in-flight, ignore stale results.
     const requestedSubId = sub.id;
+    let scheduleBackfill = false;
     sub._hubClustersLoading = true;
-    const shouldShowLoadingPlaceholder = !sub._hubClustersHasRendered;
-    if (shouldShowLoadingPlaceholder) {
-        clearHubContainers();
-        if (movieHubSimilarByGenre) {
-            // Keep the genre section visible so the user sees it's loading.
-            movieHubSimilarByGenre.classList.remove('hidden');
-            movieHubSimilarByGenre.innerHTML = '';
-            const titleEl = document.createElement('h3');
-            titleEl.className = 'movie-hub-cluster-title';
-            titleEl.textContent = 'Loading similar movies...';
-            movieHubSimilarByGenre.appendChild(titleEl);
-        }
-    }
+    setMovieHubUpdating(true);
 
     const contextLabel = getHubContextLabel(sub.contextMovie);
     const anchorText = contextLabel ? contextLabel : 'this movie';
 
-    const maxAttempts = 3;
-    const minRequiredGenreMovies = 20; // show loading until at least 20 VALID genre movies render
+    const maxAttempts = Math.max(1, Math.min(5, Math.floor(_cfgNumber('hubAutoMaxAttempts', 2))));
+    const minRequiredGenreMovies = Math.max(1, Math.min(20, Math.floor(_cfgNumber('hubMinInitialRenderMovies', 10))));
     const targetGenreMovies = 20; // prefer full set
     sub._hubClustersAttempts = (sub._hubClustersAttempts || 0) + 1;
     const attempt = sub._hubClustersAttempts;
@@ -307,34 +365,21 @@ async function maybeAutoLoadMovieHubClusters(sub) {
         return genreMovies;
     }
 
-    function showHubEmptyState() {
-        if (!movieHubSimilarByGenre) return;
-        movieHubSimilarByGenre.classList.remove('hidden');
-        movieHubSimilarByGenre.innerHTML = '';
-        const h = document.createElement('h3');
-        h.className = 'movie-hub-cluster-title';
-        h.textContent = 'No similar movies found.';
-        movieHubSimilarByGenre.appendChild(h);
-    }
-
-    function showHubLoadingMoreIndicator() {
-        if (!movieHubSimilarByGenre) return;
-        movieHubSimilarByGenre.classList.remove('hidden');
-        const el = document.createElement('div');
-        el.className = 'movie-hub-loading-more';
-        el.textContent = 'Loading more similar movies...';
-        movieHubSimilarByGenre.appendChild(el);
-    }
-
         try {
             // Fast path: use PLAYGROUND for the automatic hub population to keep latency low.
             // If we fail to get usable `movieHubClusters`, retry with the Real Agent (when enabled)
             // so the LLM can reliably follow the genre-bucket formatting contract.
-            const hubTimeoutMs = parseInt((typeof HUB_AUTO_QUERY_TIMEOUT_MS !== 'undefined' && HUB_AUTO_QUERY_TIMEOUT_MS) || '90000', 10);
+            const hubTimeoutMs = Math.max(1000, Math.floor(_cfgNumber('hubAutoQueryTimeoutMs', 12000)));
             // Real Agent hub retries can be expensive; only try it once (on the first retry)
             // to avoid starving other UI features like "Where to Watch".
             const useRealAgentForHub = (attempt === 2 && appState && appState.useRealAgent) ? true : false;
-            const result = await sendQuery(outgoingText, useRealAgentForHub, { timeoutMs: hubTimeoutMs > 0 ? hubTimeoutMs : 90000 });
+            abortActiveHubRequests();
+            activeHubAutoLoadController = new AbortController();
+            const result = await sendQuery(outgoingText, useRealAgentForHub, {
+                timeoutMs: hubTimeoutMs,
+                signal: activeHubAutoLoadController.signal
+            });
+            activeHubAutoLoadController = null;
         // Only apply if user is still on the same sub-conversation.
         if (appState.activeSubConversationId !== requestedSubId) return;
         if (!(result && Array.isArray(result.movieHubClusters))) {
@@ -377,13 +422,15 @@ async function maybeAutoLoadMovieHubClusters(sub) {
             if (validGenreMovies >= targetGenreMovies) {
                 markLoaded = true;
             } else if (attempt < maxAttempts) {
-                // Backfill: retry in background to try to reach the preferred target.
-                showHubLoadingMoreIndicator();
+                // Backfill: keep "Updating hub" on and poster rows empty until the next attempt finishes.
+                scheduleBackfill = true;
+                setMovieHubUpdating(true);
+                const backfillDelayMs = Math.max(150, Math.floor(_cfgNumber('hubAutoBackfillDelayMs', 1000)));
                 setTimeout(function () {
                     if (sub && appState.activeSubConversationId === requestedSubId && !sub._hubClustersLoading && !sub._hubClustersLoaded) {
                         void maybeAutoLoadMovieHubClusters(sub);
                     }
-                }, 1200);
+                }, backfillDelayMs);
             } else {
                 // Retries exhausted: render whatever we have.
                 markLoaded = true;
@@ -392,21 +439,57 @@ async function maybeAutoLoadMovieHubClusters(sub) {
             // Keep loading sign active; retry until threshold is met or attempts complete.
             throw new Error('hub too few valid movies: ' + String(validGenreMovies));
         } else {
-            // Retries exhausted: stop loading and render partial results.
-            applyMovieHubClusters(sub._hubClustersLastPayload || result.movieHubClusters);
-            didApply = true;
-            sub._hubClustersHasRendered = true;
-            markLoaded = true;
-
-            // If we ended up with no usable genre movies, show an empty state.
-            if (countValidGenreMovies(sub._hubClustersLastPayload || result.movieHubClusters) === 0) {
-                showHubEmptyState();
-            }
+            // Retries exhausted with too-few titles. Route through catch so the TMDB
+            // fallback path runs before we settle on sparse clusters.
+            throw new Error('hub insufficient on final attempt: ' + String(validGenreMovies));
         }
     } catch (e) {
+        activeHubAutoLoadController = null;
+        const shouldTryEarlyFallback = attempt === 1;
+        if (shouldTryEarlyFallback) {
+            const thread = getActiveThread();
+            const m = sub && sub.contextMovie ? sub.contextMovie : null;
+            const tmdbId = m ? (m.tmdbId != null ? m.tmdbId : m.tmdb_id) : null;
+            const canTrySimilar = thread && thread.sub && thread.sub.id === requestedSubId && m
+                && (tmdbId != null && String(tmdbId).trim() !== '' || (m.title && String(m.title).trim()));
+            if (canTrySimilar) {
+                try {
+                    activeHubFallbackController = new AbortController();
+                    const sim = await fetchSimilarMovies(tmdbId, {
+                        timeoutMs: 8000,
+                        title: m.title,
+                        year: m.year != null ? m.year : undefined,
+                        mediaType: m.mediaType || m.media_type || 'movie',
+                        signal: activeHubFallbackController.signal
+                    });
+                    activeHubFallbackController = null;
+                    const clusters = sim && (sim.clusters || sim.movieHubClusters);
+                    if (Array.isArray(clusters) && countValidGenreMovies(clusters) >= minRequiredGenreMovies) {
+                        applyMovieHubClusters(clusters);
+                        sub._hubClustersHasRendered = true;
+                        didApply = true;
+                        // Keep trying in background for richer clusters when we have attempts left.
+                        if (attempt < maxAttempts) {
+                            const backfillDelayMs = Math.max(150, Math.floor(_cfgNumber('hubAutoBackfillDelayMs', 1000)));
+                            setTimeout(function () {
+                                if (sub && appState.activeSubConversationId === requestedSubId && !sub._hubClustersLoading && !sub._hubClustersLoaded) {
+                                    void maybeAutoLoadMovieHubClusters(sub);
+                                }
+                            }, backfillDelayMs);
+                        } else {
+                            markLoaded = true;
+                        }
+                        return;
+                    }
+                } catch (_) {
+                    activeHubFallbackController = null;
+                }
+            }
+        }
         // Silent failure; mini-hero remains visible.
         if (attempt < maxAttempts) {
             // Retry after a short delay; transient LLM/network/TMDB timing issues are expected.
+            const retryDelayMs = Math.max(150, Math.floor(_cfgNumber('hubAutoRetryDelayMs', 500)));
             setTimeout(function () {
                 // Re-check: if we've switched to another sub, do nothing.
                 if (sub && appState.activeSubConversationId === requestedSubId) {
@@ -414,15 +497,26 @@ async function maybeAutoLoadMovieHubClusters(sub) {
                     sub._hubClustersLoading = false;
                     void maybeAutoLoadMovieHubClusters(sub);
                 }
-            }, 800);
+            }, retryDelayMs);
         } else {
-            // Retries exhausted: prefer TMDB similar-movies fallback (more posters),
-            // otherwise fall back to local relatedMovies.
+            // Retries exhausted: prefer TMDB similar-movies API (`build_similar_movie_clusters`).
+            // Pass title/year/mediaType so labels match the anchor; if tmdbId is missing, path `_` + title resolves id.
             const thread = getActiveThread();
-            const tmdbId = sub && sub.contextMovie ? (sub.contextMovie.tmdbId || sub.contextMovie.tmdb_id) : null;
-            if (thread && thread.sub && thread.sub.id === requestedSubId && tmdbId != null) {
+            const m = sub && sub.contextMovie ? sub.contextMovie : null;
+            const tmdbId = m ? (m.tmdbId != null ? m.tmdbId : m.tmdb_id) : null;
+            const canTrySimilar = thread && thread.sub && thread.sub.id === requestedSubId && m
+                && (tmdbId != null && String(tmdbId).trim() !== '' || (m.title && String(m.title).trim()));
+            if (canTrySimilar) {
                 try {
-                    const sim = await fetchSimilarMovies(tmdbId, { timeoutMs: 12000 });
+                    activeHubFallbackController = new AbortController();
+                    const sim = await fetchSimilarMovies(tmdbId, {
+                        timeoutMs: 12000,
+                        title: m.title,
+                        year: m.year != null ? m.year : undefined,
+                        mediaType: m.mediaType || m.media_type || 'movie',
+                        signal: activeHubFallbackController.signal
+                    });
+                    activeHubFallbackController = null;
                     const clusters = sim && (sim.clusters || sim.movieHubClusters);
                     if (Array.isArray(clusters) && clusters.length) {
                         applyMovieHubClusters(clusters);
@@ -430,15 +524,26 @@ async function maybeAutoLoadMovieHubClusters(sub) {
                         sub._hubClustersLoaded = true;
                         return;
                     }
-                } catch (_) { /* ignore */ }
+                } catch (_) {
+                    activeHubFallbackController = null;
+                    /* ignore */
+                }
             }
             if (thread && thread.sub && thread.sub.id === requestedSubId) {
                 updateMovieHub(thread);
+                sub._hubClustersLoaded = true;
             }
         }
     } finally {
+        activeHubAutoLoadController = null;
+        activeHubFallbackController = null;
         sub._hubClustersLoading = false;
         if (didApply && markLoaded) sub._hubClustersLoaded = true;
+        // Only touch the shared DOM indicator if this invocation still owns the active sub.
+        // Otherwise a stale finally run can hide the spinner during the new sub's load or leave it stuck on after a switch.
+        if (appState.activeSubConversationId === requestedSubId && !scheduleBackfill) {
+            setMovieHubUpdating(false);
+        }
     }
 }
 
@@ -519,14 +624,69 @@ export function applyMovieHubClusters(movieHubClusters) {
     const sub = thread && thread.sub ? thread.sub : null;
     if (!sub) return;
 
-    // Replace the clusters used to render the hub.
-    sub.similarClusters = movieHubClusters;
+    const dedupedClusters = dedupeMovieHubClusters(movieHubClusters, { maxTotal: 20 });
+    if (!Array.isArray(dedupedClusters) || dedupedClusters.length === 0) return;
 
-    renderMovieHubCluster(movieHubSimilarByGenre, movieHubClusters, 'genre');
-    renderMovieHubCluster(movieHubSimilarByTone, movieHubClusters, 'tone');
-    renderMovieHubCluster(movieHubSimilarByCast, movieHubClusters, 'cast');
+    // Replace the clusters used to render the hub.
+    sub.similarClusters = dedupedClusters;
+
+    // Baseline hub for reset / replay-after-delete (first non-empty apply only).
+    if (!sub.hubOriginalClusters) {
+        const titles = candidateTitlesFromClusters(dedupedClusters);
+        if (titles.length > 0) {
+            sub.hubOriginalClusters = cloneMovieHubClusters(dedupedClusters);
+        }
+    }
+
+    renderMovieHubCluster(movieHubSimilarByGenre, dedupedClusters, 'genre');
+    renderMovieHubCluster(movieHubSimilarByTone, dedupedClusters, 'tone');
+    renderMovieHubCluster(movieHubSimilarByCast, dedupedClusters, 'cast');
 
     if (movieHubView) movieHubView.classList.remove('hidden');
+    if (_renderMessages) _renderMessages();
+}
+
+/**
+ * Re-apply hub filtering from remaining chat turns: start from hubOriginalClusters,
+ * then sequentially POST each user→assistant pair (same contract as live send).
+ * @param {object} sub — active sub-conversation
+ * @param {boolean} useRealAgent
+ * @returns {Promise<void>}
+ */
+export async function recomputeHubFromMessages(sub, useRealAgent) {
+    if (!sub || !Array.isArray(sub.messages)) return;
+    const orig = cloneMovieHubClusters(sub.hubOriginalClusters);
+    if (!orig) return;
+    applyMovieHubClusters(orig);
+    const msgs = sub.messages;
+    let i;
+    for (i = 0; i < msgs.length; i++) {
+        if (msgs[i].role !== 'user') continue;
+        const assistant = msgs[i + 1];
+        if (!assistant || assistant.role !== 'assistant') continue;
+        const userText = msgs[i].content != null ? String(msgs[i].content) : '';
+        if (!String(userText).trim()) {
+            i++;
+            continue;
+        }
+        const history = buildHubConversationHistory(msgs, i);
+        const candidates = candidateTitlesFromClusters(sub.similarClusters);
+        const outgoing = prefixMovieHubContextQuery(userText, sub.contextMovie, candidates);
+        try {
+            const result = await sendQuery(outgoing, useRealAgent, { hubConversationHistory: history });
+            if (result && Array.isArray(result.movieHubClusters)) {
+                applyMovieHubClusters(result.movieHubClusters);
+                if (assistant.meta && typeof assistant.meta === 'object') {
+                    const snap = cloneMovieHubClusters(result.movieHubClusters);
+                    assistant.meta.hubSnapshot = snap;
+                    assistant.meta.movieHubClusters = snap;
+                }
+            }
+        } catch (e) {
+            if (typeof console !== 'undefined' && console.warn) console.warn('Hub replay step failed', e);
+        }
+        i++;
+    }
 }
 
 function getRelatedMoviesForHub(movie) {
@@ -568,14 +728,6 @@ function updateMovieHub(thread) {
         movieHubSelectedTagline.textContent = tagline;
         movieHubSelectedTagline.classList.toggle('hidden', !tagline);
     }
-    if (movieHubAskBtn && composerInput) {
-        movieHubAskBtn.onclick = function () {
-            const prompt = label ? ('Tell me more about ' + label) : 'Tell me more about this movie';
-            composerInput.value = prompt;
-            composerInput.focus();
-        };
-    }
-
     // Keep the chat column active but marked as non-empty so the hub sits above it.
     if (chatColumn) {
         chatColumn.classList.remove('empty');
@@ -590,6 +742,9 @@ function updateMovieHub(thread) {
             label: 'Similar by genre to ' + baseLabel,
             movies: hubMovies
         }];
+        if (!sub.hubOriginalClusters && candidateTitlesFromClusters(sub.similarClusters).length > 0) {
+            sub.hubOriginalClusters = cloneMovieHubClusters(sub.similarClusters);
+        }
         renderMovieHubCluster(movieHubSimilarByGenre, sub.similarClusters, 'genre');
         // Tone/cast clusters are reserved for richer future data.
         if (movieHubSimilarByTone) movieHubSimilarByTone.classList.add('hidden');
@@ -602,6 +757,9 @@ function updateMovieHub(thread) {
         if (movieHubSimilarByCast) movieHubSimilarByCast.classList.add('hidden');
     } else {
         const clusters = Array.isArray(sub.similarClusters) ? sub.similarClusters : [];
+        if (!sub.hubOriginalClusters && candidateTitlesFromClusters(clusters).length > 0) {
+            sub.hubOriginalClusters = cloneMovieHubClusters(clusters);
+        }
         renderMovieHubCluster(movieHubSimilarByGenre, clusters, 'genre');
         renderMovieHubCluster(movieHubSimilarByTone, clusters, 'tone');
         renderMovieHubCluster(movieHubSimilarByCast, clusters, 'cast');
@@ -719,13 +877,7 @@ export function loadProjectAssets(projectId) {
     const strip = document.getElementById('rightPanelProjectAssetsList');
     if (!strip) return;
     strip.innerHTML = '';
-    let url = API_BASE + '/api/projects/' + encodeURIComponent(projectId);
-    url += (url.indexOf('?') !== -1 ? '&' : '?') + '_=' + Date.now();
-    fetch(url)
-        .then(res => {
-            if (!res.ok) throw new Error('Project not found');
-            return res.json();
-        })
+    getProject(projectId, { timeoutMs: 12000 })
         .then(project => {
             const assets = (project && project.assets) ? project.assets : [];
             appState.currentProjectId = projectId;
@@ -791,11 +943,7 @@ function renderProjectAssetsStack() {
             e.stopPropagation();
             const i = parseInt(card.getAttribute('data-index'), 10);
             if (!projectId || isNaN(i) || i < 0) return;
-            fetch(API_BASE + '/api/projects/' + encodeURIComponent(projectId) + '/assets/' + i, { method: 'DELETE' })
-                .then(res => {
-                    if (!res.ok) return Promise.reject(new Error('Failed to remove'));
-                    return res.json();
-                })
+            deleteProjectAsset(projectId, String(i), { timeoutMs: 12000 })
                 .then(() => { loadProjectAssets(projectId); })
                 .catch(() => { showFallbackToast('Could not remove from project.'); });
         });
@@ -814,8 +962,7 @@ function renderProjectAssetsStack() {
 /* ── Projects dropdown ── */
 
 export function loadProjects() {
-    fetch(API_BASE + '/api/projects')
-        .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load projects')))
+    getProjects({ timeoutMs: 12000 })
         .then(data => {
             appState.projects = Array.isArray(data) ? data : [];
             renderProjectsDropdown();
@@ -906,12 +1053,24 @@ export function updateConversationList() {
 /* ── Retrieving indicator ── */
 
 export function showRetrieving() {
-    if (retrievingRow) retrievingRow.classList.remove('hidden');
-    if (chatColumn) chatColumn.scrollTo({ top: chatColumn.scrollHeight, behavior: 'smooth' });
+    if (appState.conversationView === 'sub' && movieHubRetrieving) {
+        movieHubRetrieving.classList.remove('hidden');
+        if (retrievingRow) retrievingRow.classList.add('hidden');
+        clearHubPosterStripsForLoading();
+    } else if (retrievingRow) {
+        retrievingRow.classList.remove('hidden');
+        if (movieHubRetrieving) movieHubRetrieving.classList.add('hidden');
+    }
+    if (chatColumn) chatColumn.scrollTo({ top: appState.conversationView === 'sub' ? 0 : chatColumn.scrollHeight, behavior: 'smooth' });
 }
 
 export function hideRetrieving() {
     if (retrievingRow) retrievingRow.classList.add('hidden');
+    if (movieHubRetrieving) movieHubRetrieving.classList.add('hidden');
+    if (appState.conversationView === 'sub') {
+        const thread = getActiveThread();
+        if (thread && thread.sub) updateMovieHub(thread);
+    }
 }
 
 /* ── Navigation helpers ── */
@@ -923,6 +1082,8 @@ export function startNewChat() {
 export function navigateBackToParentConversation() {
     const main = getActiveConversation();
     if (!main || appState.conversationView !== 'sub') return;
+    abortActiveHubRequests();
+    hideRetrieving();
     appState.lastViewByConversationId[main.id] = { view: 'main', subId: null };
     appState.conversationView = 'main';
     appState.restoreScrollTop = appState.mainScrollTopByConversationId[main.id] != null
@@ -1036,9 +1197,25 @@ export function initLayout() {
     })();
 
     if (newChatBtn) newChatBtn.addEventListener('click', startNewChat);
+    if (projectsPageBtn) {
+        projectsPageBtn.addEventListener('click', function () {
+            window.location.href = 'projects.html';
+        });
+    }
     if (headerBackBtn) headerBackBtn.addEventListener('click', navigateBackToParentConversation);
     if (headerSubRenameBtn) headerSubRenameBtn.addEventListener('click', renameSubConversation);
     if (headerSubCloseBtn) headerSubCloseBtn.addEventListener('click', closeSubConversation);
+
+    if (movieHubResetBtn) {
+        movieHubResetBtn.addEventListener('click', function () {
+            const thread = getActiveThread();
+            const sub = thread && thread.sub;
+            if (!sub || !sub.hubOriginalClusters) return;
+            const restored = cloneMovieHubClusters(sub.hubOriginalClusters);
+            if (restored) applyMovieHubClusters(restored);
+            if (_renderMessages) _renderMessages();
+        });
+    }
 
     if (useRealAgentToggle) {
         useRealAgentToggle.checked = appState.useRealAgent;

@@ -2,24 +2,42 @@
 TMDB movie metadata helpers for Sub-context Movie Hub filtering.
 
 These helpers are deterministic, server-side only, and must not raise:
-- return [] on any failure.
+- return [] on any failure (bad token, network, malformed JSON)
+- Parse TMDB JSON into deterministic lists
+
+Uses shared httpx pooling via http_client. Prefer fetch_movie_filter_bundle for one RTT
+(genres + cast + keywords) via append_to_response.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import urllib.parse
-import urllib.request
+import os
+import threading
+import time
 from typing import Any, Optional
+
+from .http_client import tmdb_request_json
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.themoviedb.org/3"
 
 
-def _bearer_headers(token: str) -> dict[str, str]:
-    return {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+def _env_float(name: str, default: float, *, minimum: float = 1.0) -> float:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return max(minimum, float(raw))
+    except Exception:
+        return max(minimum, default)
+
+# Short memo so sequential fetch_movie_genre_names + fetch_movie_cast_names share one HTTP call.
+_bundle_memo: dict[int, tuple[dict[str, Any], float]] = {}
+_bundle_lock = threading.Lock()
+BUNDLE_MEMO_TTL_SECONDS = _env_float("CINEMIND_TMDB_METADATA_BUNDLE_MEMO_TTL_SECONDS", 300.0)
+_bundle_hits = 0
+_bundle_misses = 0
+_bundle_evictions = 0
 
 
 def _safe_int(x: Any) -> Optional[int]:
@@ -34,78 +52,127 @@ def _safe_int(x: Any) -> Optional[int]:
         return None
 
 
-def _fetch_json(url: str, token: str, timeout: float = 10.0) -> Any:
-    token = (token or "").strip()
-    if not token:
+def clear_movie_metadata_bundle_cache() -> None:
+    """Clear in-process bundle memo (tests)."""
+    global _bundle_hits, _bundle_misses, _bundle_evictions
+    with _bundle_lock:
+        _bundle_memo.clear()
+        _bundle_hits = 0
+        _bundle_misses = 0
+        _bundle_evictions = 0
+
+
+def movie_metadata_bundle_stats() -> dict[str, int]:
+    with _bundle_lock:
+        return {
+            "size": len(_bundle_memo),
+            "hits": _bundle_hits,
+            "misses": _bundle_misses,
+            "expired": _bundle_evictions,
+        }
+
+
+def fetch_movie_filter_bundle(
+    movie_id: Any,
+    token: str,
+    *,
+    timeout: float = 10.0,
+) -> Optional[dict[str, Any]]:
+    """
+    Single GET /movie/{id}?append_to_response=credits,keywords.
+
+    Returns:
+      {"genres": list[str], "cast": list[str], "keywords": list[str]}
+    or None on failure.
+    """
+    mid = _safe_int(movie_id)
+    if mid is None:
         return None
-    try:
-        req = urllib.request.Request(url, headers=_bearer_headers(token))
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        logger.debug("TMDB metadata fetch failed (%s): %s", url, e)
+    url = f"{BASE_URL}/movie/{mid}?append_to_response=credits%2Ckeywords"
+    data = tmdb_request_json(url, token, timeout=timeout, log_label="TMDB_movie_bundle")
+    if not isinstance(data, dict):
+        return None
+
+    genres: list[str] = []
+    for g in data.get("genres") or []:
+        if isinstance(g, dict) and g.get("name"):
+            genres.append(str(g["name"]))
+
+    credits = data.get("credits") if isinstance(data.get("credits"), dict) else {}
+    cast_raw = credits.get("cast") if isinstance(credits.get("cast"), list) else []
+    cast_names: list[str] = []
+    if isinstance(cast_raw, list):
+        for item in cast_raw:
+            if isinstance(item, dict) and item.get("name"):
+                cast_names.append(str(item["name"]))
+                if len(cast_names) >= 80:
+                    break
+
+    kw_block = data.get("keywords") if isinstance(data.get("keywords"), dict) else {}
+    kws = kw_block.get("keywords") if isinstance(kw_block.get("keywords"), list) else []
+    keyword_names: list[str] = []
+    if isinstance(kws, list):
+        for kw in kws:
+            if isinstance(kw, dict) and kw.get("name"):
+                keyword_names.append(str(kw["name"]))
+
+    return {"genres": genres, "cast": cast_names, "keywords": keyword_names}
+
+
+def _memoized_bundle(movie_id: Any, token: str) -> Optional[dict[str, Any]]:
+    global _bundle_hits, _bundle_misses, _bundle_evictions
+    mid = _safe_int(movie_id)
+    if mid is None:
+        return None
+    now = time.monotonic()
+    with _bundle_lock:
+        ent = _bundle_memo.get(mid)
+        if ent:
+            data, exp = ent
+            if now < exp:
+                _bundle_hits += 1
+                logger.debug("TMDB bundle_memo hit movie_id=%s", mid)
+                return data
+            _bundle_evictions += 1
+        _bundle_misses += 1
+        logger.debug("TMDB bundle_memo miss movie_id=%s", mid)
+        fresh = fetch_movie_filter_bundle(mid, token)
+        if fresh:
+            _bundle_memo[mid] = (fresh, now + BUNDLE_MEMO_TTL_SECONDS)
+            return fresh
         return None
 
 
 def fetch_movie_cast_names(movie_id: Any, token: str, *, max_names: int = 80) -> list[str]:
-    """Return cast member names for `movie_id` using TMDB /movie/{id}/credits."""
-    mid = _safe_int(movie_id)
-    if mid is None:
+    """Return cast member names for `movie_id` (append_to_response bundle)."""
+    b = _memoized_bundle(movie_id, token)
+    if not b:
         return []
-    url = f"{BASE_URL}/movie/{mid}/credits"
-    data = _fetch_json(url, token)
-    if not isinstance(data, dict):
-        return []
-    cast = data.get("cast") or []
-    if not isinstance(cast, list):
-        return []
-    names: list[str] = []
-    for item in cast:
-        if not isinstance(item, dict):
-            continue
-        name = item.get("name")
-        if not name:
-            continue
-        names.append(str(name))
-        if len(names) >= max_names:
-            break
-    return names
+    names = list(b.get("cast") or [])
+    return names[: max(0, max_names)]
 
 
 def fetch_movie_genre_names(movie_id: Any, token: str) -> list[str]:
-    """Return genre names for `movie_id` using TMDB /movie/{id}."""
-    mid = _safe_int(movie_id)
-    if mid is None:
+    """Return genre names for `movie_id` (append_to_response bundle)."""
+    b = _memoized_bundle(movie_id, token)
+    if not b:
         return []
-    url = f"{BASE_URL}/movie/{mid}"
-    data = _fetch_json(url, token)
-    if not isinstance(data, dict):
-        return []
-    genres = data.get("genres") or []
-    if not isinstance(genres, list):
-        return []
-    out: list[str] = []
-    for g in genres:
-        if isinstance(g, dict) and g.get("name"):
-            out.append(str(g["name"]))
-    return out
+    return list(b.get("genres") or [])
 
 
 def fetch_movie_keyword_names(movie_id: Any, token: str) -> list[str]:
-    """Return keyword names for `movie_id` using TMDB /movie/{id}/keywords."""
-    mid = _safe_int(movie_id)
-    if mid is None:
+    """Return keyword names for `movie_id` (append_to_response bundle)."""
+    b = _memoized_bundle(movie_id, token)
+    if not b:
         return []
-    url = f"{BASE_URL}/movie/{mid}/keywords"
-    data = _fetch_json(url, token)
-    if not isinstance(data, dict):
-        return []
-    keywords = data.get("keywords") or []
-    if not isinstance(keywords, list):
-        return []
-    out: list[str] = []
-    for kw in keywords:
-        if isinstance(kw, dict) and kw.get("name"):
-            out.append(str(kw["name"]))
-    return out
+    return list(b.get("keywords") or [])
 
+
+__all__ = [
+    "fetch_movie_cast_names",
+    "fetch_movie_genre_names",
+    "fetch_movie_keyword_names",
+    "fetch_movie_filter_bundle",
+    "clear_movie_metadata_bundle_cache",
+    "movie_metadata_bundle_stats",
+]

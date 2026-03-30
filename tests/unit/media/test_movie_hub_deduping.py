@@ -25,14 +25,14 @@ def _build_llm_genre_response(*, genres: list[str], items_per_genre: int = 5, st
     return "\n".join(lines).strip()
 
 
-def test_movie_hub_dedup_blanks_duplicate_posters(monkeypatch: pytest.MonkeyPatch):
+def test_movie_hub_dedup_removes_duplicate_movies(monkeypatch: pytest.MonkeyPatch):
     """
-    If different LLM entries resolve to the same TMDB id, we should not show the
-    exact same poster image repeatedly.
+    If different LLM entries resolve to the same TMDB id, we should not keep
+    duplicate movie cards in sub-context clusters.
 
     Contract:
-      - total movies still equals 20
-      - for each repeated tmdbId, at most one item keeps `primary_image_url`
+      - each tmdbId appears at most once in the final hub
+      - first-seen order is preserved for unique entries
     """
     from src.api import main as api_main
 
@@ -87,9 +87,9 @@ def test_movie_hub_dedup_blanks_duplicate_posters(monkeypatch: pytest.MonkeyPatc
     for c in genre_clusters:
         all_movies.extend(c.get("movies") or [])
 
-    assert len(all_movies) == 20
+    assert len(all_movies) == 10
 
-    # For each tmdbId, only the first occurrence should keep the image URL.
+    # For each tmdbId, only one movie should remain after dedupe.
     by_tmdb: dict[int, list[dict[str, Any]]] = {}
     for m in all_movies:
         tmdb_id = m.get("tmdbId")
@@ -97,8 +97,7 @@ def test_movie_hub_dedup_blanks_duplicate_posters(monkeypatch: pytest.MonkeyPatc
         by_tmdb.setdefault(int(tmdb_id), []).append(m)
 
     for tmdb_id, items in by_tmdb.items():
-        kept = [it for it in items if it.get("primary_image_url")]
-        assert len(kept) <= 1, f"tmdbId={tmdb_id} kept {len(kept)} images"
+        assert len(items) == 1, f"tmdbId={tmdb_id} appears {len(items)} times"
 
 
 def test_movie_hub_rebucketing_single_fallback_bucket_to_four_genres(monkeypatch: pytest.MonkeyPatch):

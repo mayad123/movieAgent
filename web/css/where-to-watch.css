@@ -4,8 +4,8 @@
     width: 0;
     min-width: 0;
     overflow: hidden;
-    background: #f7f7f8;
-    border-left: 1px solid #e5e5e5;
+    background: var(--surface-sidebar);
+    border-left: 1px solid var(--border-hairline);
     display: flex;
     flex-direction: column;
     transition: width 0.25s ease, min-width 0.25s ease;
@@ -22,13 +22,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid #e5e5e5;
-    min-height: 52px;
+    border-bottom: 1px solid var(--border-hairline);
+    min-height: var(--chrome-header-min-height);
 }
 .where-to-watch-drawer-title {
     font-size: 1rem;
-    font-weight: 600;
-    color: #0d0d0d;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
     margin: 0;
     min-width: 0;
     overflow: visible;
@@ -41,7 +41,7 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 1.5rem;
     line-height: 1;
     cursor: pointer;
@@ -49,11 +49,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.15s, background 0.15s;
+    transition: color var(--duration-fast), background var(--duration-fast);
 }
 .where-to-watch-drawer-close:hover {
-    color: #0d0d0d;
-    background: #e5e7eb;
+    color: var(--text-primary);
+    background: var(--surface-active);
 }
 .where-to-watch-drawer-content {
     flex: 1 1 auto;
@@ -63,10 +63,10 @@
 /* Loading skeleton */
 .where-to-watch-skeleton {
     height: 1rem;
-    background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+    background: linear-gradient(90deg, var(--surface-active) 25%, var(--surface-hover) 50%, var(--surface-active) 75%);
     background-size: 200% 100%;
     animation: where-to-watch-shimmer 1s ease-in-out infinite;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     margin-bottom: 0.75rem;
 }
 .where-to-watch-skeleton.short { width: 60%; }
@@ -82,14 +82,14 @@
     gap: 1.25rem;
 }
 .where-to-watch-drawer-region {
-    font-size: 0.75rem;
-    color: #6b7280;
+    font-size: var(--text-2xs);
+    color: var(--text-muted);
     margin: 0 0 0.5rem 0;
 }
 .where-to-watch-group-title {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: #6b7280;
+    font-size: var(--text-3xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 0.5rem;
@@ -100,7 +100,7 @@
     padding: 0;
 }
 .where-to-watch-offer {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border-default);
 }
 .where-to-watch-offer:last-child { border-bottom: none; }
 .where-to-watch-offer > .where-to-watch-offer-info {
@@ -118,18 +118,18 @@
     color: inherit;
 }
 .where-to-watch-offer-link:hover {
-    background-color: rgba(250, 204, 21, 0.25);
+    background-color: var(--accent-warm-bg);
 }
 .where-to-watch-offer-info {
     min-width: 0;
 }
 .where-to-watch-offer-provider {
-    font-weight: 500;
-    color: #0d0d0d;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
 }
 .where-to-watch-offer-price {
-    font-size: 0.8125rem;
-    color: #4b5563;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
 }
 /* Empty & error states */
 .where-to-watch-drawer-empty,
@@ -139,7 +139,7 @@
 .where-to-watch-drawer-empty-text,
 .where-to-watch-drawer-error-text {
     font-size: 0.9375rem;
-    color: #4b5563;
+    color: var(--text-secondary);
     margin: 0;
 }
-.where-to-watch-drawer-error-text { color: #b91c1c; }
+.where-to-watch-drawer-error-text { color: var(--text-error); }

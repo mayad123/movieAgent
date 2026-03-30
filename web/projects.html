@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineMind · Projects</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <div class="projects-shell">
+        <header class="projects-topbar">
+            <h1>Projects</h1>
+            <a href="index.html" aria-label="Back to Chat">← Back to Chat</a>
+        </header>
+        <div class="projects-layout">
+            <aside class="projects-sidebar">
+                <form class="projects-create-form" id="projectsCreateForm">
+                    <input id="projectNameInput" type="text" placeholder="Project name (e.g. Cozy Sci-Fi)" required>
+                    <input id="projectFocusInput" type="text" placeholder="Context focus (genre, theme, actor...)">
+                    <textarea id="projectDescriptionInput" rows="3" placeholder="Description (optional)"></textarea>
+                    <button type="submit">Create Project</button>
+                </form>
+                <div class="projects-list" id="projectsList"></div>
+            </aside>
+            <main class="projects-main">
+                <div class="projects-detail-header">
+                    <div>
+                        <h2 id="projectTitle">Select a project</h2>
+                        <p id="projectSubtitle"></p>
+                    </div>
+                </div>
+                <div class="projects-assets-grid" id="projectAssetsGrid"></div>
+            </main>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script type="module" src="js/projects-app.js"></script>
+</body>
+</html>

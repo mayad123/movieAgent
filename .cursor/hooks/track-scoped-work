@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""
+Cursor hook: afterFileEdit / afterTabFileEdit — record substantive path edits for session-log drafting.
+
+Appends one JSON line per debounced edit to docs/session_logs/.tracking/signals.jsonl (gitignored).
+Always exits 0. Does not create canonical session entries (those stay human/agent curated).
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+
+def _repo_root(start: Path) -> Path | None:
+    for parent in [start, *start.parents]:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return None
+
+
+def _load_map(hooks_dir: Path) -> dict:
+    p = hooks_dir / "session_track_map.json"
+    with p.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _should_skip(rel_posix: str, skip_prefixes: list[str]) -> bool:
+    for prefix in skip_prefixes:
+        pre = prefix.rstrip("/")
+        if rel_posix == pre or rel_posix.startswith(prefix):
+            return True
+    return False
+
+
+def _debounce_path(hooks_dir: Path) -> Path:
+    return hooks_dir / ".session_track_last"
+
+
+def _debounced(path_file: Path, key: str, seconds: int) -> bool:
+    if seconds <= 0:
+        return False
+    now = time.time()
+    data: dict = {}
+    if path_file.is_file():
+        try:
+            data = json.loads(path_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+    last = data.get(key)
+    if isinstance(last, (int, float)) and (now - last) < seconds:
+        return True
+    data[key] = now
+    cutoff = now - seconds * 6
+    data = {k: v for k, v in data.items() if isinstance(v, (int, float)) and v > cutoff}
+    data[key] = now
+    path_file.write_text(json.dumps(data), encoding="utf-8")
+    return False
+
+
+def _longest_prefix_match(rel_posix: str, entries: list[dict]) -> tuple[int, list[str]] | None:
+    best: tuple[int, list[str]] | None = None
+    for entry in entries:
+        prefix = entry.get("prefix", "")
+        topics = entry.get("topics", [])
+        if not prefix or not isinstance(topics, list):
+            continue
+        pre = prefix.rstrip("/")
+        if rel_posix == pre or rel_posix.startswith(prefix):
+            plen = len(prefix)
+            if best is None or plen > best[0]:
+                best = (plen, [str(t) for t in topics])
+    return best
+
+
+def _topics_for_path(rel_posix: str, cfg: dict) -> list[str] | None:
+    if _should_skip(rel_posix, list(cfg.get("skip_prefixes", []))):
+        return None
+    tracked = cfg.get("tracked_prefixes", [])
+    if not isinstance(tracked, list):
+        return None
+    match = _longest_prefix_match(rel_posix, tracked)
+    return None if match is None else match[1]
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return 0
+
+    file_path_raw = payload.get("file_path")
+    if not file_path_raw or not isinstance(file_path_raw, str):
+        return 0
+
+    edited = Path(file_path_raw).resolve()
+    root = _repo_root(edited)
+    if root is None:
+        return 0
+
+    try:
+        rel = edited.relative_to(root)
+    except ValueError:
+        return 0
+
+    rel_posix = rel.as_posix()
+    hooks_dir = (root / ".cursor" / "hooks").resolve()
+
+    try:
+        cfg = _load_map(hooks_dir)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[track-scoped-work] config error: {e}", flush=True)
+        return 0
+
+    topics = _topics_for_path(rel_posix, cfg)
+    if not topics:
+        print(f"[track-scoped-work] not tracked: {rel_posix}", flush=True)
+        return 0
+
+    debounce_s = int(cfg.get("debounce_seconds", 90))
+    debounce_file = _debounce_path(hooks_dir)
+    if _debounced(debounce_file, rel_posix, debounce_s):
+        print(f"[track-scoped-work] debounced: {rel_posix}", flush=True)
+        return 0
+
+    tracking_dir = root / "docs" / "session_logs" / ".tracking"
+    tracking_dir.mkdir(parents=True, exist_ok=True)
+    signals = tracking_dir / "signals.jsonl"
+
+    line = {
+        "ts": time.time(),
+        "path": rel_posix,
+        "topics": topics,
+    }
+    with signals.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(line, ensure_ascii=False) + "\n")
+
+    print(f"[track-scoped-work] recorded: {rel_posix} topics={topics}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

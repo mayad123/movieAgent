@@ -4,6 +4,7 @@ Unit tests for OutputValidator.
 Tests forbidden terms detection, verbosity checks, freshness requirements,
 and repair instruction generation.
 """
+import re
 import pytest
 import sys
 from pathlib import Path
@@ -456,6 +457,32 @@ class TestMultipleViolations:
         
         # But should still require re-prompt (verbosity can't be auto-fixed)
         assert result.requires_reprompt, "Should still require re-prompt for verbosity violations"
+
+
+class TestMarkdownNormalization:
+    """Markdown artifacts stripped for plain-text chat (no reprompt violation)."""
+
+    @pytest.fixture
+    def validator(self):
+        return OutputValidator(enable_auto_fix=True)
+
+    @pytest.fixture
+    def general_template(self):
+        return get_template("info", "general_info")
+
+    def test_numbered_list_triple_star_stripped(self, validator, general_template):
+        response = "1. ***Inception*** (2010)\n\n2. **The Matrix** (1999)"
+        result = validator.validate(response, general_template)
+        assert result.corrected_text is not None
+        assert "***" not in result.corrected_text
+        assert "**" not in result.corrected_text
+        assert "Inception" in result.corrected_text
+
+    def test_horizontal_rule_line_removed(self, validator, general_template):
+        response = "Here are picks.\n\n***\n\n1. First\n2. Second"
+        result = validator.validate(response, general_template)
+        assert result.corrected_text is not None
+        assert not re.search(r"^\s*\*{3,}\s*$", result.corrected_text, re.M)
 
 
 class TestValidatorWithAutoFixDisabled:

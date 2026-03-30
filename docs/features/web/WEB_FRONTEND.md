@@ -14,8 +14,10 @@
 | How API calls work | [API Client](#api-client-apijs) |
 | Page layout structure | [UI Layout](#ui-layout) |
 | How messages are rendered | [Message Rendering Flow](#message-rendering-flow) |
+| Sub-context Movie Hub (filters, history, no chat thread) | [Sub-context Page](WEB_SUB_CONTEXT_PAGE.md) + [UI Layout § Sub-context](#sub-context-movie-hub) |
 | Poster cards and carousels | [Media & Poster System](#media--poster-system-postersjs) |
 | Where-to-Watch drawer | [Where-to-Watch Drawer](#where-to-watch-drawer-where-to-watchjs) |
+| Movie Details modal | [Movie Details (“More Info”) Modal](WEB_MORE_INFO_PAGE.md) |
 | CSS file organization | [CSS Architecture](#css-architecture) |
 | Design tokens | [CSS Custom Properties](#css-custom-properties-design-tokens) |
 | Backend response contract | [Backend ↔ Frontend Contract](#backend--frontend-contract) |
@@ -24,6 +26,7 @@
 
 **Example changes and where to look:**
 - "Change how messages look" → [Message Rendering Flow](#message-rendering-flow) + `css/chat.css`
+- "Change sub-context hub filters / history UI" → [WEB_SUB_CONTEXT_PAGE.md](WEB_SUB_CONTEXT_PAGE.md) + `messages.js` (`renderSubHubFilterHistory`), `layout.js`, `hub-history.js`, `api.js`
 - "Add a new card type" → [Media & Poster System](#media--poster-system-postersjs) + `css/media.css`
 - "Change sidebar behavior" → [UI Layout](#ui-layout) + `css/sidebar.css`
 - "Handle a new response field" → [Backend ↔ Frontend Contract](#backend--frontend-contract) + [Normalization](#normalization-normalizejs)
@@ -32,40 +35,54 @@
 
 ---
 
+## Page Views (Home vs Sub-context)
+
+This UI is effectively two views toggled inside the same single-page layout:
+
+- [Home Page (Main Chat View)](WEB_HOME_PAGE.md)
+- [Sub-context Page (Sub-conversation Movie Hub)](WEB_SUB_CONTEXT_PAGE.md)
+- [Movie Details (“More Info”) Modal](WEB_MORE_INFO_PAGE.md)
+
 ## File Map
 
 ### Entry
 
 | File | Role | Lines |
 |------|------|-------|
-| `index.html` | Shell: layout skeleton, all DOM elements, script tags | ~154 |
-| `js/app.js` | Module entry point: imports, callback wiring, boot | ~82 |
+| `index.html` | Chat shell: layout skeleton, all DOM elements, script tags | ~240+ |
+| `projects.html` | Dedicated Projects page shell for persistent project collections | ~40+ |
+| `js/app.js` | Module entry point: imports, callback wiring, boot | ~85 |
+| `js/projects-app.js` | Projects page entry point: list/create/select projects + render assets | ~150 |
 | `js/config.js` | API base URL configuration | ~7 |
 
 ### JavaScript Modules (`js/modules/`)
 
 | Module | Role | Lines |
 |--------|------|-------|
-| `state.js` | Application state, constants, conversation helpers | ~165 |
-| `dom.js` | Cached DOM element references | ~39 |
-| `api.js` | HTTP client for backend calls | ~86 |
-| `layout.js` | Sidebar, header, right panel, toasts, modal | ~481 |
-| `messages.js` | Message rendering, append, send | ~220 |
-| `posters.js` | Movie cards, carousels, collections, projects | ~857 |
-| `normalize.js` | Response normalization, HTML escaping | ~94 |
-| `where-to-watch.js` | Streaming availability drawer | ~227 |
+| `state.js` | Application state, constants, conversation helpers | ~170 |
+| `dom.js` | Cached DOM element references (chat, hub, movie details, etc.) | ~80+ |
+| `api.js` | HTTP: `sendQuery`, movie hub helpers, where-to-watch, and persistent project APIs (`getProjects`, `createProject`, `getProject`, `addProjectAssets`, `deleteProjectAsset`) | ~220+ |
+| `layout.js` | Sidebar, header, movie hub, sub-context, retrieving, `applyMovieHubClusters`, `recomputeHubFromMessages` | ~1150+ |
+| `messages.js` | Main chat messages; sub-view uses `renderSubHubFilterHistory` + hidden `#messageList` | ~520+ |
+| `hub-history.js` | Pure helpers: clone hub clusters, build history for API, candidate title strings | ~70 |
+| `posters.js` | Movie cards, carousels, collections, projects, attachment sections | ~1350+ |
+| `normalize.js` | Response normalization, HTML escaping | ~100 |
+| `where-to-watch.js` | Streaming availability drawer | ~230 |
+| `movie-details.js` | Full-screen “More info” modal, TMDB details, related titles | (see [WEB_MORE_INFO_PAGE](WEB_MORE_INFO_PAGE.md)) |
 
 ### CSS (`css/`)
 
 | File | Role | Lines |
 |------|------|-------|
-| `app.css` | Import aggregator (no rules, just `@import`) | ~9 |
+| `app.css` | Import aggregator (no rules, just `@import`) | ~11 |
 | `base.css` | Reset, body, CSS custom properties | ~29 |
 | `sidebar.css` | Left sidebar, conversation list, agent toggle | ~219 |
-| `header.css` | Header bar, breadcrumb, sub-conversation view | ~218 |
-| `chat.css` | Chat column, messages, composer, modal | ~330 |
-| `media.css` | Hero cards, carousels, posters, scenes, attachments | ~670 |
+| `header.css` | Header bar, breadcrumb, sub-conversation view, hub filter history theming | ~230+ |
+| `chat.css` | Chat column, messages, composer, sub-context hub, filter history, retrieving | ~560+ |
+| `media.css` | Hero cards, carousels, posters, scenes, attachments | ~670+ |
+| `movie-details.css` | Movie Details modal layout | (paired with modal in `index.html`) |
 | `right-panel.css` | Collections panel, project assets, stack | ~402 |
+| `projects.css` | Dedicated Projects page layout and card/list styles | ~120 |
 | `where-to-watch.css` | Streaming availability drawer | ~144 |
 
 ---
@@ -139,9 +156,9 @@ flowchart LR
 ```
 
 Each module exposes a `setXxxCallbacks(obj)` function. `app.js` calls all three at boot to inject cross-module references. This means:
-- No module directly imports another feature module
-- `app.js` is the only place where all modules meet
-- Circular dependencies are impossible
+- Feature modules avoid importing each other **except** where unavoidable: `messages.js` imports `layout.js` for hub-only actions (`applyMovieHubClusters`, `recomputeHubFromMessages`, `restoreSubHubSnapshotFromMessageMeta`). `layout.js` does **not** import `messages.js` (it uses `_renderMessages` from callbacks).
+- `app.js` is the primary place where modules are wired together.
+- Circular **import** cycles among feature modules are still avoided (layout ↔ messages is one-way).
 
 ---
 
@@ -169,6 +186,7 @@ classDiagram
     }
 
     class Message {
+        +id: string
         +role: "user" | "assistant"
         +content: string
         +meta: Object
@@ -178,7 +196,9 @@ classDiagram
         +id: string
         +title: string
         +messages: Message[]
-        +movieContext: Object
+        +contextMovie: Object
+        +similarClusters: Object[]
+        +hubOriginalClusters: Object[]?
     }
 
     appState --> Conversation
@@ -191,7 +211,7 @@ classDiagram
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `API_BASE` | From `window.CINEMIND_CONFIG.apiBase` | Backend URL |
-| `SEND_TIMEOUT_MS` | `60000` | Request abort timeout |
+| `SEND_TIMEOUT_MS` | `90000` | Request abort timeout for `POST /query` |
 
 ### Key Helpers
 
@@ -206,9 +226,10 @@ classDiagram
 
 ## API Client (`api.js`)
 
-Two backend calls:
+### `sendQuery(text, useRealAgent, options?)`
 
-### `sendQuery(text, useRealAgent)`
+- **Main chat:** `options` omitted. Body: `{ user_query, requestedAgentMode }`.
+- **Sub-context hub filters:** `options.hubConversationHistory` may be set to `{ role, content }[]` (prior turns). See [API Server](../api/API_SERVER.md) (`hubConversationHistory`). The hub marker and `candidateTitles` still live inside `user_query` via `prefixMovieHubContextQuery(...)`.
 
 ```mermaid
 sequenceDiagram
@@ -216,11 +237,19 @@ sequenceDiagram
     participant API as api.js
     participant Backend as FastAPI
 
-    UI->>API: sendQuery("who directed inception", false)
-    API->>Backend: POST /query {user_query, requestedAgentMode}
+    UI->>API: sendQuery(text, mode, { hubConversationHistory? })
+    API->>Backend: POST /query { user_query, requestedAgentMode, hubConversationHistory? }
     Backend-->>API: MovieResponse JSON
     API-->>UI: parsed result
 ```
+
+### `prefixMovieHubContextQuery(userQuery, contextMovie, candidateTitles?)`
+
+Builds `[[CINEMIND_HUB_CONTEXT]]{ title, year, tmdbId, candidateTitles? }[[/CINEMIND_HUB_CONTEXT]]` + user text for sub-context narrowing.
+
+### `fetchSimilarMovies(tmdbId, options?)`
+
+`GET /api/movies/{id}/similar?by=genre&title&year&mediaType` — TMDB-backed similar clusters for hub **fallback** when LLM auto-load fails (see `layout.js` / [WEB_SUB_CONTEXT_PAGE](WEB_SUB_CONTEXT_PAGE.md)). If `tmdbId` is missing, the client uses a non-numeric path segment and passes `title` / `year` so the backend can resolve the movie.
 
 ### `fetchWhereToWatch(movie, callback)`
 
@@ -260,6 +289,33 @@ flowchart LR
     MAIN --> COMPOSER
 ```
 
+### Sub-context Movie Hub
+
+When the user opens a sub-conversation from a poster (“Talk More About This”), the main chat column shows the **Movie Hub** at the top. **Full documentation:** [WEB_SUB_CONTEXT_PAGE.md](WEB_SUB_CONTEXT_PAGE.md) (DOM, multi-turn history, reset, replay, guardrails).
+
+**DOM structure (`index.html`) — summary**
+
+- `#movieHubView` — hub header with `#movieHubRetrieving` (in-flight filter), `#movieHubResetBtn`, selected movie meta, cluster sections (`#movieHubSimilarByGenre` / tone / cast).
+- `#movieHubFilterHistoryWrap` — compact **filter history** (not a chat transcript); lists turns with Remove / Show this hub.
+- In sub-view, `#messageList` is **hidden** (CSS + class); `sub.messages` still backs `hubConversationHistory` and replay.
+
+**Behavior (summary)**
+
+- Hub is visible when `appState.conversationView === 'sub'` and `thread.sub.contextMovie` exists (`addSubConversationFromPoster`).
+- **Initial hub load:** `maybeAutoLoadMovieHubClusters` sends a structured `/query` with the hub marker (no parent “candidate universe” copied onto `contextMovie` — see errors doc). On failure after retries, **`fetchSimilarMovies`** (TMDB similar API) fills the hub.
+- **Hub filters:** Composer sends hub-marked queries; optional **`hubConversationHistory`** in the POST body for follow-ups. Results apply via `applyMovieHubClusters` — posters stay in the **top hub row**; filter turns appear in **Filter history** only.
+- **Retrieving:** In sub-view, `showRetrieving()` uses `#movieHubRetrieving`; main chat still uses `#retrievingRow`.
+
+**Cluster rendering**
+
+- Each cluster maps to a hub region:
+  - `kind: "genre"` → `#movieHubSimilarByGenre`
+  - `kind: "tone"` → `#movieHubSimilarByTone`
+  - `kind: "cast"` → `#movieHubSimilarByCast`
+- Rendering is handled by `web/js/modules/layout.js::renderMovieHubCluster(container, clusters, kind)` (which uses `createHeroCard(...)` from `posters.js`):
+  - Appends a heading (`.movie-hub-cluster-title`).
+  - Renders a horizontally scrollable strip (`.movie-hub-cluster-strip`) of hero cards using `createHeroCard(...)`, sharing the same sizing tokens as other poster views.
+
 ### Panel States
 
 | Panel | States | Toggle |
@@ -272,24 +328,55 @@ flowchart LR
 
 ## Message Rendering Flow
 
+**Main chat** (`conversationView === 'main'`): messages render into `#messageList` as before (bubbles, attachments, media strip).
+
+**Sub-context** (`conversationView === 'sub'`): `#messageList` is not shown. `renderMessages()` calls **`renderSubHubFilterHistory()`** which fills `#movieHubFilterHistory` with compact rows (user question + assistant summary, Remove, Show this hub). Hub poster updates come from `applyMovieHubClusters` / `movieHubClusters` on the response `meta`, not from a second strip in the message area.
+
 ```mermaid
 flowchart TD
     SEND["User sends message"]
     SEND --> APPEND_USER["appendMessage('user', text)"]
     APPEND_USER --> SHOW_LOADING["showRetrieving()"]
-    SHOW_LOADING --> API_CALL["sendQuery(text, useRealAgent)"]
+    SHOW_LOADING --> API_CALL["sendQuery(..., hubConversationHistory?)"]
     API_CALL --> NORMALIZE["normalizeMeta(result)"]
     NORMALIZE --> APPEND_ASSIST["appendMessage('assistant', response, meta)"]
+    APPEND_ASSIST --> RENDER["renderMessages()"]
+    RENDER --> BRANCH{"conversationView?"}
+    BRANCH -->|main| MAIN["#messageList: bubbles, attachments, media strip"]
+    BRANCH -->|sub| SUB["#messageList hidden; renderSubHubFilterHistory; hub row from meta.movieHubClusters"]
 
-    APPEND_ASSIST --> CHECK{"meta.attachments?"}
-    CHECK -->|Yes| ATTACHMENTS["createAttachmentsFromSections()"]
-    CHECK -->|No| MEDIA{"meta.media_strip?"}
+    MAIN --> ASSIST{"meta.attachments?"}
+    ASSIST -->|Yes| ATTACHMENTS["createAttachmentsFromSections()"]
+    ASSIST -->|No| MEDIA{"meta.media_strip?"}
     MEDIA -->|Yes| STRIP["createUnifiedMovieStrip()"]
-    MEDIA -->|No| DONE["Render text only"]
-
+    MEDIA -->|No| DONE["Text-only bubble"]
     ATTACHMENTS --> DONE
     STRIP --> DONE
 ```
+
+---
+
+## Assistant Message Rendering Contract
+
+Assistant responses are rendered as **structured text** using paragraphs and simple lists without allowing arbitrary HTML.
+
+- **Input format (from backend):**
+  - Plain text with newline separators.
+  - Blank lines (double newlines) indicate paragraph breaks.
+  - List items start with either `- ` (bulleted) or `1. `, `2. `, etc. (numbered).
+- **Rendering behavior (`messages.js`):**
+  - User and system messages are rendered as a single text node in `.message-bubble`.
+  - Assistant messages use a helper in `messages.js` to:
+    - Split content into blocks on double newlines.
+    - Render blocks as `<ul>/<ol><li>` when **all non-empty lines** in the block start with `- ` or a number + `.`.
+    - Otherwise, render the block as a `<p>` element.
+    - Always insert text via `textContent`/`createTextNode` so HTML is escaped.
+  - Before splitting, assistant text passes through `stripMarkdownNoiseForDisplay()` so echoed markdown (e.g. `***`, `**title**`, or `1. ***` on list lines) is removed and ordered lists render as clean plain text. Backend `output_validator.py` applies the same normalization on the server when possible (see [Prompt pipeline](../prompting/PROMPT_PIPELINE.md#output-validator-output_validatorpy)).
+- **Styling (`chat.css`):**
+  - `.message-bubble p` and `.message-bubble ul, .message-bubble ol` define spacing and indent within the bubble.
+  - Lists are indented relative to the bubble, with compact spacing for `li` elements.
+
+This contract keeps assistant answers **scannable** (paragraphs and bullets) while preserving the existing `MovieResponse` text field and avoiding HTML injection.
 
 ---
 
@@ -359,22 +446,25 @@ flowchart TD
     APP_CSS --> HEADER["header.css"]
     APP_CSS --> CHAT["chat.css"]
     APP_CSS --> MEDIA["media.css"]
+    APP_CSS --> MOVIE_DETAILS_CSS["movie-details.css"]
     APP_CSS --> WTW["where-to-watch.css"]
 ```
 
 ### CSS Custom Properties (Design Tokens)
 
-Defined in `base.css`:
+**Full light-shell palette, typography scale, spacing, radii, shadows, and motion** live in [`base.css`](../../../web/css/base.css). Sub-view tokens (`--sub-*`) are defined there too; `--sub-text-primary` / `--sub-text-secondary` reference the global text tokens for alignment.
 
 | Token | Value | Purpose |
 |-------|-------|---------|
 | `--sub-surface-bg` | `#e8e8ec` | Sub-conversation background |
 | `--sub-surface-elevated` | `#e8e8ec` | Elevated surfaces |
 | `--sub-surface-soft` | `#d8d8de` | Soft surfaces |
-| `--sub-text-primary` | `#0d0d0d` | Primary text |
-| `--sub-text-secondary` | `#4b5563` | Secondary text |
+| `--sub-text-primary` | maps to `--text-primary` | Primary text |
+| `--sub-text-secondary` | maps to `--text-secondary` | Secondary text |
 | `--sub-border` | `rgba(0,0,0,0.1)` | Border color |
 | `--sub-poster-width` | `clamp(3rem,9vw,5.5rem)` | Poster size |
+
+See **[WEB_DESIGN_TOKENS.md](WEB_DESIGN_TOKENS.md)** for cross-surface parity, component patterns (buttons, list rows), and a manual verification checklist.
 
 ### Component ↔ CSS Mapping
 
@@ -382,8 +472,9 @@ Defined in `base.css`:
 |-----------|----------|-------------|
 | Sidebar | `sidebar.css` | `.sidebar`, `.conversation-list`, `.sidebar-agent-toggle` |
 | Header | `header.css` | `.header`, `.header-title`, `.header-sub-view`, `.mode-badge` |
-| Chat | `chat.css` | `.chat-column`, `.message-*`, `.composer-*`, `.retrieving` |
+| Chat | `chat.css` | `.chat-column`, `.message-*`, `.composer-*`, `.retrieving`, `.movie-hub-*`, `.movie-hub-filter-history-*` |
 | Posters/Media | `media.css` | `.hero-card`, `.candidate-card`, `.carousel-wheel`, `.attachments-*` |
+| Movie Details | `movie-details.css` | `.movie-details-*` (modal in `index.html`) |
 | Right Panel | `right-panel.css` | `.right-panel`, `.collection-*`, `.project-assets-*` |
 | Where-to-Watch | `where-to-watch.css` | `.where-to-watch-drawer`, `.where-to-watch-*` |
 
@@ -402,6 +493,7 @@ classDiagram
         +search_metadata: Object
         +media_strip: MediaStrip
         +attachments: Attachments
+        +movieHubClusters?: SimilarCluster[]
     }
 
     class MediaStrip {
@@ -412,6 +504,21 @@ classDiagram
 
     class Attachments {
         +sections: Section[]
+    }
+
+    class SimilarCluster {
+        +kind: string
+        +label: string
+        +movies: List<SimilarMovie>
+    }
+
+    class SimilarMovie {
+        +title: string
+        +year: number?
+        +primary_image_url: string?
+        +page_url: string?
+        +tmdbId: number?
+        +mediaType: string?
     }
 
     class Section {
@@ -425,6 +532,7 @@ classDiagram
 
     MovieResponse --> MediaStrip
     MovieResponse --> Attachments
+    MovieResponse --> SimilarCluster
     Attachments --> Section
 ```
 
@@ -443,8 +551,10 @@ classDiagram
 
 | Endpoint | Module | Purpose |
 |----------|--------|---------|
-| `POST /query` | `api.js` | Send movie query |
+| `POST /query` | `api.js` | Chat + sub-context hub queries (`hubConversationHistory` optional) |
+| `GET /api/movies/{movie_id}/similar` | `api.js` | `fetchSimilarMovies` — hub fallback clusters |
 | `GET /api/watch/where-to-watch` | `api.js` | Streaming availability |
+| `GET /api/movies/{tmdbId}/details` | `movie-details.js` | Movie Details modal (when wired) |
 | `GET /health` | (config check) | Mode detection |
 
 ### External Dependencies
@@ -502,6 +612,7 @@ python -m tests.playground.server
 | If you change... | Also check... |
 |-----------------|---------------|
 | `MovieResponse` shape (backend) | `normalize.js`, `messages.js`, `posters.js` |
+| Sub-context hub / `movieHubClusters` / marker | [WEB_SUB_CONTEXT_PAGE.md](WEB_SUB_CONTEXT_PAGE.md), `layout.js`, `api.js`, `hub-history.js`, [API_SERVER](../api/API_SERVER.md) |
 | Attachment section types | `posters.js` `createAttachmentsFromSections()` |
 | Where-to-Watch API | `api.js` `fetchWhereToWatch()`, `where-to-watch.js` |
 | CSS custom properties | All CSS files that reference `--sub-*` tokens |
@@ -509,3 +620,4 @@ python -m tests.playground.server
 | State shape | `state.js`, `layout.js`, `messages.js` |
 | API base URL | `config.js`, deployment configs |
 | Callback signatures | `app.js` wiring, all `setXxxCallbacks()` consumers |
+| `messages.js` ↔ `layout.js` hub imports | Avoid circular imports: `layout` must not import `messages` |

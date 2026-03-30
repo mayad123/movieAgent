@@ -1,0 +1,14 @@
+---
+description: Vanilla web frontend module and DOM rules
+globs: web/**/*.{js,css,html}
+alwaysApply: false
+---
+
+# Web Frontend Flow
+
+- Keep the frontend build-free: vanilla JS modules, no framework or npm dependency additions.
+- Use `app.js` as wiring only; avoid direct cross-feature imports between UI modules.
+- Read and mutate shared UI state via `state.js`; do not store source-of-truth state in DOM nodes.
+- Access static DOM references through `dom.js`; avoid ad hoc element lookups in feature modules.
+- Route all network calls through `web/js/modules/api.js` and handle timeout + non-OK responses.
+- Prefer `textContent` for user-derived strings; use `innerHTML` only for trusted and escaped content.

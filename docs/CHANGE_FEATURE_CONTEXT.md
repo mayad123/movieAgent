@@ -55,7 +55,7 @@ flowchart TD
 | Bad LLM response | [Prompt Pipeline](features/prompting/PROMPT_PIPELINE.md) | Extraction (evidence), Templates |
 | Missing/wrong posters | [Media Enrichment](features/media/MEDIA_ENRICHMENT.md) | Integrations (TMDB), Extraction (title parsing) |
 | API returns error | [API Server](features/api/API_SERVER.md) | Workflows, Agent Core |
-| Frontend rendering issue | [Web Frontend](features/web/WEB_FRONTEND.md) | API response shape, normalize.js |
+| Frontend rendering issue | [Web Frontend](features/web/WEB_FRONTEND.md) | API response shape, normalize.js, [Sub-context Page](features/web/WEB_SUB_CONTEXT_PAGE.md) |
 | Cache returns stale data | [Infrastructure](features/infrastructure/INFRASTRUCTURE.md) | Extraction (intent = cache key) |
 | Wrong request classification | [Request Planning](features/planning/REQUEST_PLANNING.md) | Extraction, Prompting (template selection) |
 | Facts are wrong | [Fact Verification](features/verification/FACT_VERIFICATION.md) | Planning (source policy), Extraction |
@@ -333,6 +333,13 @@ state.js changes   → affects all frontend modules
 ---
 
 ## Verification Checklist (After Any Change)
+
+### Documentation (keep in sync with `src/`)
+
+- [ ] **Feature doc** — Updated the matching `docs/features/<area>/*.md` if you changed behavior, public functions, env vars, or HTTP/JSON contracts (use the file’s *Change Impact Guide* as a checklist).
+- [ ] **Routing** — If you added a new top-level package under `src/cinemind/` or a new integration, add a row to [`AI_CONTEXT.md` § Navigate from `src/`](../AI_CONTEXT.md#navigate-from-src-canonical-map) and [`features/README.md` § Source ↔ Documentation](features/README.md#source--documentation-mapping).
+- [ ] **Errors / guardrails** — If the change affects Movie Hub, Where to Watch, or Movie Details edge cases, review [`errors/README.md`](../errors/README.md) and update the relevant error doc if the guardrail story changed.
+- [ ] **Planning** — Optional: bump [planning/SUMMARY.md](../planning/SUMMARY.md) *Now/Next/Risks* if delivery status or risks changed.
 
 ### Backend Changes
 

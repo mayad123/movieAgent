@@ -13,12 +13,20 @@ from integrations.tmdb.resolver import (
     TMDBResolveResult,
     TMDBCandidate,
     resolve_movie,
+    clear_resolve_cache,
     _normalize_title,
     _extract_year,
     _score_candidate,
     MIN_CONFIDENCE_AUTO_SELECT,
     MIN_SCORE_GAP_AUTO_SELECT,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_resolver_cache():
+    clear_resolve_cache()
+    yield
+    clear_resolve_cache()
 
 
 class TestNormalizeAndExtract:
@@ -65,16 +73,16 @@ class TestResolveMovie:
         assert result.status == "not_found"
 
     def test_not_found_no_results(self):
-        with patch("urllib.request.urlopen") as m:
-            m.return_value.__enter__.return_value.read.return_value = b'{"results":[]}'
+        with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
+            m.return_value = {"results": []}
             result = resolve_movie("Nonexistent Movie XYZ", access_token="t")
         assert result.status == "not_found"
         assert result.movie_id is None
 
     def test_resolved_single_clear_match(self):
-        payload = b'{"results":[{"id":27205,"title":"Inception","release_date":"2010-07-16","popularity":50,"vote_count":10000}]}'
-        with patch("urllib.request.urlopen") as m:
-            m.return_value.__enter__.return_value.read.return_value = payload
+        payload = {"results": [{"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}]}
+        with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
+            m.return_value = payload
             result = resolve_movie("Inception", year=2010, access_token="t")
         assert result.status == "resolved"
         assert result.movie_id == 27205
@@ -82,24 +90,24 @@ class TestResolveMovie:
         assert len(result.candidates) >= 1
 
     def test_ambiguous_when_top_two_close(self):
-        # Two results with same title and close scores -> ambiguous
-        payload = b'{"results":[' \
-            b'{"id":1,"title":"Dune","release_date":"2021-01-01","popularity":80,"vote_count":8000},' \
-            b'{"id":2,"title":"Dune","release_date":"1984-01-01","popularity":75,"vote_count":7500}' \
-            b']}'
-        with patch("urllib.request.urlopen") as m:
-            m.return_value.__enter__.return_value.read.return_value = payload
+        payload = {
+            "results": [
+                {"id": 1, "title": "Dune", "release_date": "2021-01-01", "popularity": 80, "vote_count": 8000},
+                {"id": 2, "title": "Dune", "release_date": "1984-01-01", "popularity": 75, "vote_count": 7500},
+            ]
+        }
+        with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
+            m.return_value = payload
             result = resolve_movie("Dune", access_token="t")
-        # Either resolved (if gap is large enough) or ambiguous
         assert result.status in ("resolved", "ambiguous")
         assert len(result.candidates) >= 2
         ids = [c.id for c in result.candidates]
         assert 1 in ids and 2 in ids
 
     def test_candidates_have_id_title_year(self):
-        payload = b'{"results":[{"id":123,"title":"Test Movie","release_date":"1999-05-01","popularity":1,"vote_count":10}]}'
-        with patch("urllib.request.urlopen") as m:
-            m.return_value.__enter__.return_value.read.return_value = payload
+        payload = {"results": [{"id": 123, "title": "Test Movie", "release_date": "1999-05-01", "popularity": 1, "vote_count": 10}]}
+        with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
+            m.return_value = payload
             result = resolve_movie("Test Movie", access_token="t")
         assert result.candidates
         c = result.candidates[0]
@@ -108,6 +116,15 @@ class TestResolveMovie:
         assert c.year == 1999
         d = c.to_dict()
         assert d["id"] == 123 and d["title"] == "Test Movie" and d.get("year") == 1999
+
+    def test_second_call_uses_cache(self):
+        payload = {"results": [{"id": 1, "title": "Cached", "release_date": "2000-01-01", "popularity": 10, "vote_count": 100}]}
+        with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
+            m.return_value = payload
+            r1 = resolve_movie("Cached", access_token="t")
+            r2 = resolve_movie("Cached", access_token="t")
+        assert r1.movie_id == r2.movie_id
+        assert m.call_count == 1
 
 
 class TestTMDBResolveResultToDict:

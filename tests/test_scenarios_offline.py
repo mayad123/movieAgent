@@ -230,12 +230,15 @@ class ScenarioTester:
             # Extract violation types from violation messages
             violation_types_found = []
             for violation in result.violations:
-                if "forbidden" in violation.lower() or "term" in violation.lower():
+                v = violation.lower()
+                if "forbidden" in v or "term" in v:
                     violation_types_found.append("forbidden_terms")
-                elif "sentence" in violation.lower() or "word" in violation.lower() or "length" in violation.lower():
+                elif "sentence" in v or "word" in v or "length" in v or "verbosity" in v:
                     violation_types_found.append("verbosity")
-                elif "freshness" in violation.lower() or "timestamp" in violation.lower() or "date" in violation.lower():
+                elif "freshness" in v or "timestamp" in v or "date" in v or "as of" in v:
                     violation_types_found.append("freshness")
+                elif "boilerplate" in v:
+                    violation_types_found.append("boilerplate")
             
             for expected_type in expected_violation_types:
                 if expected_type not in violation_types_found:

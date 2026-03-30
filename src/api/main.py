@@ -2,17 +2,18 @@
 REST API wrapper for CineMind agent.
 For operationalization and deployment.
 """
-import logging
 import json
+import logging
 import os
 import re
 import time
 import uuid
-from typing import Optional, List
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Path as ApiPath
+from typing import Optional
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, Path as ApiPath, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import uvicorn
 
 try:
     import sys
@@ -393,7 +394,7 @@ async def where_to_watch(
     )
 
 
-@app.get("/api/projects", response_model=List[ProjectSummary])
+@app.get("/api/projects", response_model=list[ProjectSummary])
 async def list_projects():
     """List all projects."""
     store = get_projects_store()

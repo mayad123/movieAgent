@@ -11,16 +11,16 @@ Output:
 
 from __future__ import annotations
 
+import logging
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import get_tmdb_access_token, is_tmdb_enabled
 
-from integrations.tmdb.movie_metadata import (
-    fetch_movie_cast_names,
-    fetch_movie_genre_names,
-    fetch_movie_keyword_names,
-)
+from integrations.tmdb.movie_metadata import fetch_movie_filter_bundle
+
+logger = logging.getLogger(__name__)
 
 
 def _norm_text(s: Any) -> str:
@@ -87,30 +87,47 @@ def extract_like_movie_title(question: str) -> Optional[str]:
     return title or None
 
 
+def _ensure_hub_filter_metadata(tmdb_id: int, token: str, cache: Dict[int, Dict[str, Any]]) -> None:
+    """Load genres, keywords, and cast in one TMDB request per id (append_to_response)."""
+    cur = cache.get(tmdb_id) or {}
+    if "genres" in cur and "keywords" in cur and "cast" in cur:
+        return
+    b = fetch_movie_filter_bundle(tmdb_id, token)
+    if not b:
+        cache[tmdb_id] = {**cur, "genres": [], "keywords": [], "cast": []}
+        return
+    cache[tmdb_id] = {
+        **cur,
+        "genres": b.get("genres") or [],
+        "keywords": b.get("keywords") or [],
+        "cast": b.get("cast") or [],
+    }
+
+
 def _is_horror_movie(tmdb_id: int, token: str, cache: Dict[int, Dict[str, Any]]) -> bool:
     cached = cache.get(tmdb_id) or {}
     if "is_horror" in cached:
         return bool(cached["is_horror"])
 
-    genres = fetch_movie_genre_names(tmdb_id, token)
+    _ensure_hub_filter_metadata(tmdb_id, token, cache)
+    cached = cache.get(tmdb_id) or {}
+    genres = cached.get("genres") or []
     genre_norm = {_norm_text(g) for g in genres if g}
     has_horror_genre = any(g in ("horror",) for g in genre_norm)
 
-    keywords = fetch_movie_keyword_names(tmdb_id, token)
+    keywords = cached.get("keywords") or []
     kw_norm = {_norm_text(k) for k in keywords if k}
     horror_kw = {"horror", "scary", "scare", "fear"}
     has_horror_kw = any(k in horror_kw for k in kw_norm)
 
     is_horror = has_horror_genre or has_horror_kw
-    cache[tmdb_id] = {**cached, "is_horror": is_horror, "genres": genres, "keywords": keywords}
+    cache[tmdb_id] = {**cached, "is_horror": is_horror}
     return is_horror
 
 
 def _cast_matches_actor(tmdb_id: int, token: str, actor_norm: str, cache: Dict[int, Dict[str, Any]]) -> bool:
+    _ensure_hub_filter_metadata(tmdb_id, token, cache)
     cached = cache.get(tmdb_id) or {}
-    if "cast" not in cached:
-        cached["cast"] = fetch_movie_cast_names(tmdb_id, token)
-        cache[tmdb_id] = cached
 
     for name in cached.get("cast") or []:
         if not name:
@@ -131,6 +148,7 @@ def filter_movie_hub_clusters_by_question(
 
     If TMDB metadata is unavailable, returns clusters unchanged.
     """
+    t0 = time.perf_counter()
     if not clusters:
         return clusters
 
@@ -194,6 +212,10 @@ def filter_movie_hub_clusters_by_question(
 
                     # Avoid collapsing UX into an empty hub; fall back if intersection is empty.
                     if any((c.get("movies") or []) for c in out_like):
+                        logger.debug(
+                            "TMDB hub_filter like_intersection total_ms=%.1f",
+                            (time.perf_counter() - t0) * 1000,
+                        )
                         return out_like
             except Exception:
                 # Any TMDB/network failure should preserve the anchored universe.
@@ -204,6 +226,7 @@ def filter_movie_hub_clusters_by_question(
 
     # If we can't recognize any constraints, do not filter.
     if not actor and not include_horror and not exclude_horror:
+        logger.debug("TMDB hub_filter noop total_ms=%.1f", (time.perf_counter() - t0) * 1000)
         return clusters
 
     if not is_tmdb_enabled():
@@ -259,7 +282,9 @@ def filter_movie_hub_clusters_by_question(
 
     # If filtering yields an empty hub, preserve the original candidate universe.
     if not any((c.get("movies") or []) for c in out):
+        logger.debug("TMDB hub_filter empty_fallback total_ms=%.1f", (time.perf_counter() - t0) * 1000)
         return clusters
 
+    logger.debug("TMDB hub_filter applied total_ms=%.1f", (time.perf_counter() - t0) * 1000)
     return out
 

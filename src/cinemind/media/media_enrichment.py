@@ -9,9 +9,11 @@ Deterministic; never blocks or raises.
 from __future__ import annotations
 
 import logging
+import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 from .media_cache import MediaCache, get_default_media_cache
 from ..extraction.title_extraction import get_search_phrases, extract_movie_titles
@@ -29,6 +31,37 @@ MAX_GALLERY_CANDIDATES = 5
 # Poster debug keys (attachment_debug)
 POSTER_DEBUG_TMDB_ATTEMPTED = "tmdb_attempted"
 POSTER_DEBUG_PROVIDER = "poster_provider"  # "tmdb" | null
+
+
+def _get_tmdb_token_best_effort() -> str:
+    """
+    Best-effort TMDB token retrieval that respects test monkeypatching.
+
+    Tests sometimes patch `cinemind.media.media_enrichment.is_tmdb_enabled` /
+    `cinemind.media.media_enrichment.get_tmdb_access_token` directly.
+    Production code uses `config.is_tmdb_enabled` / `config.get_tmdb_access_token`.
+    """
+    try:
+        local_is_enabled = globals().get("is_tmdb_enabled")
+        local_get_token = globals().get("get_tmdb_access_token")
+        if callable(local_is_enabled):
+            # If tests override `is_tmdb_enabled`, respect it even if
+            # `get_tmdb_access_token` wasn't overridden.
+            if not bool(local_is_enabled()):
+                return ""
+            if callable(local_get_token):
+                return (local_get_token() or "").strip()
+            return ""
+    except Exception:
+        pass
+
+    try:
+        from config import is_tmdb_enabled, get_tmdb_access_token
+        if is_tmdb_enabled():
+            return (get_tmdb_access_token() or "").strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _normalize_enrich_key(user_query: str) -> str:
@@ -175,14 +208,35 @@ def _enrich_one_title_tmdb(
         return {}
     try:
         from integrations.tmdb.resolver import resolve_movie
-        tr = resolve_movie(title, year=None, access_token=token)
+
+        # Extract an optional "(YYYY)" tail so resolver can apply deterministic year scoring.
+        # Many LLM outputs are formatted as "Title (Year)".
+        year = None
+        cleaned_title = title
+        try:
+            m = re.search(r"\(\s*(\d{4})\s*\)\s*$", title)
+            if m:
+                year = int(m.group(1))
+                cleaned_title = re.sub(r"\(\s*\d{4}\s*\)\s*$", "", title).strip()
+        except Exception:
+            year = None
+            cleaned_title = title
+
+        tr = resolve_movie(cleaned_title, year=year, access_token=token)
         if tr.status == "not_found":
-            return {"movie_title": title, "page_url": "#"}
-        strip, _ = _build_strip_from_tmdb(tr, title, token, cache=cache)
+            # Always return a placeholder so enrich_batch stays usable even
+            # when TMDB resolution fails (unit tests + hub UI robustness).
+            out: dict[str, Any] = {"movie_title": cleaned_title or title, "page_url": "#"}
+            if year is not None:
+                out["year"] = year
+            return out
+        strip, _ = _build_strip_from_tmdb(tr, cleaned_title, token, cache=cache)
         return strip
     except Exception as e:
         logger.debug("Batch enrich single title failed for %r: %s", title, e)
-        return {"movie_title": title, "page_url": "#"}
+        # Last-resort placeholder.
+        out: dict[str, Any] = {"movie_title": title, "page_url": "#"}
+        return out
 
 
 def enrich(
@@ -213,6 +267,8 @@ def enrich(
                     return t
         return (user_query or "").strip()
 
+    explicit_fallback_provided = bool(fallback_title and (fallback_title or "").strip()) or bool(fallback_from_result)
+
     media_cache = cache or get_default_media_cache()
     query_key = _normalize_enrich_key(user_query)
 
@@ -221,54 +277,63 @@ def enrich(
         if cached is not None:
             return cached
 
-    token = ""
-    try:
-        from config import is_tmdb_enabled, get_tmdb_access_token
-        if is_tmdb_enabled():
-            token = (get_tmdb_access_token() or "").strip()
-    except Exception:
-        pass
+    token = _get_tmdb_token_best_effort()
 
     if not token:
-        title = _fallback_title_value()
-        if title:
+        # No TMDB token → still return a minimal placeholder for `movie_title`
+        # so downstream code/tests can render “text-only” cards safely.
+        if explicit_fallback_provided:
+            title = _fallback_title_value()
+        else:
+            title = ""
+        if (title or "").strip():
             return MediaEnrichmentResult(
                 media_strip={"movie_title": title, "page_url": "#"},
                 poster_debug={POSTER_DEBUG_TMDB_ATTEMPTED: False, POSTER_DEBUG_PROVIDER: None},
             )
-        return MediaEnrichmentResult(media_strip={}, poster_debug={})
+        return MediaEnrichmentResult(
+            media_strip={},
+            poster_debug={POSTER_DEBUG_TMDB_ATTEMPTED: False, POSTER_DEBUG_PROVIDER: None},
+        )
 
     try:
         from integrations.tmdb.resolver import resolve_movie
-        for search_text in get_search_phrases(user_query):
-            if not (search_text or "").strip():
-                continue
-            tr = resolve_movie(search_text, year=None, access_token=token)
-            if tr.status == "not_found":
-                continue
-            media_strip, poster_debug = _build_strip_from_tmdb(tr, search_text, token, cache=media_cache)
-            if not media_strip.get("movie_title"):
-                continue
-            payloads = [_build_candidate_from_tmdb(c, token) for c in (tr.candidates or [])[:MAX_GALLERY_CANDIDATES]]
-            if not payloads:
-                payloads = [dict(media_strip)]
-            # Invariant: hero must not appear in did_you_mean; exclude strip from candidates.
-            candidates_no_hero = [p for p in payloads if not _same_movie_as_strip(p, media_strip)]
-            show_gallery = _should_show_gallery_tmdb(tr) and len(candidates_no_hero) > 0
-            result = MediaEnrichmentResult(
-                media_strip=media_strip,
-                media_candidates=candidates_no_hero if show_gallery else [],
-                poster_debug=poster_debug,
-            )
-            if use_enrich_cache and query_key:
-                media_cache.set_enrich(query_key, result)
-            return result
+
+        phrases = [p for p in get_search_phrases(user_query) if (p or "").strip()]
+        if phrases:
+
+            def _resolve_phrase(search_text: str):
+                return resolve_movie(search_text, year=None, access_token=token)
+
+            max_workers = min(2, len(phrases))
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                resolved_list = list(pool.map(_resolve_phrase, phrases))
+
+            for search_text, tr in zip(phrases, resolved_list):
+                if tr.status == "not_found":
+                    continue
+                media_strip, poster_debug = _build_strip_from_tmdb(tr, search_text, token, cache=media_cache)
+                if not media_strip.get("movie_title"):
+                    continue
+                payloads = [_build_candidate_from_tmdb(c, token) for c in (tr.candidates or [])[:MAX_GALLERY_CANDIDATES]]
+                if not payloads:
+                    payloads = [dict(media_strip)]
+                # Invariant: hero must not appear in did_you_mean; exclude strip from candidates.
+                candidates_no_hero = [p for p in payloads if not _same_movie_as_strip(p, media_strip)]
+                show_gallery = _should_show_gallery_tmdb(tr) and len(candidates_no_hero) > 0
+                result = MediaEnrichmentResult(
+                    media_strip=media_strip,
+                    media_candidates=candidates_no_hero if show_gallery else [],
+                    poster_debug=poster_debug,
+                )
+                if use_enrich_cache and query_key:
+                    media_cache.set_enrich(query_key, result)
+                return result
     except Exception as e:
         logger.debug("Media enrichment failed: %s", e)
 
     title = _fallback_title_value()
     if title:
-        fallback_strip: dict[str, Any] = {"movie_title": title, "page_url": "#"}
         try:
             from integrations.tmdb.resolver import resolve_movie
             tr = resolve_movie(title, year=None, access_token=token)
@@ -276,9 +341,17 @@ def enrich(
                 fallback_strip, poster_debug = _build_strip_from_tmdb(tr, title, token, cache=media_cache)
                 return MediaEnrichmentResult(media_strip=fallback_strip, poster_debug=poster_debug)
         except Exception:
-            pass
+            logger.debug("Fallback media enrichment failed for %r", title)
+        # If even fallback resolution fails, return a minimal placeholder.
+        # Here TMDB is enabled (token exists), so we always return `movie_title`
+        # to keep enrichment usable even without successful TMDB resolution.
+        if (title or "").strip():
+            return MediaEnrichmentResult(
+                media_strip={"movie_title": title, "page_url": "#"},
+                poster_debug={POSTER_DEBUG_TMDB_ATTEMPTED: True, POSTER_DEBUG_PROVIDER: None},
+            )
         return MediaEnrichmentResult(
-            media_strip=fallback_strip,
+            media_strip={},
             poster_debug={POSTER_DEBUG_TMDB_ATTEMPTED: True, POSTER_DEBUG_PROVIDER: None},
         )
     return MediaEnrichmentResult(media_strip={}, poster_debug={})
@@ -294,14 +367,9 @@ def enrich_batch(
     """
     Enrich multiple titles using TMDB only. Returns list of UI-ready cards.
     """
+    t_batch = time.perf_counter()
     media_cache = cache or get_default_media_cache()
-    token = ""
-    try:
-        from config import is_tmdb_enabled, get_tmdb_access_token
-        if is_tmdb_enabled():
-            token = (get_tmdb_access_token() or "").strip()
-    except Exception:
-        pass
+    token = _get_tmdb_token_best_effort()
     if not token:
         return [{"movie_title": (t or "").strip(), "page_url": "#"} for t in (titles or [])[:max_titles] if (t or "").strip()]
 
@@ -331,7 +399,15 @@ def enrich_batch(
             except Exception as e:
                 logger.debug("Batch enrich future failed: %s", e)
 
-    return [c for c in cards if c is not None and c.get("movie_title")]
+    out_cards = [c for c in cards if c is not None and c.get("movie_title")]
+    logger.debug(
+        "TMDB enrich_batch input_titles=%s unique=%s max_concurrent=%s total_ms=%.1f",
+        min(len(titles or []), max_titles),
+        len(unique),
+        max_concurrent,
+        (time.perf_counter() - t_batch) * 1000,
+    )
+    return out_cards
 
 
 def _movie_card_item(card: dict[str, Any]) -> dict[str, Any]:
@@ -381,6 +457,21 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
             "title": title,
             "items": [_movie_card_item(c) for c in candidates if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
         })
+
+    # Surface relatedMovies alongside attachments for Movie Hub and Movie Details.
+    # When we have movie_list-style candidates, reuse them as relatedMovies.
+    # Preserve any existing relatedMovies set earlier in the pipeline.
+    existing_related = result.get("relatedMovies")
+    if existing_related is None:
+        related: list[dict[str, Any]] = []
+        # Hero is always "this movie"; relatedMovies should be "other movies".
+        if len(sections) >= 2 and sections[1]["type"] in (SECTION_MOVIE_LIST, SECTION_DID_YOU_MEAN):
+            for item in sections[1].get("items", []):
+                if not item:
+                    continue
+                related.append(dict(item))
+        if related:
+            result["relatedMovies"] = related
 
     return {"sections": sections}
 
@@ -472,3 +563,149 @@ def attach_media_to_result(
         if enrichment.media_candidates:
             result["media_candidates"] = enrichment.media_candidates
     result["attachments"] = build_attachments_from_media(result)
+
+
+def build_similar_movie_clusters(
+    title: str,
+    year: Optional[int] = None,
+    tmdb_id: Optional[int] = None,
+    media_type: Optional[str] = None,
+    max_results: int = 18,
+) -> Dict[str, Any]:
+    """
+    Build genre/tone/cast clusters for a movie using TMDB "similar" titles.
+
+    Contract:
+      - Returns {"clusters": [SimilarCluster, ...]} where each cluster has:
+          kind: "genre" | "tone" | "cast"
+          label: human‑readable string
+          movies: list of movie card dicts compatible with SimilarMovie / Movie Hub.
+
+    Data sourcing strategy:
+      1. If TMDB is disabled or we cannot resolve a TMDB id → return empty clusters
+         with labels only (frontend will hide strips with no movies).
+      2. If tmdb_id is provided (preferred) → call TMDB /movie/{id}/similar.
+      3. Else, resolve by title/year via integrations.tmdb.resolver.resolve_movie.
+
+    The "genre" cluster is the primary IMDb‑style "People who liked this also liked..."
+    row. "tone" and "cast" are currently placeholders (empty) that can be filled by a
+    richer similarity model later (e.g. LLM‑derived tone tags or shared cast credits).
+    """
+    from config import is_tmdb_enabled, get_tmdb_access_token  # local import to avoid cycles
+
+    # Always build the three clusters so the frontend contract is stable.
+    base_label = (title or "").strip() or "This movie"
+    clusters: List[Dict[str, Any]] = [
+        {
+            "kind": "genre",
+            "label": f"Similar by genre to {base_label}",
+            "movies": [],
+        },
+        {
+            "kind": "tone",
+            "label": f"Similar by tone or theme to {base_label}",
+            "movies": [],
+        },
+        {
+            "kind": "cast",
+            "label": f"Similar by cast or crew to {base_label}",
+            "movies": [],
+        },
+    ]
+
+    # Fast path: TMDB integration disabled or missing token → just return labels.
+    token = ""
+    try:
+        if is_tmdb_enabled():
+            token = (get_tmdb_access_token() or "").strip()
+    except Exception:
+        token = ""
+    if not token:
+        return {"clusters": clusters}
+
+    # Helper imports kept inside the function to avoid hard dependencies at module import.
+    try:
+        from integrations.tmdb.http_client import tmdb_request_json  # type: ignore
+        from integrations.tmdb.resolver import (  # type: ignore
+            BASE_URL,
+            _extract_year,
+            resolve_movie,
+        )
+        from integrations.tmdb.image_config import (  # type: ignore
+            SIZE_POSTER_GALLERY,
+            build_image_url,
+        )
+    except Exception:
+        # If TMDB modules are not available for any reason, keep graceful fallback.
+        return {"clusters": clusters}
+
+    # Resolve TMDB id if not provided.
+    resolved_id: Optional[int] = tmdb_id
+    if resolved_id is None:
+        try:
+            search_title = (title or "").strip()
+            if not search_title:
+                return {"clusters": clusters}
+            tr = resolve_movie(search_title, year=year, access_token=token)
+            if tr.status == "resolved" and tr.movie_id:
+                resolved_id = tr.movie_id
+        except Exception:
+            resolved_id = None
+    if resolved_id is None:
+        return {"clusters": clusters}
+
+    import urllib.parse
+
+    url = f"{BASE_URL}/movie/{resolved_id}/similar"
+    qs: Dict[str, str] = {"page": "1"}
+    full_url = f"{url}?{urllib.parse.urlencode(qs)}"
+    data = tmdb_request_json(full_url, token, timeout=10.0, log_label="TMDB_similar")
+    if not isinstance(data, dict):
+        return {"clusters": clusters}
+
+    results = (data or {}).get("results") or []
+    if not results:
+        return {"clusters": clusters}
+
+    movies: List[Dict[str, Any]] = []
+    slice_limit = max(0, int(max_results) if max_results is not None else 0)
+    for r in results[:slice_limit]:
+        try:
+            tmdb_movie_id = int(r.get("id") or 0)
+        except Exception:
+            tmdb_movie_id = 0
+        if tmdb_movie_id <= 0:
+            continue
+
+        raw_title = (r.get("title") or r.get("original_title") or "").strip()
+        if not raw_title:
+            continue
+
+        poster_path = (r.get("poster_path") or "").strip()
+        primary_image_url: Optional[str] = None
+        if poster_path:
+            try:
+                primary_image_url = build_image_url(poster_path, SIZE_POSTER_GALLERY)
+            except Exception:
+                primary_image_url = None
+
+        release_year = _extract_year(r.get("release_date"))
+
+        media_kind = (media_type or "movie").strip() or "movie"
+        page_url = f"https://www.themoviedb.org/{'movie' if media_kind == 'movie' else 'tv'}/{tmdb_movie_id}"
+
+        movie_item: Dict[str, Any] = {
+            "title": raw_title,
+            "year": release_year,
+            "primary_image_url": primary_image_url,
+            "page_url": page_url,
+            "tmdbId": tmdb_movie_id,
+            "mediaType": media_kind,
+        }
+        movies.append(movie_item)
+
+    # Attach all movies to the primary "genre" cluster; tone/cast remain placeholders for now.
+    if movies:
+        clusters[0]["movies"] = movies
+
+    return {"clusters": clusters}

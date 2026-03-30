@@ -28,13 +28,14 @@
 
 ## Module Map
 
-| Module | Role | Lines |
-|--------|------|-------|
-| `title_extraction.py` | Extract movie titles from user queries for media enrichment | ~120 |
-| `intent_extraction.py` | Structured intent extraction (rule-based + optional LLM) | ~800 |
-| `candidate_extraction.py` | Extract movie candidates from search results | ~250 |
-| `response_movie_extractor.py` | Parse agent response text for movie titles and structure | ~300 |
-| `fuzzy_intent_matcher.py` | Typo-tolerant and paraphrase intent matching | ~200 |
+| Module | Role | Lines (approx.) |
+|--------|------|-----------------|
+| `__init__.py` | Re-exports public API (`extract_movie_titles`, `IntentExtractor`, `parse_response`, `normalize_title` from `candidate_extraction`, …) | ~10 |
+| `title_extraction.py` | Extract movie titles from user queries for media enrichment | ~180 |
+| `intent_extraction.py` | Structured intent extraction (rule-based + optional LLM) | ~1115 |
+| `candidate_extraction.py` | Extract movie candidates from search results | ~400 |
+| `response_movie_extractor.py` | Parse agent response text for movie titles, structure, and classifier signals | ~460 |
+| `fuzzy_intent_matcher.py` | Typo-tolerant and paraphrase intent matching | ~240 |
 
 ---
 
@@ -96,15 +97,18 @@ flowchart TD
     FULL --> RESULT
 ```
 
-**Title prefixes** include patterns like:
-- `"show me images for"`, `"who directed"`, `"movies like"`
-- `"compare"`, `"cast of"`, `"scenes from"`
+**Title prefixes** are defined in `_TITLE_PREFIXES` (longest match wins), e.g.:
+- Image/poster: `"show me images for"`, `"images for"`, `"poster for"`, …
+- Question forms: `"who directed"`, `"when was"`, `"what is"`, `"tell me about"`, …
+- Similar / compare: `"movies like"`, `"similar to"`, `"compare"`, `"difference between"`, …
+
+Comma-separated lists (e.g. `"Avatar, Inception"`) and `"X and Y"` splits produce multiple titles with `intent="compare"` where applicable.
 
 ### Key Types
 
 | Type | Fields | Purpose |
 |------|--------|---------|
-| `TitleExtractionResult` | `titles: List[str]`, `reason: str`, `intent: str` | Extracted titles with rationale |
+| `TitleExtractionResult` | `titles: tuple[str, …]`, `reason: str`, `intent: str` (`single_title` \| `seed_for_similar` \| `compare`) | Extracted titles with rationale and routing hint |
 
 ### Public API
 
@@ -117,48 +121,52 @@ flowchart TD
 
 ## Intent Extraction (`intent_extraction.py`)
 
-The richest extraction module — produces a fully structured intent from the user query using a three-tier strategy.
+The richest extraction module — produces a fully structured intent from the user query using **rule-based extraction first**, optional **fuzzy refinement** inside `_detect_intent`, and **async LLM fallback** via `extract_smart`.
 
 ### Extraction Strategy
 
+`IntentExtractor.extract_smart(...)` (async) implements the production path:
+
 ```mermaid
 flowchart TD
-    Q["User Query"] --> RULES["Rule-based extraction"]
-    RULES --> CONF{"Confidence?"}
-    CONF -->|High ≥ 0.8| DONE["Return StructuredIntent"]
-    CONF -->|Medium| FUZZY["Fuzzy matcher refinement"]
-    CONF -->|Low < 0.4| LLM["LLM extraction (optional)"]
-    FUZZY --> DONE
-    LLM --> DONE
+    Q["User Query"] --> RULES["Rule-based extract(query)"]
+    RULES --> ASSESS["_assess_rule_based_confidence"]
+    ASSESS -->|confidence ≥ 0.8 and no LLM| DONE["Return (intent, 'rules', conf)"]
+    ASSESS -->|low confidence or force_llm| LLM["extract_with_llm (async)"]
+    LLM --> DONE2["Return (intent, 'llm', conf)"]
+    LLM -->|client missing or failure| FALL["Fallback rules + needs_clarification"]
 
     style RULES fill:#d4edda
-    style FUZZY fill:#fff3cd
     style LLM fill:#f8d7da
 ```
+
+Rule-based intent detection also consults `fuzzy_intent_matcher` inside `_detect_intent` (exact → typo → paraphrase) before falling back.
 
 ### StructuredIntent Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `intent` | `str` | Classified intent (e.g., `"director_info"`, `"recommendation"`, `"cast_info"`) |
-| `entities` | `Dict` | Extracted entities (movie titles, person names, genres) |
-| `constraints` | `Dict` | Filters (year range, genre, era) |
-| `confidence` | `float` | 0.0–1.0 confidence score |
-| `candidate_year` | `Optional[int]` | Explicit year mentioned |
-| `need_freshness` | `bool` | Whether result requires fresh data |
+| `intent` | `str` | Classified intent (e.g. `director_info`, `recommendation`, `cast_info`, `general_info`, …) |
+| `entities` | `Dict[str, List[str]]` | Typed buckets: `"movies"` and `"people"` lists (normalized in `__post_init__`) |
+| `constraints` | `Dict[str, Any]` | Filters (counts, ordering, format hints) |
+| `original_query` | `str` | Original user text |
+| `confidence` | `float` | 0.0–1.0 |
+| `requires_disambiguation` | `bool` | Ambiguous title (e.g. remake names) |
+| `candidate_year` | `Optional[int]` | Disambiguation year (only when `requires_disambiguation`) |
+| `mentioned_year` | `Optional[int]` | Any year mentioned (e.g. awards), even when not disambiguating |
+| `need_freshness` | `bool` | Needs up-to-date data |
 | `freshness_reason` | `Optional[str]` | Why freshness is needed |
-| `freshness_ttl_hours` | `Optional[int]` | Cache TTL override |
-| `needs_clarification` | `bool` | Ambiguous query flag |
-| `requires_disambiguation` | `bool` | Multiple possible interpretations |
-| `slots` | `Dict` | Award-specific slots (ceremony, category, year) |
+| `freshness_ttl_hours` | `Optional[float]` | Suggested cache TTL (hours) |
+| `needs_clarification` | `bool` | Query too vague / extractor uncertain |
+| `slots` | `Optional[Dict[str, Optional[str]]]` | Award slots: `award_body`, `award_category`, `award_year_basis` |
 
 ### Extraction Methods
 
 | Method | Strategy | When Used |
 |--------|----------|-----------|
-| `extract(query)` | Rule-based only | Fast path, most queries |
-| `extract_with_llm(query)` | LLM-powered | Complex/ambiguous queries |
-| `extract_smart(query)` | Rule → LLM fallback | Production default |
+| `extract(query, request_type="info")` | Rule-based only | Fast path; synchronous |
+| `async extract_with_llm(query, client, request_type="info")` | LLM + validation | Called from `extract_smart` when rules are weak |
+| `async extract_smart(query, client=None, request_type="info", force_llm=False)` | Rules first; LLM if confidence &lt; 0.8 or forced | Production default; returns `(StructuredIntent, extraction_mode, confidence)` where `extraction_mode` is `"rules"` or `"llm"` |
 
 ---
 
@@ -191,45 +199,60 @@ flowchart TD
 | `extract_collaboration_candidates(results)` | Movies where two people worked together |
 | `extract_release_year_candidates(results)` | Release year for a specific movie |
 
-### Title Normalization
+### Title normalization (`candidate_extraction.normalize_title`)
 
-`normalize_title()` handles:
-- Curly/smart apostrophes → straight
-- Curly/smart quotes → straight
-- En-dash / em-dash → hyphen
-- Collapse whitespace
-- Strip leading/trailing whitespace
+Used for **search-result / candidate** strings (matching and dedup). It:
+- Unifies apostrophe/quote variants and common dash characters
+- Collapses whitespace
+- Preserves meaningful punctuation where appropriate
+
+**Note:** `response_movie_extractor` defines a **separate** `normalize_title()` for **response parsing** (outer-quote stripping, zero-width removal, **numbered list marker stripping** so lines like `1. Interstellar` don’t become poster titles). The package `from cinemind.extraction import normalize_title` refers to **`candidate_extraction.normalize_title`** only. Import `response_movie_extractor.normalize_title` explicitly if you need the response-parser variant.
 
 ---
 
 ## Response Movie Extractor (`response_movie_extractor.py`)
 
-Deterministic parser for the agent's response text — identifies mentioned movies, structural patterns, and content signals used for attachment decisions.
+Deterministic parser for the agent's response text — identifies mentioned movies (with per-hit confidence), structural patterns, and keyword/structural signals for the attachment intent classifier.
 
-### Three-Layer Parse
+### Parse flow
+
+1. **Structure** — `_compute_structure`: bullets (`- * • – ◦`), numbered lists (`1.` / `1)` / `(1)`), Markdown bold, `Title (Year)` presence, dash-blurb after `(Year)`.
+2. **Signals** — `_compute_signals`: phrase lists `_DEEP_DIVE_PHRASES` and `_SCENE_PHRASES`; plus `_compute_scene_structure` for `scene_like_enumeration` (short bullet/numbered lines without `(YYYY)`) and `the_film_movie_references` (counts of “the film” / “the movie”).
+3. **Movies** — candidates collected in order, then **deduped** by normalized title (first-seen wins):
+   - `_extract_from_title_year_patterns`: `Title (Year) – blurb`, `Title (Year):`, standalone `Title (Year)`
+   - `_extract_from_bold`: `**Title**` / `*Title*` with optional `(Year)` after markers
+   - `_extract_from_bullets_and_numbered`: bold-first line, quoted title, `Title (Year)`, then separator/colon splits and short bare list lines (lower confidence)
 
 ```mermaid
 flowchart TD
     RESPONSE["Agent Response Text"]
-    RESPONSE --> MOVIES["Layer 1: Extract Movies<br/>title + year + confidence"]
-    RESPONSE --> STRUCTURE["Layer 2: Parse Structure<br/>bullets, numbered lists, bold titles"]
-    RESPONSE --> SIGNALS["Layer 3: Detect Signals<br/>deep-dive, scene, film references"]
+    RESPONSE --> STRUCTURE["ParseStructure"]
+    RESPONSE --> SIGNALS["ParseSignals"]
+    RESPONSE --> ORDERED["Ordered movie candidates<br/>(then dedupe)"]
 
-    MOVIES --> RESULT["ResponseParseResult"]
-    STRUCTURE --> RESULT
+    STRUCTURE --> RESULT["ResponseParseResult"]
     SIGNALS --> RESULT
+    ORDERED --> RESULT
 
-    RESULT --> ENRICH["extract_titles_for_enrichment()<br/>confidence ≥ threshold"]
+    RESULT --> ENRICH["extract_titles_for_enrichment<br/>default min_confidence=0.8"]
 ```
 
 ### Key Types
 
 | Type | Fields | Purpose |
 |------|--------|---------|
-| `ExtractedMovie` | `title`, `year`, `confidence` | A movie found in the response |
-| `ParseStructure` | `has_bullets`, `has_numbered_list`, `has_bold_titles`, `has_title_year_pattern`, `has_dash_blurb_pattern` | Response formatting signals |
-| `ParseSignals` | `deep_dive_indicators`, `scene_indicators`, `scene_like_enumeration`, `the_film_movie_references` | Content intent signals |
-| `ResponseParseResult` | `movies`, `structure`, `signals` | Combined parse output |
+| `ExtractedMovie` | `title`, `year`, `confidence` (0–1) | One extracted title; confidence reflects pattern strength |
+| `ParseStructure` | `has_bullets`, `has_numbered_list`, `has_bold_titles`, `has_title_year_pattern`, `has_dash_blurb_pattern` | List vs paragraph / formatting cues |
+| `ParseSignals` | `deep_dive_indicators`, `scene_indicators`, `scene_like_enumeration`, `the_film_movie_references` | Keyword hits + structural scene/deep-dive heuristics |
+| `ResponseParseResult` | `movies`, `structure`, `signals` | Combined parse; `to_dict()` serializes with **camelCase** keys (`hasBullets`, `deepDiveIndicators`, `sceneLikeEnumeration`, …) for logging/API consumers |
+
+### Public API
+
+| Function | Behavior |
+|----------|----------|
+| `parse_response(text)` | Full `ResponseParseResult` |
+| `extract_titles_for_enrichment(text, min_confidence=0.8)` | Ordered title strings for TMDB `enrich` / `enrich_batch` (filters out low-confidence noise) |
+| `normalize_title` (this module) | Response-line normalization (differs from `candidate_extraction.normalize_title`; see **Title normalization** under Candidate extraction) |
 
 ---
 
@@ -255,7 +278,7 @@ flowchart LR
 
 | Type | Fields | Purpose |
 |------|--------|---------|
-| `FuzzyMatchResult` | `intent`, `match_strength`, `match_type`, `matched_pattern` | Match outcome with diagnostics |
+| `FuzzyMatchResult` | `intent`, `match_strength`, `match_type` (`exact` \| `fuzzy_typo` \| `fuzzy_paraphrase`), `matched_pattern` | Match outcome with diagnostics |
 
 ### Usage Pattern
 
@@ -309,12 +332,12 @@ graph TD
 
 ## Design Patterns & Practices
 
-1. **Deterministic First** — rule-based extraction handles >90% of queries; LLM is the fallback, not the default
+1. **Deterministic First** — rule-based extraction handles most queries; LLM is the fallback inside `extract_smart`, not the default entrypoint
 2. **Progressive Enrichment** — each stage adds structure (raw query → intent → candidates → verified facts)
-3. **Confidence Scoring** — every extraction carries a confidence score enabling downstream filtering
-4. **Normalization at Boundaries** — `normalize_title()` is called at extraction time, not downstream
+3. **Confidence Scoring** — intents and extracted movies carry scores for downstream filtering (`extract_titles_for_enrichment` threshold)
+4. **Normalization at Boundaries** — use the appropriate `normalize_title` for candidates vs response lines (two implementations; see above)
 5. **Singleton for Stateful Matchers** — `get_fuzzy_matcher()` avoids recompiling pattern tables
-6. **No Side Effects** — all extraction functions are pure transforms (input → output)
+6. **Pure transforms** — synchronous extractors are side-effect free; `extract_smart` / `extract_with_llm` perform I/O via the injected LLM client
 
 ---
 
@@ -341,10 +364,10 @@ python -m pytest tests/test_scenarios_offline.py -v
 
 | Test File | What It Covers |
 |-----------|---------------|
-| `tests/unit/extraction/test_title_extraction.py` | `extract_movie_titles`, `get_search_phrases`, prefix matching |
-| `tests/unit/extraction/test_entity_extraction.py` | `IntentExtractor`: interrogatives, punctuation, multi-title |
+| `tests/unit/extraction/test_title_extraction.py` | `extract_movie_titles`, `get_search_phrases`, prefixes, comma/`and` splits |
+| `tests/unit/extraction/test_entity_extraction.py` | `IntentExtractor` / `StructuredIntent`: rules, entities, edge cases |
 | `tests/unit/extraction/test_fuzzy_intent_matcher.py` | Fuzzy matching: exact, typo tolerance, paraphrases, false positives |
-| `tests/unit/extraction/test_response_movie_extractor.py` | `parse_response`, `extract_titles_for_enrichment`, `normalize_title` |
+| `tests/unit/extraction/test_response_movie_extractor.py` | `parse_response`, `extract_titles_for_enrichment`, response `normalize_title`, structure/signals |
 | `tests/unit/planning/test_request_type_router.py` | Downstream: router uses extraction output |
 | `tests/unit/media/test_attachment_intent_classifier.py` | Downstream: classifier uses `ResponseParseResult` |
 
@@ -354,9 +377,10 @@ python -m pytest tests/test_scenarios_offline.py -v
 
 | If you change... | Also check... |
 |-----------------|---------------|
-| `StructuredIntent` fields | `RequestPlanner`, `ToolPlanner`, `SemanticCache` (uses intent for key) |
-| Title prefix patterns | Media enrichment results, test assertions on known queries |
-| `normalize_title()` | `CandidateExtractor`, `FactVerifier`, deduplication logic |
-| `ResponseParseResult` structure | `attachment_intent_classifier`, `playground_attachments` |
-| Intent taxonomy (adding new intents) | `RequestTypeRouter`, `ResponseTemplate`, `HybridClassifier` |
-| Confidence thresholds | `extract_smart()` LLM fallback trigger, `extract_titles_for_enrichment()` |
+| `StructuredIntent` fields | `RequestPlanner`, `ToolPlanner`, `SemanticCache` (uses intent for key), `IntentExtractor._validate_and_correct_intent` |
+| Title prefix patterns (`_TITLE_PREFIXES`) | `media_enrichment`, `test_title_extraction.py` |
+| `candidate_extraction.normalize_title` | `CandidateExtractor`, `FactVerifier`, package re-export in `extraction/__init__.py` |
+| `response_movie_extractor.normalize_title` | List-marker stripping behavior, `test_response_movie_extractor.py`, dedupe keys in `parse_response` |
+| `ResponseParseResult` / `to_dict()` camelCase | `attachment_intent_classifier`, any JSON consumers of parse blobs |
+| Intent taxonomy (adding new intents) | `RequestTypeRouter`, `ResponseTemplate`, `HybridClassifier`, `valid_intents` in `intent_extraction` |
+| Confidence thresholds | `extract_smart` (0.8 rule cutoff), `extract_titles_for_enrichment` (default 0.8) |

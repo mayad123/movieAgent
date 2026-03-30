@@ -94,6 +94,11 @@ export function getActiveThread() {
     return { main: main, sub: null, messages: main.messages, title: main.title || 'New conversation' };
 }
 
+export function getActiveMovieContext() {
+    const thread = getActiveThread();
+    return thread.sub && thread.sub.contextMovie ? thread.sub.contextMovie : null;
+}
+
 /**
  * Whether the given poster is already in the active collection (same de-dupe key).
  * poster: { title, imageUrl, pageUrl?, pageId? }

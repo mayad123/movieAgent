@@ -51,12 +51,14 @@ def test_filter_by_actor_star_constraint(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(m, "is_tmdb_enabled", lambda: True)
     monkeypatch.setattr(m, "get_tmdb_access_token", lambda: "token")
 
-    def fake_cast(tmdb_id: int, _token: str, *, max_names: int = 80) -> list[str]:
-        return ["Keanu Reeves"] if tmdb_id in (1, 3) else ["Someone Else"]
+    def fake_bundle(tmdb_id: int, _token: str, **_kwargs):
+        return {
+            "genres": [],
+            "keywords": [],
+            "cast": ["Keanu Reeves"] if tmdb_id in (1, 3) else ["Someone Else"],
+        }
 
-    monkeypatch.setattr(m, "fetch_movie_cast_names", fake_cast)
-    monkeypatch.setattr(m, "fetch_movie_genre_names", lambda _tmdb_id, _token: [])
-    monkeypatch.setattr(m, "fetch_movie_keyword_names", lambda _tmdb_id, _token: [])
+    monkeypatch.setattr(m, "fetch_movie_filter_bundle", fake_bundle)
 
     clusters = _clusters_with_movies()
     out = m.filter_movie_hub_clusters_by_question(clusters, "Which movies star Keanu Reeves?")
@@ -71,20 +73,15 @@ def test_filter_by_not_scary_constraint(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(m, "is_tmdb_enabled", lambda: True)
     monkeypatch.setattr(m, "get_tmdb_access_token", lambda: "token")
-    monkeypatch.setattr(m, "fetch_movie_cast_names", lambda _tmdb_id, _token: [])
 
-    def fake_genres(tmdb_id: int, _token: str) -> list[str]:
+    def fake_bundle(tmdb_id: int, _token: str, **_kwargs):
         if tmdb_id == 2:
-            return ["Horror"]
-        return ["Drama"]
-
-    def fake_keywords(tmdb_id: int, _token: str) -> list[str]:
+            return {"genres": ["Horror"], "keywords": [], "cast": []}
         if tmdb_id == 3:
-            return ["scary"]
-        return []
+            return {"genres": ["Drama"], "keywords": ["scary"], "cast": []}
+        return {"genres": ["Drama"], "keywords": [], "cast": []}
 
-    monkeypatch.setattr(m, "fetch_movie_genre_names", fake_genres)
-    monkeypatch.setattr(m, "fetch_movie_keyword_names", fake_keywords)
+    monkeypatch.setattr(m, "fetch_movie_filter_bundle", fake_bundle)
 
     clusters = _clusters_with_movies()
     out = m.filter_movie_hub_clusters_by_question(clusters, "Are there movies that aren't scary?")
@@ -307,4 +304,78 @@ def test_candidate_titles_injected_into_prompt(monkeypatch: pytest.MonkeyPatch):
     assert "Return exactly 4 genre blocks." in q
     assert "Genre: <GenreName>" in q
     assert "1. Title (Year)" in q
+
+
+def test_hub_conversation_history_prepended_to_agent_prompt(monkeypatch: pytest.MonkeyPatch):
+    """hubConversationHistory should appear in the agent prompt when candidateTitles are present."""
+    from src.api import main as api_main
+
+    captured = {"user_query": None}
+
+    async def fake_run_playground(user_query: str, request_type: str | None):
+        captured["user_query"] = user_query
+        genres = ["Action", "Comedy", "Drama", "Horror"]
+        lines: list[str] = []
+        idx = 1
+        for g in genres:
+            lines.append(f"Genre: {g}")
+            for _ in range(5):
+                lines.append(f"{idx}. Movie {idx} (2000)")
+                idx += 1
+            lines.append("")
+        return {"response": "\n".join(lines).strip()}
+
+    monkeypatch.setattr(api_main, "run_playground", fake_run_playground)
+
+    def fake_enrich_batch(titles: list[str], *, max_titles: int = 30, **_kwargs: Any) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for i, _t in enumerate(titles[:max_titles]):
+            out.append(
+                {
+                    "movie_title": "Movie",
+                    "year": 2000 + i % 10,
+                    "primary_image_url": None,
+                    "page_url": f"/movie/{i}",
+                    "tmdb_id": i + 1,
+                }
+            )
+        return out
+
+    monkeypatch.setattr(api_main, "enrich_batch", fake_enrich_batch)
+
+    client = TestClient(api_main.app)
+    candidate_titles = ["Alpha (2000)", "Beta (2001)", "Gamma (2002)"]
+    marker_payload = {
+        "title": "Anchor",
+        "year": 1999,
+        "tmdbId": 10,
+        "candidateTitles": candidate_titles,
+    }
+    marker = (
+        "[[CINEMIND_HUB_CONTEXT]]"
+        + json.dumps(marker_payload)
+        + "[[/CINEMIND_HUB_CONTEXT]]"
+    )
+
+    resp = client.post(
+        "/query",
+        json={
+            "user_query": marker + " Only psychological thrillers",
+            "requestedAgentMode": "PLAYGROUND",
+            "hubConversationHistory": [
+                {"role": "user", "content": "Which movies are scary?"},
+                {"role": "assistant", "content": "Genre: Horror\n1. Alpha (2000)\n2. Beta (2001)"},
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert "movieHubClusters" in resp.json()
+
+    q = captured["user_query"] or ""
+    assert "Sub-context Movie Hub — prior conversation" in q
+    assert "User: Which movies are scary?" in q
+    assert "Assistant:" in q and "Genre: Horror" in q
+    assert "Current user question:" in q
+    assert "Only psychological thrillers" in q
+    assert "Candidate Titles (movies currently shown in the hub" in q
 

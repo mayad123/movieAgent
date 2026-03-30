@@ -139,51 +139,35 @@ def test_build_similar_movie_clusters_uses_tmdb_results(monkeypatch):
         raising=False,
     )
 
-    # Stub urllib to return a deterministic TMDB /similar payload
-    class DummyResponse:
-        def __init__(self, payload: dict[str, Any]):
-            import json
+    similar_payload = {
+        "results": [
+            {
+                "id": 1,
+                "title": "Similar One",
+                "poster_path": "/one.jpg",
+                "release_date": "2010-01-01",
+            },
+            {
+                "id": 2,
+                "title": "Similar Two",
+                "poster_path": "/two.jpg",
+                "release_date": "2011-02-02",
+            },
+            {
+                "id": 3,
+                "title": "Similar Three",
+                "poster_path": "/three.jpg",
+                "release_date": "2012-03-03",
+            },
+        ]
+    }
 
-            self._payload = json.dumps(payload).encode("utf-8")
+    def fake_tmdb_json(url: str, token: str, **_kwargs: Any):  # noqa: ARG001
+        if "similar" in url:
+            return similar_payload
+        return None
 
-        def read(self) -> bytes:
-            return self._payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    def fake_urlopen(req, timeout=10.0):  # noqa: ARG001
-        payload = {
-            "results": [
-                {
-                    "id": 1,
-                    "title": "Similar One",
-                    "poster_path": "/one.jpg",
-                    "release_date": "2010-01-01",
-                },
-                {
-                    "id": 2,
-                    "title": "Similar Two",
-                    "poster_path": "/two.jpg",
-                    "release_date": "2011-02-02",
-                },
-                {
-                    "id": 3,
-                    "title": "Similar Three",
-                    "poster_path": "/three.jpg",
-                    "release_date": "2012-03-03",
-                },
-            ]
-        }
-        return DummyResponse(payload)
-
-    # Patch urllib at the global package level; media_enrichment imports
-    # `urllib.request` inside build_similar_movie_clusters, which resolves to
-    # this module.
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen, raising=False)
+    monkeypatch.setattr("integrations.tmdb.http_client.tmdb_request_json", fake_tmdb_json, raising=False)
 
     clusters = build_similar_movie_clusters(
         title="Inception",
@@ -256,4 +240,41 @@ def test_similar_movies_endpoint_shapes_clusters(monkeypatch):
     cluster = data["clusters"][0]
     assert cluster["kind"] == "genre"
     assert len(cluster["movies"]) == 2
+
+
+def test_similar_movies_non_numeric_path_passes_title_for_resolve(monkeypatch):
+    """Hub fallback may use a non-numeric path segment when TMDB id is unknown; title/year must reach build_similar_movie_clusters."""
+    captured: dict = {}
+
+    def fake_build(title, year=None, tmdb_id=None, media_type=None, max_results=None, **_kwargs):
+        captured["title"] = title
+        captured["year"] = year
+        captured["tmdb_id"] = tmdb_id
+        captured["media_type"] = media_type
+        return {
+            "clusters": [
+                {
+                    "kind": "genre",
+                    "label": "Similar by genre to Test",
+                    "movies": [],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "src.api.main.build_similar_movie_clusters",
+        fake_build,
+        raising=False,
+    )
+
+    from fastapi.testclient import TestClient
+    from src.api.main import app
+
+    client = TestClient(app)
+    resp = client.get("/api/movies/_/similar?title=Interstellar&year=2014&mediaType=movie")
+    assert resp.status_code == 200
+    assert captured.get("title") == "Interstellar"
+    assert captured.get("year") == 2014
+    assert captured.get("tmdb_id") is None
+    assert captured.get("media_type") == "movie"
 

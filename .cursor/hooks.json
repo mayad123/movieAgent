@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/run-related-tests",
+        "timeout": 300
+      },
+      {
+        "command": ".cursor/hooks/track-scoped-work",
+        "timeout": 60
+      }
+    ],
+    "afterTabFileEdit": [
+      {
+        "command": ".cursor/hooks/run-related-tests",
+        "timeout": 300
+      },
+      {
+        "command": ".cursor/hooks/track-scoped-work",
+        "timeout": 60
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "projects": [
+    {
+      "id": "0ae1b17bd7f244398f6494669062967b",
+      "name": "Horror Movies",
+      "description": null,
+      "contextFocus": null,
+      "createdAt": "2026-03-24T04:26:36.426440+00:00",
+      "updatedAt": "2026-03-25T04:58:17.544505+00:00",
+      "assets": [
+        {
+          "id": "0a61e6ae52c24058b826b00d294e3d6f",
+          "title": "Primer",
+          "posterImageUrl": "https://image.tmdb.org/t/p/w500/xEoq2WmDzpzxhkHEsmOYOg6BPg6.jpg",
+          "pageUrl": "https://www.themoviedb.org/movie/14337",
+          "pageId": null,
+          "conversationId": "conv_1774326400682_xy5ewd1",
+          "subConversationId": null,
+          "capturedAt": "2026-03-24T04:27:00.665767+00:00",
+          "storedRef": null
+        },
+        {
+          "id": "f0260324680e4f51b697331b3d142ab7",
+          "title": "Pan's Labyrinth",
+          "posterImageUrl": "https://image.tmdb.org/t/p/w500/z7xXihu5wHuSMWymq5VAulPVuvg.jpg",
+          "pageUrl": "https://www.themoviedb.org/movie/1417",
+          "pageId": null,
+          "conversationId": "conv_1774414627337_odh2kq8",
+          "subConversationId": "conv_1774414665104_mf97ve6",
+          "capturedAt": "2026-03-25T04:58:17.544395+00:00",
+          "storedRef": null
+        }
+      ]
+    }
+  ]
+}

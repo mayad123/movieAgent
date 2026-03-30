@@ -27,6 +27,7 @@
 2. **Follow the full-stack trace** — most features touch multiple layers
 3. **Use the checklist** at the end to verify completeness
 4. **Include the listed companion docs** as additional AI context
+5. **Plan documentation** — add or extend the relevant `docs/features/<area>/*.md` (and a row in [AI_CONTEXT.md § Navigate from `src/`](AI_CONTEXT.md#navigate-from-src-canonical-map) if you introduce a new package path)
 
 **Always also include:** [AI_CONTEXT.md](AI_CONTEXT.md) for the dependency chain map and system overview.
 

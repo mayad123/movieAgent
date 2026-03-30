@@ -56,6 +56,14 @@ def normalize_title(s: str) -> str:
         t = t[1:-1].strip()
     # Remove zero-width and other invisible
     t = re.sub(r"[\u200b-\u200d\ufeff]", "", t)
+    # If the title was extracted from a numbered list item, strip the list marker
+    # so posters never render "1. Title" as part of the actual title.
+    #
+    # Examples:
+    #   "1. Interstellar" -> "Interstellar"
+    #   "(1) Interstellar" -> "Interstellar"
+    #   "2) Inception" -> "Inception"
+    t = re.sub(r"^\s*(?:[-*•–◦]\s*)?\(?\s*\d+\s*\)?\s*[\.\)]\s*", "", t).strip()
     return t.strip()
 
 

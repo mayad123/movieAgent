@@ -1,0 +1,297 @@
+<svg width="960" height="600" viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" aria-label="CineMind Movie Hub — sub-context exploration with AI-curated similar film clusters">
+  <defs>
+    <!-- Hub card gradients -->
+    <linearGradient id="hg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c1c3a"/>
+      <stop offset="100%" stop-color="#2d1b4e"/>
+    </linearGradient>
+    <linearGradient id="hg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="hg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a0c0c"/>
+      <stop offset="100%" stop-color="#1a0606"/>
+    </linearGradient>
+    <linearGradient id="hg4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c1a0c"/>
+      <stop offset="100%" stop-color="#061006"/>
+    </linearGradient>
+    <linearGradient id="hg5" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#252525"/>
+      <stop offset="100%" stop-color="#181818"/>
+    </linearGradient>
+    <linearGradient id="hg6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#200820"/>
+      <stop offset="100%" stop-color="#140514"/>
+    </linearGradient>
+    <linearGradient id="hg7" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c1a1a"/>
+      <stop offset="100%" stop-color="#061010"/>
+    </linearGradient>
+    <linearGradient id="hg8" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a1212"/>
+      <stop offset="100%" stop-color="#1a0808"/>
+    </linearGradient>
+    <!-- Hero poster gradient (Inception) -->
+    <linearGradient id="hero" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0d0d20"/>
+    </linearGradient>
+    <!-- Card bottom overlay (transparent → dark) -->
+    <linearGradient id="cov" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.78)"/>
+    </linearGradient>
+    <!-- App clip -->
+    <clipPath id="app2"><rect width="960" height="600" rx="12"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#app2)">
+
+    <!-- ════════════════════════════
+         SIDEBAR
+         ════════════════════════════ -->
+    <rect width="196" height="600" fill="#f7f7f8"/>
+    <line x1="196" y1="0" x2="196" y2="600" stroke="#e5e7eb" stroke-width="1"/>
+
+    <text x="15" y="33" font-size="15" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">📁</text>
+    <rect x="44" y="12" width="136" height="29" rx="6" fill="#0d0d0d"/>
+    <text x="112" y="31" text-anchor="middle" font-size="12" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#ffffff">+ New chat</text>
+    <line x1="0" y1="52" x2="196" y2="52" stroke="#e5e7eb" stroke-width="1"/>
+
+    <text x="16" y="72" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">Conversations</text>
+
+    <rect x="8" y="80" width="180" height="34" rx="6" fill="#e5e7eb"/>
+    <text x="18" y="101" font-size="12.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#0d0d0d">Inception deep dive</text>
+
+    <text x="18" y="134" font-size="12.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Nolan filmography</text>
+    <text x="18" y="159" font-size="12.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Sci-fi picks</text>
+    <text x="18" y="184" font-size="12.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Best films of 2023</text>
+    <text x="18" y="209" font-size="12.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Award season picks</text>
+
+    <line x1="0" y1="540" x2="196" y2="540" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="16" y="564" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">Real Agent</text>
+    <rect x="136" y="551" width="42" height="22" rx="11" fill="#e5e7eb"/>
+    <circle cx="147" cy="562" r="9" fill="#9ca3af"/>
+
+
+    <!-- ════════════════════════════
+         MAIN CONTENT  (196 → 824)
+         ════════════════════════════ -->
+    <rect x="196" y="0" width="628" height="600" fill="#ffffff"/>
+
+    <!-- ── Sub-conversation header ── -->
+    <line x1="196" y1="52" x2="824" y2="52" stroke="#e5e7eb" stroke-width="1"/>
+
+    <!-- Back button -->
+    <text x="210" y="32" font-size="13" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">← Back</text>
+    <!-- Vertical separator -->
+    <line x1="256" y1="16" x2="256" y2="38" stroke="#e5e7eb" stroke-width="1"/>
+    <!-- Mini movie thumbnail in breadcrumb -->
+    <rect x="264" y="15" width="22" height="23" rx="4" fill="url(#hero)"/>
+    <circle cx="275" cy="26" r="6" fill="rgba(255,255,255,0.08)"/>
+    <!-- Breadcrumb title -->
+    <text x="294" y="32" font-size="13" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#0d0d0d">Inception</text>
+    <text x="348" y="32" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">· Movie Hub</text>
+    <!-- Sub-header actions -->
+    <text x="748" y="32" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">Rename</text>
+    <text x="803" y="32" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">Close</text>
+
+    <!-- ── Hub mini-hero: selected movie ── -->
+    <rect x="196" y="52" width="628" height="104" fill="#f9fafb"/>
+
+    <!-- Selected movie poster (small) -->
+    <rect x="220" y="62" width="56" height="80" rx="6" fill="url(#hero)"/>
+    <circle cx="248" cy="102" r="20" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <ellipse cx="248" cy="102" rx="16" ry="4" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>
+    <circle cx="248" cy="102" r="9" fill="rgba(255,255,255,0.06)"/>
+
+    <!-- Selected movie meta -->
+    <text x="288" y="86" font-size="16" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#0d0d0d">Inception</text>
+    <text x="288" y="105" font-size="12" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">2010 · Sci-Fi · Thriller · 148 min</text>
+    <text x="288" y="122" font-size="11.5" font-style="italic" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">Your mind is the scene of the crime.</text>
+
+    <!-- Reset hub button -->
+    <rect x="720" y="86" width="80" height="26" rx="5" fill="#ffffff" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="760" y="103" text-anchor="middle" font-size="11.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Reset hub</text>
+
+    <!-- Divider below hub header -->
+    <line x1="196" y1="156" x2="824" y2="156" stroke="#e5e7eb" stroke-width="1"/>
+
+
+    <!-- ════════════════════════════
+         CLUSTER 1 — Similar by genre  (156 → 296)
+         ════════════════════════════ -->
+    <text x="220" y="176" font-size="12" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Similar by genre</text>
+    <text x="316" y="176" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">· 5 films</text>
+
+    <!-- Card: Dark Knight  x=220 -->
+    <rect x="220" y="186" width="96" height="92" rx="6" fill="url(#hg1)"/>
+    <circle cx="268" cy="224" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="268" cy="224" r="14" fill="rgba(255,255,255,0.04)"/>
+    <path d="M254,219 Q268,208 282,219 Q275,225 268,222 Q261,225 254,219Z" fill="rgba(255,255,255,0.09)"/>
+    <rect x="220" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="228" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Dark Knight</text>
+    <text x="228" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2008</text>
+
+    <!-- Card: Interstellar  x=324 -->
+    <rect x="324" y="186" width="96" height="92" rx="6" fill="url(#hg2)"/>
+    <circle cx="372" cy="224" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <ellipse cx="372" cy="224" rx="20" ry="5" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+    <circle cx="372" cy="224" r="10" fill="rgba(255,255,255,0.04)"/>
+    <rect x="324" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="332" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Interstellar</text>
+    <text x="332" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2014</text>
+
+    <!-- Card: Tenet  x=428 -->
+    <rect x="428" y="186" width="96" height="92" rx="6" fill="url(#hg3)"/>
+    <circle cx="476" cy="224" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="476" cy="224" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="428" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="436" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Tenet</text>
+    <text x="436" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2020</text>
+
+    <!-- Card: Dunkirk  x=532 -->
+    <rect x="532" y="186" width="96" height="92" rx="6" fill="url(#hg4)"/>
+    <circle cx="580" cy="224" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="580" cy="224" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="532" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="540" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Dunkirk</text>
+    <text x="540" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2017</text>
+
+    <!-- Card: Memento  x=636 -->
+    <rect x="636" y="186" width="96" height="92" rx="6" fill="url(#hg5)"/>
+    <rect x="652" y="208" width="22" height="17" rx="2" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>
+    <rect x="648" y="214" width="22" height="17" rx="2" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <rect x="636" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="644" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Memento</text>
+    <text x="644" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2000</text>
+
+    <!-- Partial scrollable card  x=740 (right panel covers beyond x=824) -->
+    <rect x="740" y="186" width="96" height="92" rx="6" fill="url(#hg2)"/>
+    <circle cx="788" cy="224" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <rect x="740" y="246" width="96" height="32" fill="url(#cov)"/>
+    <text x="748" y="265" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Arrival</text>
+    <text x="748" y="276" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2016</text>
+
+
+    <!-- ════════════════════════════
+         CLUSTER 2 — Similar by tone  (296 → 436)
+         ════════════════════════════ -->
+    <line x1="220" y1="296" x2="808" y2="296" stroke="#f3f4f6" stroke-width="1"/>
+    <text x="220" y="318" font-size="12" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Similar by tone or theme</text>
+    <text x="366" y="318" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">· 4 films</text>
+
+    <!-- Card: Shutter Island  x=220 -->
+    <rect x="220" y="328" width="96" height="92" rx="6" fill="url(#hg6)"/>
+    <circle cx="268" cy="366" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="268" cy="366" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="220" y="388" width="96" height="32" fill="url(#cov)"/>
+    <text x="228" y="407" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Shutter Island</text>
+    <text x="228" y="418" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2010</text>
+
+    <!-- Card: Primer  x=324 -->
+    <rect x="324" y="328" width="96" height="92" rx="6" fill="url(#hg7)"/>
+    <circle cx="372" cy="366" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="372" cy="366" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="324" y="388" width="96" height="32" fill="url(#cov)"/>
+    <text x="332" y="407" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Primer</text>
+    <text x="332" y="418" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2004</text>
+
+    <!-- Card: Coherence  x=428 -->
+    <rect x="428" y="328" width="96" height="92" rx="6" fill="url(#hg1)"/>
+    <circle cx="476" cy="366" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="476" cy="366" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="428" y="388" width="96" height="32" fill="url(#cov)"/>
+    <text x="436" y="407" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Coherence</text>
+    <text x="436" y="418" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2013</text>
+
+    <!-- Card: Arrival  x=532 -->
+    <rect x="532" y="328" width="96" height="92" rx="6" fill="url(#hg2)"/>
+    <circle cx="580" cy="366" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <ellipse cx="580" cy="366" rx="20" ry="5" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+    <rect x="532" y="388" width="96" height="32" fill="url(#cov)"/>
+    <text x="540" y="407" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Arrival</text>
+    <text x="540" y="418" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2016</text>
+
+    <!-- Filter history label (shows AI-narrowed results) -->
+    <rect x="220" y="432" width="430" height="0" fill="none"/>
+    <text x="636" y="351" font-size="10.5" font-style="italic" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#c4c9d1">filtered: "only thrillers"</text>
+
+
+    <!-- ════════════════════════════
+         CLUSTER 3 — Similar by cast  (436 → 576)
+         ════════════════════════════ -->
+    <line x1="220" y1="436" x2="808" y2="436" stroke="#f3f4f6" stroke-width="1"/>
+    <text x="220" y="458" font-size="12" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Similar by cast or crew</text>
+    <text x="356" y="458" font-size="11" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">· 4 films</text>
+
+    <!-- Card: The Prestige  x=220 -->
+    <rect x="220" y="468" width="96" height="92" rx="6" fill="url(#hg8)"/>
+    <circle cx="268" cy="506" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="268" cy="506" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="220" y="528" width="96" height="32" fill="url(#cov)"/>
+    <text x="228" y="547" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">The Prestige</text>
+    <text x="228" y="558" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2006</text>
+
+    <!-- Card: Batman Begins  x=324 -->
+    <rect x="324" y="468" width="96" height="92" rx="6" fill="url(#hg1)"/>
+    <circle cx="372" cy="506" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <path d="M358,500 Q372,490 386,500 Q379,506 372,503 Q365,506 358,500Z" fill="rgba(255,255,255,0.09)"/>
+    <rect x="324" y="528" width="96" height="32" fill="url(#cov)"/>
+    <text x="332" y="547" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Batman Begins</text>
+    <text x="332" y="558" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2005</text>
+
+    <!-- Card: Insomnia  x=428 -->
+    <rect x="428" y="468" width="96" height="92" rx="6" fill="url(#hg7)"/>
+    <circle cx="476" cy="506" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+    <circle cx="476" cy="506" r="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="428" y="528" width="96" height="32" fill="url(#cov)"/>
+    <text x="436" y="547" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Insomnia</text>
+    <text x="436" y="558" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">2002</text>
+
+    <!-- Card: Following  x=532 -->
+    <rect x="532" y="468" width="96" height="92" rx="6" fill="url(#hg5)"/>
+    <rect x="548" y="490" width="20" height="16" rx="2" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>
+    <rect x="545" y="496" width="20" height="16" rx="2" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <rect x="532" y="528" width="96" height="32" fill="url(#cov)"/>
+    <text x="540" y="547" font-size="9.5" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.95)">Following</text>
+    <text x="540" y="558" font-size="8.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="rgba(255,255,255,0.60)">1998</text>
+
+    <!-- Filter history strip at bottom -->
+    <line x1="220" y1="576" x2="808" y2="576" stroke="#f3f4f6" stroke-width="1"/>
+    <text x="220" y="590" font-size="10.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">Filter history</text>
+    <rect x="281" y="580" width="120" height="16" rx="8" fill="#f3f4f6"/>
+    <text x="341" y="592" text-anchor="middle" font-size="9.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">only thrillers</text>
+    <rect x="409" y="580" width="168" height="16" rx="8" fill="#f3f4f6"/>
+    <text x="493" y="592" text-anchor="middle" font-size="9.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6b7280">remove films longer than 2h</text>
+
+
+    <!-- ════════════════════════════
+         RIGHT PANEL  (824 → 960)
+         ════════════════════════════ -->
+    <rect x="824" y="0" width="136" height="600" fill="#f9fafb"/>
+    <line x1="824" y1="0" x2="824" y2="600" stroke="#e5e7eb" stroke-width="1"/>
+
+    <text x="844" y="31" font-size="13" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#0d0d0d">Collections</text>
+    <text x="844" y="46" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">This Conversation</text>
+    <line x1="824" y1="56" x2="960" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+
+    <rect x="836" y="68" width="108" height="44" rx="6" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="846" y="89" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Nolan Films</text>
+    <text x="846" y="104" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">6 titles</text>
+
+    <rect x="836" y="122" width="108" height="44" rx="6" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="846" y="143" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Watchlist</text>
+    <text x="846" y="158" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">12 titles</text>
+
+    <rect x="836" y="176" width="108" height="44" rx="6" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="846" y="197" font-size="11.5" font-weight="500" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#374151">Award Season</text>
+    <text x="846" y="212" font-size="10.5" font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#9ca3af">8 titles</text>
+
+  </g>
+
+  <!-- App frame border -->
+  <rect width="960" height="600" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5"/>
+</svg>

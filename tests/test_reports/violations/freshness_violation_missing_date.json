@@ -14,7 +14,7 @@
   "violation_count": 1,
   "offending_text": "Dune is available on HBO Max and for rent on various platforms.",
   "fixed_text": null,
-  "repair_instruction": "CORRECTION REQUIRED: The previous response violated the response contract.\n\nVIOLATIONS:\n1. Missing freshness/timestamp language (required: 'as of [date]', 'currently', etc.)\n\nSTRICT REQUIREMENTS:\nLength: maximum 4 sentences or maximum 100 words. Be concise and direct.\nRequired elements: Provide the direct answer immediately (first sentence); Include current date/time context (e.g., 'as of [date]', 'currently', 'as of today').\nStructure: Use list format (numbered or bulleted).\nCitation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names.\nForbidden terms: Never use these terms in the response: \"Tier\", \"dataset\", \"Kaggle\", \"Tavily\", \"confidence framework\".\n\nPlease regenerate the response following ALL requirements above. Do not include any forbidden terms. Respect the length limits exactly.",
+  "repair_instruction": "CORRECTION REQUIRED: The previous response violated the response contract.\n\nVIOLATIONS:\n1. Missing freshness/timestamp language (required: 'as of [date]', 'currently', etc.)\n\nSTRICT REQUIREMENTS:\nLength: maximum 4 sentences or maximum 100 words. Be concise and direct.\nRequired elements: Provide the direct answer immediately (first sentence); Include current date/time context (e.g., 'as of [date]', 'currently', 'as of today').\nStructure: Use short paragraphs for explanations and bullet or numbered lists for multi-item outputs.\nCitation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names.\nForbidden terms: Never use these terms in the response: \"Tier\", \"dataset\", \"Kaggle\", \"Tavily\", \"confidence framework\".\nPlain text only: do not use markdown emphasis or dividers (no **, ***, __, or lines of only * or -). For lists use lines starting with 1. or 2. or with - .\n\nPlease regenerate the response following ALL requirements above. Do not include any forbidden terms. Respect the length limits exactly.",
   "kaggle": {
     "attempted": false,
     "used": false,
@@ -22,5 +22,5 @@
     "fallback_reason": null,
     "warnings": []
   },
-  "timestamp": "2026-03-11T17:53:31"
+  "timestamp": "2026-03-24T21:04:43"
 }

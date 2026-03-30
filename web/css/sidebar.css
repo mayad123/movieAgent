@@ -6,11 +6,11 @@
 .sidebar {
     width: 260px;
     min-width: 260px;
-    background: #f7f7f8;
-    border-right: 1px solid #e5e5e5;
+    background: var(--surface-sidebar);
+    border-right: 1px solid var(--border-hairline);
     display: flex;
     flex-direction: column;
-    transition: min-width 0.2s, width 0.2s;
+    transition: min-width var(--duration-normal), width var(--duration-normal);
     z-index: 10;
 }
 .sidebar.collapsed {
@@ -20,30 +20,49 @@
     pointer-events: none;
 }
 .sidebar-header {
-    padding: 12px 14px;
-    border-bottom: 1px solid #e5e5e5;
+    padding: var(--space-3) 14px;
+    border-bottom: 1px solid var(--border-hairline);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 52px;
+    min-height: var(--chrome-header-min-height);
 }
 .sidebar-header .new-chat {
-    font-size: 14px;
-    color: #0d0d0d;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
     background: transparent;
-    border: 1px solid #d1d5db;
-    padding: 8px 12px;
-    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     white-space: nowrap;
 }
-.sidebar-header .new-chat:hover { background: #eee; }
+.sidebar-header .new-chat:hover { background: var(--surface-row-hover); }
+.sidebar-header .projects-nav-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: var(--space-2);
+    font-size: var(--text-sm);
+    line-height: 1;
+}
+.sidebar-header .projects-nav-btn:hover { background: var(--surface-row-hover); }
+.sidebar-header .projects-nav-btn:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
 .conversation-list-label {
     padding: 6px 14px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #9ca3af;
+    font-size: var(--text-3xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-subtle);
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
@@ -55,9 +74,9 @@
 .conversation-list:empty::after {
     content: 'No conversations';
     display: block;
-    padding: 12px 14px;
-    font-size: 12px;
-    color: #9ca3af;
+    padding: var(--space-3) 14px;
+    font-size: var(--text-2xs);
+    color: var(--text-subtle);
 }
 .conversation-group {
     margin-bottom: 2px;
@@ -66,32 +85,33 @@
     margin-bottom: 0;
 }
 .conversation-item {
-    padding: 8px 14px;
-    font-size: 13px;
-    color: #374151;
+    padding: var(--space-2) 14px;
+    font-size: var(--text-xs);
+    color: var(--text-body-tone);
     cursor: pointer;
-    border-radius: 6px;
-    margin: 2px 8px;
+    border-radius: var(--radius-md);
+    margin: 2px var(--space-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: background-color var(--duration-fast) var(--ease-standard);
 }
 .conversation-item-sub {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     padding: 6px 14px 6px 20px;
-    font-size: 12px;
-    color: #6b7280;
+    font-size: var(--text-2xs);
+    color: var(--text-muted);
     min-height: 0;
 }
 .conversation-item-sub .conversation-item-sub-thumb {
     flex-shrink: 0;
     width: 20px;
     height: 30px;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     overflow: hidden;
-    background: #e5e7eb;
+    background: var(--surface-placeholder);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -103,7 +123,7 @@
     display: block;
 }
 .conversation-item-sub .conversation-item-sub-thumb-icon {
-    color: #9ca3af;
+    color: var(--text-subtle);
 }
 .conversation-item-sub .conversation-item-sub-thumb-icon svg {
     display: block;
@@ -117,13 +137,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.conversation-item:hover { background: #eee; }
-.conversation-item.active { background: #e5e7eb; font-weight: 500; }
-.conversation-item-sub.active { color: #374151; }
+.conversation-item:hover { background: var(--surface-row-hover); }
+.conversation-item.active { background: var(--surface-active); font-weight: var(--font-weight-medium); }
+.conversation-item-sub.active { color: var(--text-body-tone); }
 
 .sidebar-agent-toggle-wrap {
     padding: 0.75rem 0.875rem;
-    border-top: 1px solid #e5e7e5;
+    border-top: 1px solid var(--border-default);
     flex-shrink: 0;
 }
 .sidebar-agent-toggle {
@@ -131,8 +151,8 @@
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
-    font-size: 0.8125rem;
-    color: #374151;
+    font-size: var(--text-xs);
+    color: var(--text-body-tone);
 }
 .sidebar-agent-toggle-label {
     flex: 1;
@@ -148,9 +168,9 @@
     flex-shrink: 0;
     width: 2.25rem;
     height: 1.25rem;
-    background: #d1d5db;
+    background: var(--border-strong);
     border-radius: 1.25rem;
-    transition: background 0.2s ease;
+    transition: background var(--duration-normal) ease;
 }
 .sidebar-agent-toggle-slider::after {
     content: '';
@@ -158,25 +178,25 @@
     width: 1rem;
     height: 1rem;
     margin: 0.125rem;
-    background: #fff;
+    background: var(--surface-page);
     border-radius: 50%;
-    box-shadow: 0 0.0625rem 0.125rem rgba(0,0,0,0.2);
-    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-toggle-raised);
+    transition: transform var(--duration-normal) ease;
 }
 .sidebar-agent-toggle-input:checked + .sidebar-agent-toggle-slider {
-    background: #4b5563;
+    background: var(--accent-toggle-track-on);
 }
 .sidebar-agent-toggle-input:checked + .sidebar-agent-toggle-slider::after {
     transform: translateX(1.125rem);
 }
 .sidebar-agent-toggle-input:focus-visible + .sidebar-agent-toggle-slider {
-    outline: 2px solid #4b5563;
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
 .sidebar-agent-toggle-hint {
     display: block;
-    font-size: 0.6875rem;
-    color: #9ca3af;
+    font-size: var(--text-3xs);
+    color: var(--text-subtle);
     margin-top: 0.25rem;
     line-height: 1.2;
 }
@@ -188,32 +208,32 @@
     transform: translateY(-50%);
     width: 18px;
     height: 40px;
-    background: rgba(247, 247, 248, 0.55);
-    border: 1px solid rgba(229, 229, 229, 0.6);
+    background: var(--surface-panel-glaze);
+    border: 1px solid var(--border-glass);
     border-left: none;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: var(--text-3xs);
     color: rgba(107, 114, 128, 0.85);
     z-index: 30;
-    transition: left 0.2s, box-shadow 0.2s, background 0.2s, color 0.2s, border-color 0.2s;
+    transition: left var(--duration-normal), box-shadow var(--duration-normal), background var(--duration-normal), color var(--duration-normal), border-color var(--duration-normal);
 }
 /* Sidebar closed: tab is black */
 .sidebar.collapsed ~ .sidebar-toggle {
-    background: #0d0d0d;
-    border-color: #0d0d0d;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
     color: rgba(255, 255, 255, 0.9);
 }
 .sidebar.collapsed ~ .sidebar-toggle:hover {
-    background: #262626;
-    border-color: #262626;
-    color: #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    background: var(--accent-primary-hover);
+    border-color: var(--accent-primary-hover);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-toggle-raised);
 }
-.sidebar-toggle:hover { background: rgba(238, 238, 238, 0.9); color: #0d0d0d; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.sidebar-toggle:hover { background: rgba(238, 238, 238, 0.9); color: var(--text-primary); box-shadow: var(--shadow-toggle-soft); }
 .sidebar:not(.collapsed) ~ .sidebar-toggle { left: 260px; }
 .sidebar.collapsed ~ .sidebar-toggle { left: 0; }
 .sidebar.collapsed ~ .sidebar-toggle .toggle-icon::before { content: '›'; }

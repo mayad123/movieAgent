@@ -46,6 +46,49 @@ This is the base context. Depending on the task, **also include one of these:**
 3. **Check the dependency chain** to understand what else might be affected
 4. **Follow the best practices** linked for the type of change
 
+### Workflow for AI assistants (refine & ship safely)
+
+| Step | Action |
+|------|--------|
+| 1 | **Classify** the task: bugfix vs behavior change vs new surface (use [CHANGE_FEATURE_CONTEXT.md](CHANGE_FEATURE_CONTEXT.md) or [ADD_FEATURE_CONTEXT.md](ADD_FEATURE_CONTEXT.md)). |
+| 2 | **Locate** the package in [`Navigate from src/`](#navigate-from-src-canonical-map) and open **one** primary feature doc. |
+| 3 | **Read** that doc’s *Module Map*, *Change Impact Guide*, and *Test Coverage* before editing code. |
+| 4 | **Edit** `src/` (and `web/` if UI); keep contracts in `src/schemas/` aligned with [API Server](features/api/API_SERVER.md) when exposed over HTTP. |
+| 5 | **Update docs** in the same PR when behavior/contracts/env vars change (see [Keeping documentation in sync](CHANGE_FEATURE_CONTEXT.md#verification-checklist-after-any-change)). |
+| 6 | **Run** tests listed in the feature doc + [`practices/code-review/WHEN_TO_RUN_TESTS.md`](practices/code-review/WHEN_TO_RUN_TESTS.md) for the layer you touched. |
+| 7 | If the area is regression-prone (hub, WTW, movie details), skim [errors/README.md](errors/README.md). |
+
+### Documentation scope (living docs)
+
+- **Authoritative behavior** for a package = its **`docs/features/<area>/*.md`** file, not this routing guide alone.
+- **Planning snapshot** (what’s delivered / next / risks): [planning/SUMMARY.md](planning/SUMMARY.md).
+- **Recent cross-cutting work** (Movie Hub API, hub history, extraction/prompting/media doc passes, web hub UX) is summarized there and in each feature doc’s change-impact sections.
+
+---
+
+## Navigate from `src/` (canonical map)
+
+Use this table to pick **one** primary document and the **usual** test area. When in doubt, start with [features/README.md](features/README.md#documentation-index).
+
+| `src/` path | Primary documentation | Typical tests / notes |
+|-------------|----------------------|------------------------|
+| `src/api/` | [API Server](features/api/API_SERVER.md) | `tests/unit/integrations/`, `tests/smoke/`, contract tests under `tests/contract/` |
+| `src/config/`, `src/schemas/` | [Configuration](features/config/CONFIGURATION.md) | Schema/unit tests for API models; update API doc when `schemas/api.py` changes |
+| `src/cinemind/agent/` | [Agent Core](features/agent/AGENT_CORE.md) | `tests/integration/`, `tests/unit/…` as linked from agent doc |
+| `src/cinemind/extraction/` | [Extraction Pipeline](features/extraction/EXTRACTION_PIPELINE.md) | `tests/unit/extraction/` |
+| `src/cinemind/infrastructure/` | [Infrastructure](features/infrastructure/INFRASTRUCTURE.md) | `tests/unit/` under infrastructure |
+| `src/cinemind/llm/` | [LLM Client](features/llm/LLM_CLIENT.md) | Unit tests + fakes |
+| `src/cinemind/media/` | [Media Enrichment](features/media/MEDIA_ENRICHMENT.md) | `tests/unit/media/` (hub + enrichment + alignment) |
+| `src/cinemind/planning/` | [Request Planning](features/planning/REQUEST_PLANNING.md) | `tests/unit/planning/` |
+| `src/cinemind/prompting/` | [Prompt Pipeline](features/prompting/PROMPT_PIPELINE.md) | `tests/unit/prompting/`, `tests/contract/` |
+| `src/cinemind/search/` | [Search Engine](features/search/SEARCH_ENGINE.md) | `tests/unit/search/` (if present) / agent scenarios |
+| `src/cinemind/verification/` | [Fact Verification](features/verification/FACT_VERIFICATION.md) | Unit + integration per doc |
+| `src/integrations/` | [External Integrations](features/integrations/EXTERNAL_INTEGRATIONS.md) | `tests/unit/integrations/` |
+| `src/workflows/` | [Workflows](features/workflows/WORKFLOWS.md) | Workflow + smoke tests |
+| `web/` | [Web Frontend](features/web/WEB_FRONTEND.md) · [Web index](features/web/README.md) | Manual + smoke; JS modules listed in web docs |
+
+**Non–`src/` but important:** `tests/test_reports/` artifacts — see [features/README — Code Review Playbook](features/README.md#code-review-playbook-coding--tests--errors) and [ERROR_TRACKING](practices/code-review/ERROR_TRACKING.md).
+
 ---
 
 ## Change Routing Table
@@ -74,11 +117,14 @@ This is the base context. Depending on the task, **also include one of these:**
 
 | Specific Change | Primary Doc | Also Include | Best Practice |
 |----------------|-------------|-------------|---------------|
-| Chat messages / rendering | [Web Frontend](features/web/WEB_FRONTEND.md) | [API Server](features/api/API_SERVER.md) | [Frontend Patterns](practices/FRONTEND_PATTERNS.md) |
+| Chat messages / rendering | [Web Frontend](features/web/WEB_FRONTEND.md) | [Prompt Pipeline](features/prompting/PROMPT_PIPELINE.md) (plain-text replies; no `**`/Markdown in assistant output) | [Frontend Patterns](practices/FRONTEND_PATTERNS.md) |
 | Poster cards / media display | [Web Frontend](features/web/WEB_FRONTEND.md) | [Media Enrichment](features/media/MEDIA_ENRICHMENT.md) | [Frontend Patterns](practices/FRONTEND_PATTERNS.md), [CSS Style Guide](practices/CSS_STYLE_GUIDE.md) |
 | Where-to-Watch feature | [Web Frontend](features/web/WEB_FRONTEND.md) | [External Integrations](features/integrations/EXTERNAL_INTEGRATIONS.md) | [Frontend Patterns](practices/FRONTEND_PATTERNS.md) |
 | Layout / sidebar / panels | [Web Frontend](features/web/WEB_FRONTEND.md) | — | [CSS Style Guide](practices/CSS_STYLE_GUIDE.md) |
+| Sub-conversation / movie hub (sub-context) | [Sub-context Page](features/web/WEB_SUB_CONTEXT_PAGE.md) | [API Server](features/api/API_SERVER.md) (`POST /query`: hub marker + `hubConversationHistory`), [Media Enrichment](features/media/MEDIA_ENRICHMENT.md) (hub parsing/filtering wired from API), [errors/MOVIE_HUB…](errors/MOVIE_HUB_AND_SUBCONTEXT.md), [Web docs index](features/web/README.md) | [Frontend Patterns](practices/FRONTEND_PATTERNS.md) |
 | Styling / themes | [Web Frontend](features/web/WEB_FRONTEND.md) | — | [CSS Style Guide](practices/CSS_STYLE_GUIDE.md) |
+
+**Sub-context duplicate guidance:** if a change affects movie-hub clustering/ranking, include `WEB_SUB_CONTEXT_PAGE.md` duplicate-handling contract and preserve unique movie results (canonical key priority: `tmdbId` → normalized `title+year`).
 
 ### "I want to change media / poster behavior"
 
@@ -269,6 +315,7 @@ docs/
 ├── ADD_FEATURE_CONTEXT.md     ← Include when adding new features
 ├── CHANGE_FEATURE_CONTEXT.md  ← Include when modifying existing code
 ├── README.md                  ← Documentation index
+├── planning/                  ← Project planning (scope, roadmap, requirements, backlog)
 ├── getting-started/           ← Setup & deployment
 ├── features/                  ← Feature documentation
 │   ├── README.md              ← System architecture + feature index
