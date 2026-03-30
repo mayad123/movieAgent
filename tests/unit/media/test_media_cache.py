@@ -1,4 +1,5 @@
 """Unit tests for media cache (enrich and TMDB poster TTL cache)."""
+
 import sys
 from pathlib import Path
 

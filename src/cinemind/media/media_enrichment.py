@@ -57,6 +57,7 @@ def _get_tmdb_token_best_effort() -> str:
 
     try:
         from config import get_tmdb_access_token, is_tmdb_enabled
+
         if is_tmdb_enabled():
             return (get_tmdb_access_token() or "").strip()
     except Exception:
@@ -90,6 +91,7 @@ def _build_strip_from_tmdb(
     debug: dict[str, Any] = {POSTER_DEBUG_TMDB_ATTEMPTED: False, POSTER_DEBUG_PROVIDER: None}
     try:
         from config import get_tmdb_access_token
+
         if not token or not (get_tmdb_access_token() or "").strip():
             return strip, debug
     except Exception:
@@ -115,6 +117,7 @@ def _build_strip_from_tmdb(
             poster_url = cached_url
     if not poster_url and (tr.poster_path or "").strip():
         from integrations.tmdb.image_config import SIZE_POSTER_GALLERY, build_image_url, get_config
+
         cfg = get_config(token)
         poster_url = build_image_url((tr.poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
         if cache is not None and poster_url:
@@ -142,6 +145,7 @@ def _build_candidate_from_tmdb(c: Any, token: str = "") -> dict[str, Any]:
     if (poster_path or "").strip() and token:
         try:
             from integrations.tmdb.image_config import SIZE_POSTER_GALLERY, build_image_url, get_config
+
             cfg = get_config(token)
             url = build_image_url((poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
             if url:
@@ -312,7 +316,9 @@ def enrich(
                 media_strip, poster_debug = _build_strip_from_tmdb(tr, search_text, token, cache=media_cache)
                 if not media_strip.get("movie_title"):
                     continue
-                payloads = [_build_candidate_from_tmdb(c, token) for c in (tr.candidates or [])[:MAX_GALLERY_CANDIDATES]]
+                payloads = [
+                    _build_candidate_from_tmdb(c, token) for c in (tr.candidates or [])[:MAX_GALLERY_CANDIDATES]
+                ]
                 if not payloads:
                     payloads = [dict(media_strip)]
                 # Invariant: hero must not appear in did_you_mean; exclude strip from candidates.
@@ -333,6 +339,7 @@ def enrich(
     if title:
         try:
             from integrations.tmdb.resolver import resolve_movie
+
             tr = resolve_movie(title, year=None, access_token=token)
             if tr.status != "not_found":
                 fallback_strip, poster_debug = _build_strip_from_tmdb(tr, title, token, cache=media_cache)
@@ -368,7 +375,11 @@ def enrich_batch(
     media_cache = cache or get_default_media_cache()
     token = _get_tmdb_token_best_effort()
     if not token:
-        return [{"movie_title": (t or "").strip(), "page_url": "#"} for t in (titles or [])[:max_titles] if (t or "").strip()]
+        return [
+            {"movie_title": (t or "").strip(), "page_url": "#"}
+            for t in (titles or [])[:max_titles]
+            if (t or "").strip()
+        ]
 
     seen: set[str] = set()
     unique: list[str] = []
@@ -434,11 +445,13 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
     gallery_label = (result.get("media_gallery_label") or "").strip()
 
     if strip and (strip.get("movie_title") or "").strip():
-        sections.append({
-            "type": SECTION_PRIMARY_MOVIE,
-            "title": "This movie",
-            "items": [_movie_card_item(strip)],
-        })
+        sections.append(
+            {
+                "type": SECTION_PRIMARY_MOVIE,
+                "title": "This movie",
+                "items": [_movie_card_item(strip)],
+            }
+        )
 
     # Invariant: hero must not appear in did_you_mean; filter again at build time.
     candidates = [c for c in raw_candidates if not _same_movie_as_strip(c, strip)]
@@ -449,11 +462,17 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
         else:
             section_type = SECTION_MOVIE_LIST
             title = gallery_label or "Similar movies"
-        sections.append({
-            "type": section_type,
-            "title": title,
-            "items": [_movie_card_item(c) for c in candidates if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
-        })
+        sections.append(
+            {
+                "type": section_type,
+                "title": title,
+                "items": [
+                    _movie_card_item(c)
+                    for c in candidates
+                    if (c.get("movie_title") or c.get("displayTitle") or "").strip()
+                ],
+            }
+        )
 
     # Surface relatedMovies alongside attachments for Movie Hub and Movie Details.
     # When we have movie_list-style candidates, reuse them as relatedMovies.
@@ -541,6 +560,7 @@ def attach_media_to_result(
     response_text = (result.get("response") or result.get("answer") or "").strip()
     if response_text:
         from ..extraction.response_movie_extractor import extract_titles_for_enrichment
+
         extracted = extract_titles_for_enrichment(response_text)
         if len(extracted) > 1:
             _attach_batch(extracted, result, gallery_label, cache)

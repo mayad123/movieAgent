@@ -38,7 +38,7 @@ def _normalize_enrich_key(query: str) -> str:
 def _normalize_tmdb_poster_key(title: str, year: int | None) -> str:
     t = (title or "").strip().lower()
     t = " ".join(t.split())
-    y = (str(year) if year is not None else "")
+    y = str(year) if year is not None else ""
     return f"{t}|{y}"
 
 

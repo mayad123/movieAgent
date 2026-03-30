@@ -2,6 +2,7 @@
 Tool planning and routing based on freshness requirements.
 Decides which tools to call (or skip) before making any API calls.
 """
+
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ToolAction(Enum):
     """Actions for tool usage."""
+
     SKIP = "skip"  # Don't call this tool
     ALLOW = "allow"  # Allow this tool
     PREFER = "prefer"  # Prefer this tool over others
@@ -23,6 +25,7 @@ class ToolPlan:
     """
     Plan for which tools to use based on freshness and intent.
     """
+
     use_tavily: bool = False  # Should we call Tavily/web search?
     use_imdb_lookup: bool = False  # Should we use IMDb API/dataset?
     use_wiki_lookup: bool = False  # Should we use Wikipedia/Wikidata?
@@ -37,7 +40,9 @@ class ToolPlan:
     fallback_used: bool = False  # Whether fallback search was used
     fallback_provider: str | None = None  # Name of fallback provider (e.g., "duckduckgo")
     override_used: bool = False  # Whether tool plan decision was overridden
-    override_reason: str | None = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
+    override_reason: str | None = (
+        None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -54,7 +59,7 @@ class ToolPlan:
             "fallback_used": self.fallback_used,
             "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
-            "override_reason": self.override_reason
+            "override_reason": self.override_reason,
         }
 
 
@@ -75,10 +80,17 @@ class ToolPlanner:
             current_year: Current year (defaults to 2024 if not provided)
         """
         from datetime import datetime
+
         self.current_year = current_year or datetime.now().year
 
-    def determine_freshness(self, intent: str, freshness_signal: bool, entities: dict[str, list[str]],
-                           candidate_year: int | None = None, mentioned_year: int | None = None) -> tuple[bool, float, str]:
+    def determine_freshness(
+        self,
+        intent: str,
+        freshness_signal: bool,
+        entities: dict[str, list[str]],
+        candidate_year: int | None = None,
+        mentioned_year: int | None = None,
+    ) -> tuple[bool, float, str]:
         """
         Determine final freshness requirement based on intent + entity year + signal.
 
@@ -147,9 +159,15 @@ class ToolPlanner:
         logger.info(f"Freshness decision: {reason} - need_freshness={freshness_signal}")
         return (freshness_signal, ttl_hours, reason)
 
-    def plan_tools(self, intent: str, need_freshness: bool, freshness_reason: str | None,
-                   entities: dict[str, list[str]], candidate_year: int | None = None,
-                   requires_disambiguation: bool = False) -> ToolPlan:
+    def plan_tools(
+        self,
+        intent: str,
+        need_freshness: bool,
+        freshness_reason: str | None,
+        entities: dict[str, list[str]],
+        candidate_year: int | None = None,
+        requires_disambiguation: bool = False,
+    ) -> ToolPlan:
         """
         Create tool plan based on freshness requirements.
 
@@ -189,7 +207,9 @@ class ToolPlanner:
                 use_cache=True,  # Always check cache first
                 use_structured_db=True,  # Try structured DB first
                 freshness_reason=freshness_reason or "stable metadata",
-                skip_reason="no freshness needed, using cache/structured sources" if not requires_disambiguation else "only if disambiguation needed"
+                skip_reason="no freshness needed, using cache/structured sources"
+                if not requires_disambiguation
+                else "only if disambiguation needed",
             )
             tool_plan.tool_plan_skip_tavily = not requires_disambiguation
             return tool_plan
@@ -202,13 +222,14 @@ class ToolPlanner:
                 use_cache=True,  # Check cache first (may be stale)
                 use_structured_db=False,  # Skip structured DB for volatile data
                 freshness_reason=freshness_reason or "time-volatile intent",
-                skip_reason=None
+                skip_reason=None,
             )
             tool_plan.tool_plan_skip_tavily = False
             return tool_plan
 
-    def should_skip_tavily(self, tool_plan: ToolPlan, cache_hit: bool = False,
-                           need_freshness: bool = False) -> tuple[bool, str]:
+    def should_skip_tavily(
+        self, tool_plan: ToolPlan, cache_hit: bool = False, need_freshness: bool = False
+    ) -> tuple[bool, str]:
         """
         Final decision: Should we skip Tavily?
 
@@ -232,6 +253,7 @@ class ToolPlanner:
 
         # Default: follow tool plan
         should_skip = not tool_plan.use_tavily
-        reason = tool_plan.skip_reason or ("stable intent, no Tavily needed" if should_skip else "tool plan allows Tavily")
+        reason = tool_plan.skip_reason or (
+            "stable intent, no Tavily needed" if should_skip else "tool plan allows Tavily"
+        )
         return (should_skip, reason)
-

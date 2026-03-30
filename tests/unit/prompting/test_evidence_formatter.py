@@ -3,6 +3,7 @@ Unit tests for EvidenceFormatter.
 
 Tests deduplication, truncation, and source label formatting.
 """
+
 import sys
 from pathlib import Path
 
@@ -19,16 +20,11 @@ class TestEvidenceFormatterFixtures:
     """Fixture builder helpers for creating test evidence."""
 
     @staticmethod
-    def create_result(title: str, url: str, content: str, source: str = "unknown",
-                     tier: str = "UNKNOWN", year: int | None = None) -> dict:
+    def create_result(
+        title: str, url: str, content: str, source: str = "unknown", tier: str = "UNKNOWN", year: int | None = None
+    ) -> dict:
         """Create a single search result dictionary."""
-        result = {
-            "title": title,
-            "url": url,
-            "content": content,
-            "source": source,
-            "tier": tier
-        }
+        result = {"title": title, "url": url, "content": content, "source": source, "tier": tier}
         if year:
             result["year"] = year
         return result
@@ -57,17 +53,14 @@ class TestDeduplication:
         """Test that items with same URL are deduplicated."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/",
-                "Content about The Matrix",
-                source="kaggle_imdb"
+                "The Matrix", "https://www.imdb.com/title/tt0133093/", "Content about The Matrix", source="kaggle_imdb"
             ),
             TestEvidenceFormatterFixtures.create_result(
                 "The Matrix (1999)",
                 "https://www.imdb.com/title/tt0133093/",
                 "Different content about The Matrix",
-                source="tavily"
-            )
+                source="tavily",
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -81,19 +74,11 @@ class TestDeduplication:
         """Test that items with same title and year are deduplicated."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://example.com/matrix1",
-                "Content 1",
-                source="kaggle_imdb",
-                year=1999
+                "The Matrix", "https://example.com/matrix1", "Content 1", source="kaggle_imdb", year=1999
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://example.com/matrix2",
-                "Content 2",
-                source="tavily",
-                year=1999
-            )
+                "The Matrix", "https://example.com/matrix2", "Content 2", source="tavily", year=1999
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -107,17 +92,11 @@ class TestDeduplication:
         """Test that URLs with query parameters are normalized for deduplication."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/?ref_=fn_al_tt_1",
-                "Content 1",
-                source="kaggle_imdb"
+                "The Matrix", "https://www.imdb.com/title/tt0133093/?ref_=fn_al_tt_1", "Content 1", source="kaggle_imdb"
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/",
-                "Content 2",
-                source="tavily"
-            )
+                "The Matrix", "https://www.imdb.com/title/tt0133093/", "Content 2", source="tavily"
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -135,15 +114,15 @@ class TestDeduplication:
                 "https://www.imdb.com/title/tt0133093/",
                 "Content about The Matrix",
                 source="kaggle_imdb",
-                year=1999
+                year=1999,
             ),
             TestEvidenceFormatterFixtures.create_result(
                 "Inception",
                 "https://www.imdb.com/title/tt1375666/",
                 "Content about Inception",
                 source="kaggle_imdb",
-                year=2010
-            )
+                year=2010,
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -169,10 +148,7 @@ class TestTruncation:
         long_content = TestEvidenceFormatterFixtures.create_long_content(500)
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "Test Movie",
-                "https://example.com",
-                long_content,
-                source="kaggle_imdb"
+                "Test Movie", "https://example.com", long_content, source="kaggle_imdb"
             )
         ]
 
@@ -190,10 +166,7 @@ class TestTruncation:
         content = "First sentence. Second sentence. Third sentence. " * 10
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "Test Movie",
-                "https://example.com",
-                content,
-                source="kaggle_imdb"
+                "Test Movie", "https://example.com", content, source="kaggle_imdb"
             )
         ]
 
@@ -203,18 +176,16 @@ class TestTruncation:
         # Should truncate at sentence boundary (ends with period)
         content_section = formatted.split("Content:\n")[1].split("\n")[0]
         # Should end with period or ellipsis
-        assert content_section.endswith(".") or content_section.endswith("..."), \
+        assert content_section.endswith(".") or content_section.endswith("..."), (
             f"Content should end at sentence boundary, got: {content_section[-10:]}"
+        )
 
     def test_no_truncation_for_short_content(self, formatter):
         """Test that short content is not truncated."""
         short_content = "This is short content."
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "Test Movie",
-                "https://example.com",
-                short_content,
-                source="kaggle_imdb"
+                "Test Movie", "https://example.com", short_content, source="kaggle_imdb"
             )
         ]
 
@@ -231,10 +202,7 @@ class TestTruncation:
         content = "word " * 200  # Long content without periods
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "Test Movie",
-                "https://example.com",
-                content,
-                source="kaggle_imdb"
+                "Test Movie", "https://example.com", content, source="kaggle_imdb"
             )
         ]
 
@@ -243,8 +211,9 @@ class TestTruncation:
 
         # Should truncate at word boundary (ends with space or ellipsis)
         content_section = formatted.split("Content:\n")[1].split("\n")[0]
-        assert content_section.endswith("...") or content_section.endswith(" "), \
+        assert content_section.endswith("...") or content_section.endswith(" "), (
             f"Content should end at word boundary, got: {content_section[-10:]}"
+        )
 
 
 class TestSourceLabelFormatting:
@@ -263,15 +232,11 @@ class TestSourceLabelFormatting:
                 "https://www.imdb.com/title/tt0133093/",
                 "Content about The Matrix",
                 source="kaggle_imdb",
-                tier="A"
+                tier="A",
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://en.wikipedia.org/wiki/The_Matrix",
-                "Wikipedia content",
-                source="tavily",
-                tier="B"
-            )
+                "The Matrix", "https://en.wikipedia.org/wiki/The_Matrix", "Wikipedia content", source="tavily", tier="B"
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -289,11 +254,7 @@ class TestSourceLabelFormatting:
         """Test that kaggle_imdb source is labeled as 'Structured IMDb dataset'."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/",
-                "Content",
-                source="kaggle_imdb",
-                tier="A"
+                "The Matrix", "https://www.imdb.com/title/tt0133093/", "Content", source="kaggle_imdb", tier="A"
             )
         ]
 
@@ -301,8 +262,9 @@ class TestSourceLabelFormatting:
         formatted = formatter.format(bundle)
 
         # Should show friendly label
-        assert "Structured IMDb dataset" in formatted or "IMDb" in formatted, \
+        assert "Structured IMDb dataset" in formatted or "IMDb" in formatted, (
             f"Should show friendly label, got: {formatted}"
+        )
         assert "kaggle_imdb" not in formatted, "Should not show technical source name"
 
     def test_imdb_com_label(self, formatter):
@@ -313,7 +275,7 @@ class TestSourceLabelFormatting:
                 "https://www.imdb.com/title/tt0133093/",
                 "Content",
                 source="tavily",  # Tavily source, but URL infers IMDb
-                tier="A"
+                tier="A",
             )
         ]
 
@@ -328,11 +290,7 @@ class TestSourceLabelFormatting:
         """Test that wikipedia.org URLs are labeled as 'Wikipedia'."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://en.wikipedia.org/wiki/The_Matrix",
-                "Content",
-                source="tavily",
-                tier="B"
+                "The Matrix", "https://en.wikipedia.org/wiki/The_Matrix", "Content", source="tavily", tier="B"
             )
         ]
 
@@ -347,26 +305,14 @@ class TestSourceLabelFormatting:
         """Test formatting with mixed sources: imdb.com, wikipedia.org, kaggle_imdb."""
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/",
-                "IMDb content",
-                source="kaggle_imdb",
-                tier="A"
+                "The Matrix", "https://www.imdb.com/title/tt0133093/", "IMDb content", source="kaggle_imdb", tier="A"
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://en.wikipedia.org/wiki/The_Matrix",
-                "Wikipedia content",
-                source="tavily",
-                tier="B"
+                "The Matrix", "https://en.wikipedia.org/wiki/The_Matrix", "Wikipedia content", source="tavily", tier="B"
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://www.imdb.com/title/tt0133093/",
-                "Another IMDb content",
-                source="imdb",
-                tier="A"
-            )
+                "The Matrix", "https://www.imdb.com/title/tt0133093/", "Another IMDb content", source="imdb", tier="A"
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -390,7 +336,7 @@ class TestSourceLabelFormatting:
                 "https://www.rottentomatoes.com/m/the_matrix",
                 "Rotten Tomatoes content",
                 source="unknown",
-                tier="C"
+                tier="C",
             )
         ]
 
@@ -424,15 +370,15 @@ class TestInsideOutExclusion:
                 "https://www.imdb.com/title/tt2096673/",
                 "Inside Out is a 2015 animated film directed by Pete Docter.",
                 source="kaggle_imdb",
-                year=2015
+                year=2015,
             ),
             TestEvidenceFormatterFixtures.create_result(
                 "Inside Out 2 (2024)",
                 "https://www.imdb.com/title/tt1464335/",
                 "Inside Out 2 is a 2024 animated film sequel.",
                 source="kaggle_imdb",
-                year=2024
-            )
+                year=2024,
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -460,7 +406,7 @@ class TestInsideOutExclusion:
                 "https://www.imdb.com/title/tt2096673/",
                 "Inside Out is a 2015 animated film directed by Pete Docter.",
                 source="kaggle_imdb",
-                year=2015
+                year=2015,
             )
         ]
 
@@ -488,7 +434,7 @@ class TestInsideOutExclusion:
                 "https://www.imdb.com/title/tt2096673/",
                 "Inside Out is a 2015 animated film directed by Pete Docter.",
                 source="kaggle_imdb",
-                year=2015
+                year=2015,
             )
         ]
 
@@ -526,14 +472,11 @@ class TestEvidenceFormatterEdgeCases:
                 "The Matrix",
                 "https://example.com",
                 "",  # Empty content
-                source="kaggle_imdb"
+                source="kaggle_imdb",
             ),
             TestEvidenceFormatterFixtures.create_result(
-                "Inception",
-                "https://example.com",
-                "Has content",
-                source="kaggle_imdb"
-            )
+                "Inception", "https://example.com", "Has content", source="kaggle_imdb"
+            ),
         ]
 
         bundle = TestEvidenceFormatterFixtures.create_evidence_bundle(results)
@@ -549,10 +492,7 @@ class TestEvidenceFormatterEdgeCases:
 
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                f"Movie {i}",
-                f"https://example.com/movie{i}",
-                f"Content {i}",
-                source="kaggle_imdb"
+                f"Movie {i}", f"https://example.com/movie{i}", f"Content {i}", source="kaggle_imdb"
             )
             for i in range(5)
         ]
@@ -567,6 +507,7 @@ class TestEvidenceFormatterEdgeCases:
 
     def test_verified_facts_included(self, formatter):
         """Test that verified facts are included in output."""
+
         # Create a mock verified fact object
         class MockVerifiedFact:
             def __init__(self, value, verified=True):
@@ -575,16 +516,12 @@ class TestEvidenceFormatterEdgeCases:
 
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://example.com",
-                "Content",
-                source="kaggle_imdb"
+                "The Matrix", "https://example.com", "Content", source="kaggle_imdb"
             )
         ]
 
         bundle = EvidenceBundle(
-            search_results=results,
-            verified_facts=[MockVerifiedFact("The Matrix was released in 1999")]
+            search_results=results, verified_facts=[MockVerifiedFact("The Matrix was released in 1999")]
         )
 
         formatted = formatter.format(bundle)
@@ -595,6 +532,7 @@ class TestEvidenceFormatterEdgeCases:
 
     def test_verified_facts_limit(self, formatter):
         """Test that verified facts are limited to top 5."""
+
         class MockVerifiedFact:
             def __init__(self, value, verified=True):
                 self.value = value
@@ -602,16 +540,12 @@ class TestEvidenceFormatterEdgeCases:
 
         results = [
             TestEvidenceFormatterFixtures.create_result(
-                "The Matrix",
-                "https://example.com",
-                "Content",
-                source="kaggle_imdb"
+                "The Matrix", "https://example.com", "Content", source="kaggle_imdb"
             )
         ]
 
         bundle = EvidenceBundle(
-            search_results=results,
-            verified_facts=[MockVerifiedFact(f"Fact {i}") for i in range(10)]
+            search_results=results, verified_facts=[MockVerifiedFact(f"Fact {i}") for i in range(10)]
         )
 
         formatted = formatter.format(bundle)
@@ -622,4 +556,3 @@ class TestEvidenceFormatterEdgeCases:
         # Should only show first 5
         fact_count = formatted.count("- Fact")
         assert fact_count <= 5, f"Should limit to 5 facts, got {fact_count}"
-

@@ -9,14 +9,17 @@ The backend is the final authority. If REAL_AGENT is requested but
 required environment variables are missing, we fall back to PLAYGROUND
 and log a warning.
 """
+
 import logging
 import os
 from enum import StrEnum
 
 logger = logging.getLogger(__name__)
 
+
 class AgentMode(StrEnum):
     """Execution mode: playground (Wikipedia-only) or full agent."""
+
     PLAYGROUND = "PLAYGROUND"
     REAL_AGENT = "REAL_AGENT"
 

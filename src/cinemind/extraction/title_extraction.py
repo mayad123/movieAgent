@@ -5,6 +5,7 @@ Extracts candidate movie titles from user queries using pattern-based rules.
 Supports: direct titles, "movies like X", "show me images for X", etc.
 Used by media_enrichment to decide what to resolve and display.
 """
+
 from __future__ import annotations
 
 import re
@@ -129,7 +130,12 @@ def extract_movie_titles(user_query: str) -> TitleExtractionResult:
             if len(rest) < 2:
                 break
             # Determine intent from prefix; prefer extracted title(s) over full query
-            if "movies like" in prefix or "films like" in prefix or "similar to" in prefix or "similar movies" in prefix:
+            if (
+                "movies like" in prefix
+                or "films like" in prefix
+                or "similar to" in prefix
+                or "similar movies" in prefix
+            ):
                 reason = f"prefix:{prefix.strip().replace(' ', '_')}"
                 intent = "seed_for_similar"
                 candidates = [rest]

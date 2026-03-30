@@ -2,6 +2,7 @@
 Request planning and routing contract for CineMind.
 Defines a canonical RequestPlan that every downstream step follows.
 """
+
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ResponseFormat(Enum):
     """Response format requirements."""
+
     LIST = "list"  # Ordered list of items
     SHORT_FACT = "short_fact"  # Single fact or short answer
     COMPARISON = "comparison"  # Side-by-side comparison
@@ -22,6 +24,7 @@ class ResponseFormat(Enum):
 
 class ToolType(Enum):
     """Types of tools that can be called."""
+
     SEARCH = "search"  # General web search (Tavily)
     IMDB_LOOKUP = "imdb_lookup"  # Direct IMDb API/dataset lookup
     WIKI_LOOKUP = "wiki_lookup"  # Wikipedia/Wikidata lookup
@@ -35,13 +38,16 @@ class RequestPlan:
     Canonical request plan that defines the routing contract.
     This is the single source of truth for how to handle a request.
     """
+
     # Core classification
     intent: str  # e.g., "info", "recs", "filmography_overlap", "release-date"
     request_type: str  # Classified type: "info", "recs", "comparison", etc.
 
     # Entities
     entities: list[str] = field(default_factory=list)  # Movie/person names (backward compatibility - flat list)
-    entities_typed: dict[str, list[str]] = field(default_factory=lambda: {"movies": [], "people": []})  # Typed entities: {"movies": [...], "people": [...]}
+    entities_typed: dict[str, list[str]] = field(
+        default_factory=lambda: {"movies": [], "people": []}
+    )  # Typed entities: {"movies": [...], "people": [...]}
     entity_years: dict[str, int | None] = field(default_factory=dict)  # Optional year disambiguation
 
     # Freshness requirements
@@ -209,6 +215,7 @@ class RequestPlanner:
 
         if not request_type:
             from .request_type_router import get_request_type_router
+
             router = get_request_type_router()
             router_result = router.route(prompt)
             router_used = True
@@ -218,7 +225,9 @@ class RequestPlanner:
             # Use inferred type if confidence is high enough, otherwise default to "info"
             if router.should_use_inferred_type(router_result):
                 request_type = router_result.request_type
-                logger.info(f"RequestTypeRouter inferred '{request_type}' (confidence: {router_confidence:.2f}, rule: {router_rule_hit})")
+                logger.info(
+                    f"RequestTypeRouter inferred '{request_type}' (confidence: {router_confidence:.2f}, rule: {router_rule_hit})"
+                )
             else:
                 request_type = "info"  # Safe default for low confidence
                 logger.info(f"RequestTypeRouter confidence too low ({router_confidence:.2f}), defaulting to 'info'")
@@ -232,7 +241,9 @@ class RequestPlanner:
         )
 
         # Step 3: Extract typed entities (already extracted in structured_intent)
-        entities_typed = structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
+        entities_typed = (
+            structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
+        )
         if "movies" not in entities_typed:
             entities_typed["movies"] = []
         if "people" not in entities_typed:
@@ -243,21 +254,24 @@ class RequestPlanner:
         freshness_signal = structured_intent.need_freshness  # Use intent extractor's freshness determination
 
         # Get entity year for freshness decision
-        candidate_year = structured_intent.candidate_year if hasattr(structured_intent, 'candidate_year') else None
-        mentioned_year = structured_intent.mentioned_year if hasattr(structured_intent, 'mentioned_year') else None
+        candidate_year = structured_intent.candidate_year if hasattr(structured_intent, "candidate_year") else None
+        mentioned_year = structured_intent.mentioned_year if hasattr(structured_intent, "mentioned_year") else None
 
         # Use ToolPlanner to make final freshness decision
         # ToolPlanner uses intent + signal + entity year to determine final freshness
         from .tool_plan import ToolPlanner
+
         tool_planner = ToolPlanner()
         need_freshness, ttl_hours, freshness_reason = tool_planner.determine_freshness(
             structured_intent.intent,
             freshness_signal,
             entities_typed,
             candidate_year=candidate_year,
-            mentioned_year=mentioned_year
+            mentioned_year=mentioned_year,
         )
-        logger.info(f"Freshness decision: signal={freshness_signal}, final={need_freshness}, reason={freshness_reason}, ttl={ttl_hours}h")
+        logger.info(
+            f"Freshness decision: signal={freshness_signal}, final={need_freshness}, reason={freshness_reason}, ttl={ttl_hours}h"
+        )
 
         # Step 5: Determine source policy (based on request_type and intent)
         allowed_tiers, require_tier_a, reject_tier_c = self._determine_source_policy(
@@ -269,9 +283,7 @@ class RequestPlanner:
 
         # Step 7: Determine response format (based on intent, request_type, and constraints)
         response_format = self._determine_response_format(
-            structured_intent.intent,
-            request_type,
-            structured_intent.constraints
+            structured_intent.intent, request_type, structured_intent.constraints
         )
 
         # Step 8: Extract entity years (entities_typed already extracted in Step 3)
@@ -302,7 +314,7 @@ class RequestPlanner:
         rule_hit = router_rule_hit if router_used else None
 
         # Determine llm_used (true if intent extraction used LLM)
-        llm_used = (extraction_mode == "llm")
+        llm_used = extraction_mode == "llm"
 
         return RequestPlan(
             intent=structured_intent.intent,
@@ -324,7 +336,7 @@ class RequestPlanner:
             llm_used=llm_used,  # Whether LLM was used in intent extraction
             original_query=prompt,
             intent_extraction_mode=extraction_mode,  # "rules" or "llm"
-            intent_confidence=intent_confidence  # Confidence from intent extraction (0-1)
+            intent_confidence=intent_confidence,  # Confidence from intent extraction (0-1)
         )
 
     def _determine_source_policy(self, request_type: str, intent: str) -> tuple[list[str], bool, bool]:
@@ -367,8 +379,7 @@ class RequestPlanner:
         else:
             return [ToolType.SEARCH]
 
-    def _determine_response_format(self, intent: str, request_type: str,
-                                   constraints: dict[str, Any]) -> ResponseFormat:
+    def _determine_response_format(self, intent: str, request_type: str, constraints: dict[str, Any]) -> ResponseFormat:
         """Determine response format based on intent and constraints."""
         # Check constraints first
         if constraints.get("format") == "list":
@@ -393,6 +404,7 @@ class RequestPlanner:
     def _extract_entity_years(self, prompt: str, entities: list[str]) -> dict[str, int | None]:
         """Extract years associated with entities."""
         import re
+
         entity_years = {}
 
         # Find years in prompt
@@ -409,11 +421,10 @@ class RequestPlanner:
             entity_pos = prompt_lower.find(entity_lower)
             if entity_pos != -1:
                 # Look for year within 50 chars of entity
-                context = prompt[max(0, entity_pos - 50):entity_pos + len(entity) + 50]
+                context = prompt[max(0, entity_pos - 50) : entity_pos + len(entity) + 50]
                 year_matches = re.findall(year_pattern, context)
                 if year_matches:
                     # Use the first year found
                     entity_years[entity] = int(year_matches[0])
 
         return entity_years
-

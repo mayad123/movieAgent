@@ -6,6 +6,7 @@ Allows selecting:
 - Specific prompt versions (multiple or all)
 - Run combinations of tests x versions
 """
+
 import asyncio
 import json
 import sys
@@ -173,7 +174,7 @@ async def run_test_combination(
     verbose: bool = False,
     parallel: bool = False,
     max_concurrent: int = 3,
-    skip_confirmation: bool = False
+    skip_confirmation: bool = False,
 ) -> dict:
     """
     Run tests with all combinations of test_cases x prompt_versions.
@@ -199,7 +200,7 @@ async def run_test_combination(
 
     if not skip_confirmation:
         response = input("\nProceed with test run? (yes/no): ").strip().lower()
-        if response not in ['yes', 'y']:
+        if response not in ["yes", "y"]:
             print("Test run cancelled.")
             return None
 
@@ -212,9 +213,9 @@ async def run_test_combination(
 
     try:
         for version_idx, version in enumerate(prompt_versions, 1):
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print(f"[{version_idx}/{len(prompt_versions)}] Testing Prompt Version: {version}")
-            print(f"{'='*80}")
+            print(f"{'=' * 80}")
 
             # Update config to use this version
             config.SYSTEM_PROMPT = get_prompt_version(version)
@@ -224,6 +225,7 @@ async def run_test_combination(
 
             if parallel:
                 from parallel_runner import run_test_suite_parallel
+
                 report = await run_test_suite_parallel(
                     test_cases, evaluator, max_concurrent=max_concurrent, verbose=verbose
                 )
@@ -231,17 +233,17 @@ async def run_test_combination(
                 report = await run_test_suite_real_apis(test_cases, evaluator, verbose)
 
             # Add version metadata
-            report['prompt_version'] = version
-            report['prompt_text'] = get_prompt_version(version)
+            report["prompt_version"] = version
+            report["prompt_text"] = get_prompt_version(version)
 
             results[version] = report
 
             # Print summary for this version
-            summary = report['summary']
+            summary = report["summary"]
             print(f"\n{version} Results:")
             print(f"  Pass Rate: {summary['pass_rate']:.1%} ({summary['passed']}/{summary['total_tests']})")
             print(f"  Avg Time: {summary['avg_execution_time_ms']:.2f}ms")
-            if summary['failed'] > 0:
+            if summary["failed"] > 0:
                 print(f"  Failed: {summary['failed']}")
 
     finally:
@@ -267,7 +269,7 @@ def save_results(results: dict, output_dir: str | None = None) -> Path:
     # Save individual version results
     for version, report in results.items():
         filename = output_dir / f"{version}_results.json"
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(report, f, indent=2)
 
     # Create combined summary
@@ -275,7 +277,7 @@ def save_results(results: dict, output_dir: str | None = None) -> Path:
         "timestamp": datetime.now().isoformat(),
         "test_count": len(results[next(iter(results.keys()))]["results"]) if results else 0,
         "versions": {},
-        "comparison": {}
+        "comparison": {},
     }
 
     # Collect stats per version
@@ -285,21 +287,18 @@ def save_results(results: dict, output_dir: str | None = None) -> Path:
             "passed": report["summary"]["passed"],
             "failed": report["summary"]["failed"],
             "avg_time_ms": report["summary"]["avg_execution_time_ms"],
-            "total_tests": report["summary"]["total_tests"]
+            "total_tests": report["summary"]["total_tests"],
         }
 
     # Find best version
     if results:
-        best_version = max(
-            results.keys(),
-            key=lambda v: results[v]["summary"]["pass_rate"]
-        )
+        best_version = max(results.keys(), key=lambda v: results[v]["summary"]["pass_rate"])
         summary["comparison"]["best_version"] = best_version
         summary["comparison"]["best_pass_rate"] = results[best_version]["summary"]["pass_rate"]
 
     # Save summary
     summary_file = output_dir / "summary.json"
-    with open(summary_file, 'w') as f:
+    with open(summary_file, "w") as f:
         json.dump(summary, f, indent=2)
 
     return output_dir
@@ -326,13 +325,10 @@ def print_final_summary(results: dict):
         print(f"  Avg Time: {summary['avg_execution_time_ms']:.2f}ms")
 
     # Best version
-    best_version = max(
-        results.keys(),
-        key=lambda v: results[v]["summary"]["pass_rate"]
-    )
+    best_version = max(results.keys(), key=lambda v: results[v]["summary"]["pass_rate"])
     best_rate = results[best_version]["summary"]["pass_rate"]
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Best Version: {best_version} ({best_rate:.1%} pass rate)")
     print("=" * 80)
 
@@ -363,8 +359,8 @@ async def run_interactive_mode():
 
     # Additional options
     print("\nAdditional Options:")
-    verbose = input("Verbose output? (y/n, default: n): ").strip().lower() == 'y'
-    parallel = input("Parallel execution? (y/n, default: n): ").strip().lower() == 'y'
+    verbose = input("Verbose output? (y/n, default: n): ").strip().lower() == "y"
+    parallel = input("Parallel execution? (y/n, default: n): ").strip().lower() == "y"
     max_concurrent = 3
     if parallel:
         try:
@@ -379,7 +375,7 @@ async def run_interactive_mode():
         verbose=verbose,
         parallel=parallel,
         max_concurrent=max_concurrent,
-        skip_confirmation=False
+        skip_confirmation=False,
     )
 
     if results:
@@ -411,50 +407,27 @@ Examples:
 
   # Command-line mode - all tests, specific versions, parallel execution
   python tests/test_runner_interactive.py --tests all --versions v1,v4 --parallel --max-concurrent 5
-        """
+        """,
     )
 
     parser.add_argument(
-        '--tests',
+        "--tests",
         type=str,
         default=None,
-        help='Test cases to run: comma-separated names, suite names, "suite:name", or "all"'
+        help='Test cases to run: comma-separated names, suite names, "suite:name", or "all"',
     )
     parser.add_argument(
-        '--versions',
-        type=str,
-        default=None,
-        help='Prompt versions to test: comma-separated names or "all"'
+        "--versions", type=str, default=None, help='Prompt versions to test: comma-separated names or "all"'
     )
     parser.add_argument(
-        '--output',
-        type=str,
-        default=None,
-        help='Output directory for results (default: auto-generated with timestamp)'
+        "--output", type=str, default=None, help="Output directory for results (default: auto-generated with timestamp)"
     )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument("--parallel", action="store_true", help="Run tests in parallel")
     parser.add_argument(
-        '--verbose',
-        '-v',
-        action='store_true',
-        help='Verbose output'
+        "--max-concurrent", type=int, default=3, help="Max concurrent tests when using --parallel (default: 3)"
     )
-    parser.add_argument(
-        '--parallel',
-        action='store_true',
-        help='Run tests in parallel'
-    )
-    parser.add_argument(
-        '--max-concurrent',
-        type=int,
-        default=3,
-        help='Max concurrent tests when using --parallel (default: 3)'
-    )
-    parser.add_argument(
-        '--yes',
-        '-y',
-        action='store_true',
-        help='Skip confirmation prompt'
-    )
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
     args = parser.parse_args()
 
@@ -480,14 +453,16 @@ Examples:
         print(f"\nSelected {len(test_cases)} test case(s) and {len(prompt_versions)} prompt version(s)")
 
         # Run tests
-        results = asyncio.run(run_test_combination(
-            test_cases=test_cases,
-            prompt_versions=prompt_versions,
-            verbose=args.verbose,
-            parallel=args.parallel,
-            max_concurrent=args.max_concurrent,
-            skip_confirmation=args.yes
-        ))
+        results = asyncio.run(
+            run_test_combination(
+                test_cases=test_cases,
+                prompt_versions=prompt_versions,
+                verbose=args.verbose,
+                parallel=args.parallel,
+                max_concurrent=args.max_concurrent,
+                skip_confirmation=args.yes,
+            )
+        )
 
         if results:
             # Save results
@@ -502,4 +477,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

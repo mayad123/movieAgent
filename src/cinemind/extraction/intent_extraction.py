@@ -2,6 +2,7 @@
 Structured intent extraction for CineMind.
 Converts natural language queries into structured intent + entities + constraints.
 """
+
 import json
 import logging
 import re
@@ -14,19 +15,24 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StructuredIntent:
     """Structured representation of user intent."""
+
     intent: str  # e.g., "filmography_overlap", "director_info", "release_date"
     entities: dict[str, list[str]]  # Typed entities: {"movies": [...], "people": [...]}
     constraints: dict[str, Any]  # Constraints like min_count, order_by, format
     original_query: str
     confidence: float = 1.0
     requires_disambiguation: bool = False  # True if title is ambiguous (e.g., "Crash", "Glory")
-    candidate_year: int | None = None  # Optional year for disambiguation ONLY (must be None if requires_disambiguation is False)
+    candidate_year: int | None = (
+        None  # Optional year for disambiguation ONLY (must be None if requires_disambiguation is False)
+    )
     mentioned_year: int | None = None  # Any year mentioned in query (for awards, etc.), even when not ambiguous
     need_freshness: bool = False  # Whether query needs up-to-date data
     freshness_reason: str | None = None  # Reason for freshness requirement
     freshness_ttl_hours: float | None = None  # Suggested TTL in hours
     needs_clarification: bool = False  # True if query is too ambiguous/vague and needs user clarification
-    slots: dict[str, str | None] | None = None  # Award slots: {"award_body": str|null, "award_category": str|null, "award_year_basis": "ceremony_year"|"release_year"|"ambiguous"|null}
+    slots: dict[str, str | None] | None = (
+        None  # Award slots: {"award_body": str|null, "award_category": str|null, "award_year_basis": "ceremony_year"|"release_year"|"ambiguous"|null}
+    )
 
     def __post_init__(self) -> None:
         """Normalize entities to typed format and validate constraints."""
@@ -58,11 +64,7 @@ class StructuredIntent:
 
         # Ensure slots always exists with proper structure (backward compatibility)
         if self.slots is None:
-            self.slots = {
-                "award_body": None,
-                "award_category": None,
-                "award_year_basis": None
-            }
+            self.slots = {"award_body": None, "award_category": None, "award_year_basis": None}
         else:
             # Validate slots structure
             if not isinstance(self.slots, dict):
@@ -222,7 +224,7 @@ class IntentExtractor:
             freshness_reason=freshness_reason,
             freshness_ttl_hours=freshness_ttl_hours,
             needs_clarification=False,
-            slots=slots
+            slots=slots,
         )
 
     def _assess_rule_based_confidence(self, intent: StructuredIntent, query: str) -> tuple[float, bool]:
@@ -323,7 +325,10 @@ class IntentExtractor:
         original_people_count = len(intent.entities["people"])
         intent.entities["movies"] = self._filter_entities_by_stoplist(intent.entities["movies"])
         intent.entities["people"] = self._filter_entities_by_stoplist(intent.entities["people"])
-        if len(intent.entities["movies"]) < original_movie_count or len(intent.entities["people"]) < original_people_count:
+        if (
+            len(intent.entities["movies"]) < original_movie_count
+            or len(intent.entities["people"]) < original_people_count
+        ):
             warnings.append("Filtered entities using stoplist (removed interrogatives/helper verbs)")
 
         # Validate slots structure
@@ -344,7 +349,9 @@ class IntentExtractor:
             # Validate award_year_basis enum
             valid_year_basis = {"ceremony_year", "release_year", "ambiguous", None}
             if intent.slots["award_year_basis"] not in valid_year_basis:
-                warnings.append(f"Corrected: invalid award_year_basis '{intent.slots['award_year_basis']}', set to None")
+                warnings.append(
+                    f"Corrected: invalid award_year_basis '{intent.slots['award_year_basis']}', set to None"
+                )
                 intent.slots["award_year_basis"] = None
 
             # If award query detected and year present but basis missing, compute it with rules
@@ -359,15 +366,21 @@ class IntentExtractor:
                 is_oscars_like = intent.slots.get("award_body") == "Academy Awards"
 
                 # Check for explicit "films released in YEAR" / "movies released in YEAR" / "from releases in YEAR"
-                if re.search(r"\b(films?|movies?)\s+released\s+in\s+(19\d{2}|20\d{2})\b", query_lower) or \
-                   re.search(r"\bfrom\s+releases?\s+in\s+(19\d{2}|20\d{2})\b", query_lower):
+                if re.search(r"\b(films?|movies?)\s+released\s+in\s+(19\d{2}|20\d{2})\b", query_lower) or re.search(
+                    r"\bfrom\s+releases?\s+in\s+(19\d{2}|20\d{2})\b", query_lower
+                ):
                     intent.slots["award_year_basis"] = "release_year"
                 # Check for "Best Picture of YEAR" (ambiguous phrasing)
-                elif re.search(r"\b(best\s+\w+)\s+of\s+(19\d{2}|20\d{2})\b", query_lower) or \
-                     re.search(r"\b(best\s+\w+)\s+for\s+(19\d{2}|20\d{2})\b", query_lower):
+                elif re.search(r"\b(best\s+\w+)\s+of\s+(19\d{2}|20\d{2})\b", query_lower) or re.search(
+                    r"\b(best\s+\w+)\s+for\s+(19\d{2}|20\d{2})\b", query_lower
+                ):
                     intent.slots["award_year_basis"] = "ambiguous"
                 # Check for Oscars-like query with "in YEAR" → ceremony_year
-                elif (is_oscars_like and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower)) or is_oscars_like or (intent.slots.get("award_body") and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower)):
+                elif (
+                    (is_oscars_like and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower))
+                    or is_oscars_like
+                    or (intent.slots.get("award_body") and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower))
+                ):
                     intent.slots["award_year_basis"] = "ceremony_year"
                 # Otherwise, if award query has year but unclear, mark as ambiguous
                 else:
@@ -383,8 +396,15 @@ class IntentExtractor:
 
         # Validate intent is one of known types
         valid_intents = {
-            "filmography_overlap", "director_info", "release_date", "cast_info",
-            "comparison", "recommendation", "general_info", "fact_check", "spoiler_info"
+            "filmography_overlap",
+            "director_info",
+            "release_date",
+            "cast_info",
+            "comparison",
+            "recommendation",
+            "general_info",
+            "fact_check",
+            "spoiler_info",
         }
         if intent.intent not in valid_intents:
             warnings.append(f"Corrected: invalid intent '{intent.intent}', set to 'general_info'")
@@ -393,11 +413,7 @@ class IntentExtractor:
         return intent, warnings
 
     async def extract_smart(
-        self,
-        query: str,
-        client: Any = None,
-        request_type: str = "info",
-        force_llm: bool = False
+        self, query: str, client: Any = None, request_type: str = "info", force_llm: bool = False
     ) -> tuple[StructuredIntent, str, float]:
         """
         Smart routing: try rule-based extraction first, use LLM only if needed.
@@ -458,7 +474,9 @@ class IntentExtractor:
             # If LLM extraction has low confidence or validation found issues, mark for clarification
             if llm_intent.confidence < 0.6 or len(warnings) > 2:
                 llm_intent.needs_clarification = True
-                logger.info(f"Marking intent for clarification (confidence: {llm_intent.confidence:.2f}, warnings: {len(warnings)})")
+                logger.info(
+                    f"Marking intent for clarification (confidence: {llm_intent.confidence:.2f}, warnings: {len(warnings)})"
+                )
 
             return (llm_intent, "llm", llm_intent.confidence)
 
@@ -525,18 +543,77 @@ class IntentExtractor:
         """
         return {
             # Interrogatives
-            "who", "what", "when", "where", "why", "how",
+            "who",
+            "what",
+            "when",
+            "where",
+            "why",
+            "how",
             # Helper verbs / common verbs
-            "is", "was", "were", "are", "do", "did", "does", "can", "could", "would", "should",
-            "has", "have", "had", "will", "shall", "may", "might", "must",
+            "is",
+            "was",
+            "were",
+            "are",
+            "do",
+            "did",
+            "does",
+            "can",
+            "could",
+            "would",
+            "should",
+            "has",
+            "have",
+            "had",
+            "will",
+            "shall",
+            "may",
+            "might",
+            "must",
             # Common verbs in movie queries (optional but recommended)
-            "directed", "director", "played", "actor", "cast", "starring", "stars", "featured",
-            "filmed", "filming", "released", "release", "came", "come",
+            "directed",
+            "director",
+            "played",
+            "actor",
+            "cast",
+            "starring",
+            "stars",
+            "featured",
+            "filmed",
+            "filming",
+            "released",
+            "release",
+            "came",
+            "come",
             # Common function words
-            "the", "and", "or", "but", "for", "with", "from", "to", "in", "on", "at", "by",
-            "of", "a", "an", "as", "this", "that", "these", "those",
+            "the",
+            "and",
+            "or",
+            "but",
+            "for",
+            "with",
+            "from",
+            "to",
+            "in",
+            "on",
+            "at",
+            "by",
+            "of",
+            "a",
+            "an",
+            "as",
+            "this",
+            "that",
+            "these",
+            "those",
             # Other common false positives
-            "best", "worst", "top", "movie", "movies", "film", "films", "about"
+            "best",
+            "worst",
+            "top",
+            "movie",
+            "movies",
+            "film",
+            "films",
+            "about",
         }
 
     def _filter_entities_by_stoplist(self, entities: list[str]) -> list[str]:
@@ -637,10 +714,7 @@ class IntentExtractor:
             (requires_disambiguation: bool, candidate_year: Optional[int])
         """
         # Common ambiguous movie titles (single word, common English words)
-        ambiguous_titles = {
-            "crash", "glory", "it", "heat", "rush", "prisoners", "alien",
-            "gravity", "focus", "drive"
-        }
+        ambiguous_titles = {"crash", "glory", "it", "heat", "rush", "prisoners", "alien", "gravity", "focus", "drive"}
 
         movies = typed_entities.get("movies", [])
         for movie in movies:
@@ -681,7 +755,7 @@ class IntentExtractor:
             "director's cut coming out": "upcoming release",
             "new trailer": "recent content",
             "as of today": "current status",
-            "as of this week": "recent status"
+            "as of this week": "recent status",
         }
 
         for trigger, reason in freshness_triggers.items():
@@ -710,7 +784,7 @@ class IntentExtractor:
             "cast_info": "cast for released films is stable",
             "filmography_overlap": "collaborations are stable",
             "general_info": "synopsis/themes/genre are stable",
-            "comparison": "comparisons between older films are stable"
+            "comparison": "comparisons between older films are stable",
         }
 
         if intent in stable_intents:
@@ -720,7 +794,9 @@ class IntentExtractor:
         # (We'll check movie age later as a second gate)
         if intent == "release_date" or request_type == "release-date":
             # Check if query mentions "out yet" or "when does it release" (upcoming)
-            if any(phrase in query.lower() for phrase in ["out yet", "when does it release", "when will", "coming out"]):
+            if any(
+                phrase in query.lower() for phrase in ["out yet", "when does it release", "when will", "coming out"]
+            ):
                 return (True, "release status for upcoming films")
             # Otherwise, it's asking about past release date (stable)
             return (False, "release date for released films is stable")
@@ -730,7 +806,7 @@ class IntentExtractor:
             "release_status": "release status changes",
             "casting_news": "casting news is time-sensitive",
             "awards_current_year": "awards change annually",
-            "where_to_watch": "availability changes constantly"
+            "where_to_watch": "availability changes constantly",
         }
 
         if intent in volatile_intents:
@@ -759,11 +835,7 @@ class IntentExtractor:
             Dict with award_body, award_category, award_year_basis (all nullable)
         """
         query_lower = query.lower()
-        slots = {
-            "award_body": None,
-            "award_category": None,
-            "award_year_basis": None
-        }
+        slots = {"award_body": None, "award_category": None, "award_year_basis": None}
 
         # Award body keywords mapping
         award_body_patterns = {
@@ -774,7 +846,7 @@ class IntentExtractor:
             "Cannes": [r"\bcannes\b"],
             "Venice": [r"\bvenice.*film festival\b", r"\bvenice\b"],
             "Berlin": [r"\bberlin.*film festival\b", r"\bberlin\b"],
-            "SAG": [r"\bsag award(s)?\b", r"\bscreen actors guild\b"]
+            "SAG": [r"\bsag award(s)?\b", r"\bscreen actors guild\b"],
         }
 
         # Detect award body
@@ -805,7 +877,7 @@ class IntentExtractor:
             "Best Film": [r"\bbest film\b"],
             "Best Foreign Film": [r"\bbest foreign film\b"],
             "Best Animated Feature": [r"\bbest animated feature\b"],
-            "Best Documentary": [r"\bbest documentary\b"]
+            "Best Documentary": [r"\bbest documentary\b"],
         }
 
         # Detect award category
@@ -821,10 +893,17 @@ class IntentExtractor:
         if not slots["award_body"] and slots["award_category"]:
             # Common Oscar categories
             oscar_categories = {
-                "Best Picture", "Best Actor", "Best Actress", "Best Director",
-                "Best Supporting Actor", "Best Supporting Actress",
-                "Best Original Screenplay", "Best Adapted Screenplay", "Best Screenplay",
-                "Best Cinematography", "Best Film"
+                "Best Picture",
+                "Best Actor",
+                "Best Actress",
+                "Best Director",
+                "Best Supporting Actor",
+                "Best Supporting Actress",
+                "Best Original Screenplay",
+                "Best Adapted Screenplay",
+                "Best Screenplay",
+                "Best Cinematography",
+                "Best Film",
             }
             if slots["award_category"] in oscar_categories:
                 slots["award_body"] = "Academy Awards"
@@ -836,15 +915,21 @@ class IntentExtractor:
 
         if is_award_query and has_year:
             # Check for explicit "films released in YEAR" / "movies released in YEAR" / "from releases in YEAR"
-            if re.search(r"\b(films?|movies?)\s+released\s+in\s+(19\d{2}|20\d{2})\b", query_lower) or \
-               re.search(r"\bfrom\s+releases?\s+in\s+(19\d{2}|20\d{2})\b", query_lower):
+            if re.search(r"\b(films?|movies?)\s+released\s+in\s+(19\d{2}|20\d{2})\b", query_lower) or re.search(
+                r"\bfrom\s+releases?\s+in\s+(19\d{2}|20\d{2})\b", query_lower
+            ):
                 slots["award_year_basis"] = "release_year"
             # Check for "Best Picture of YEAR" (ambiguous phrasing)
-            elif re.search(r"\b(best\s+\w+)\s+of\s+(19\d{2}|20\d{2})\b", query_lower) or \
-                 re.search(r"\b(best\s+\w+)\s+for\s+(19\d{2}|20\d{2})\b", query_lower):
+            elif re.search(r"\b(best\s+\w+)\s+of\s+(19\d{2}|20\d{2})\b", query_lower) or re.search(
+                r"\b(best\s+\w+)\s+for\s+(19\d{2}|20\d{2})\b", query_lower
+            ):
                 slots["award_year_basis"] = "ambiguous"
             # Check for Oscars-like query with "in YEAR" → ceremony_year
-            elif (is_oscars_like and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower)) or is_oscars_like or (slots["award_body"] and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower)):
+            elif (
+                (is_oscars_like and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower))
+                or is_oscars_like
+                or (slots["award_body"] and re.search(r"\bin\s+(19\d{2}|20\d{2})\b", query_lower))
+            ):
                 slots["award_year_basis"] = "ceremony_year"
             # Otherwise, if award query has year but unclear, mark as ambiguous
             else:
@@ -861,10 +946,14 @@ class IntentExtractor:
         if count_match:
             count_str = count_match.group(1)
             count_map = {
-                "three": 3, "3": 3,
-                "four": 4, "4": 4,
-                "five": 5, "5": 5,
-                "ten": 10, "10": 10,
+                "three": 3,
+                "3": 3,
+                "four": 4,
+                "4": 4,
+                "five": 5,
+                "5": 5,
+                "ten": 10,
+                "10": 10,
             }
             constraints["min_count"] = count_map.get(count_str.lower(), 3)
 
@@ -882,14 +971,18 @@ class IntentExtractor:
         elif re.search(r"\b(oldest first|oldest|earliest first)\b", query_lower):
             constraints["order_by"] = "release_year_asc"
         # "in chronological order" → chronological
-        elif re.search(r"\bin\s+chronological\s+order\b", query_lower) or re.search(r"\bchronological\s+order\b", query_lower):
+        elif re.search(r"\bin\s+chronological\s+order\b", query_lower) or re.search(
+            r"\bchronological\s+order\b", query_lower
+        ):
             constraints["order_by"] = "chronological"
         # "sorted by release year" or "ordered by release year" → release_year_asc (default when direction not specified)
-        elif re.search(r"\b(sorted|ordered|arranged)\s+by\s+(release\s+)?year\b", query_lower) or re.search(r"\bin\s+release\s+year\s+order\b", query_lower):
+        elif re.search(r"\b(sorted|ordered|arranged)\s+by\s+(release\s+)?year\b", query_lower) or re.search(
+            r"\bin\s+release\s+year\s+order\b", query_lower
+        ):
             constraints["order_by"] = "release_year_asc"
         # "in order" (by itself, likely means chronological) → chronological
         elif re.search(r"\bin\s+order\b", query_lower):
-                constraints["order_by"] = "chronological"
+            constraints["order_by"] = "chronological"
 
         # Extract format constraints
         if "list" in query_lower or "name" in query_lower:
@@ -979,7 +1072,10 @@ Respond with ONLY the JSON, nothing else."""
             llm_resp = await client.chat_completions_create(
                 LLM_MODEL,
                 [
-                    {"role": "system", "content": "You are an intent extractor. Respond with ONLY valid JSON, no other text."},
+                    {
+                        "role": "system",
+                        "content": "You are an intent extractor. Respond with ONLY valid JSON, no other text.",
+                    },
                     {"role": "user", "content": extraction_prompt},
                 ],
                 temperature=0.1,
@@ -997,7 +1093,7 @@ Respond with ONLY the JSON, nothing else."""
 
                 result_json = json.loads(result_text)
             except json.JSONDecodeError:
-                json_match = re.search(r'\{[^}]+\}', result_text)
+                json_match = re.search(r"\{[^}]+\}", result_text)
                 if json_match:
                     result_json = json.loads(json_match.group())
                 else:
@@ -1010,10 +1106,7 @@ Respond with ONLY the JSON, nothing else."""
                 typed_entities = self._extract_typed_entities(query)
             else:
                 # New format - ensure both keys exist
-                typed_entities = {
-                    "movies": entities_data.get("movies", []),
-                    "people": entities_data.get("people", [])
-                }
+                typed_entities = {"movies": entities_data.get("movies", []), "people": entities_data.get("people", [])}
                 # Apply stoplist filter to LLM-extracted entities
                 typed_entities["movies"] = self._filter_entities_by_stoplist(typed_entities["movies"])
                 typed_entities["people"] = self._filter_entities_by_stoplist(typed_entities["people"])
@@ -1046,7 +1139,7 @@ Respond with ONLY the JSON, nothing else."""
                 slots = {
                     "award_body": slots_data.get("award_body"),
                     "award_category": slots_data.get("award_category"),
-                    "award_year_basis": slots_data.get("award_year_basis")
+                    "award_year_basis": slots_data.get("award_year_basis"),
                 }
                 # Validate award_year_basis enum
                 valid_year_basis = {"ceremony_year", "release_year", "ambiguous", None}
@@ -1054,11 +1147,7 @@ Respond with ONLY the JSON, nothing else."""
                     slots["award_year_basis"] = None
             else:
                 # If slots missing or invalid, use null defaults
-                slots = {
-                    "award_body": None,
-                    "award_category": None,
-                    "award_year_basis": None
-                }
+                slots = {"award_body": None, "award_category": None, "award_year_basis": None}
 
             # If award query detected and year present but basis missing, compute it with rules
             is_award_query = slots.get("award_body") or slots.get("award_category")
@@ -1072,11 +1161,9 @@ Respond with ONLY the JSON, nothing else."""
             if slots.get("award_year_basis") == "ambiguous":
                 requires_disambiguation = True
 
-            # Always derive freshness_reason (not included in LLM JSON format for consistency)
+                # Always derive freshness_reason (not included in LLM JSON format for consistency)
                 _, freshness_reason = self._determine_freshness_needs(
-                    result_json.get("intent", "general_info"),
-                    request_type,
-                    query
+                    result_json.get("intent", "general_info"), request_type, query
                 )
 
             return StructuredIntent(
@@ -1092,10 +1179,9 @@ Respond with ONLY the JSON, nothing else."""
                 freshness_reason=freshness_reason,
                 freshness_ttl_hours=freshness_ttl_hours,
                 needs_clarification=False,
-                slots=slots
+                slots=slots,
             )
 
         except Exception as e:
             logger.warning(f"LLM intent extraction failed: {e}, using pattern-based")
             return self.extract(query, request_type)
-

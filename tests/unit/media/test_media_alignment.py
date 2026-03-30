@@ -1,4 +1,5 @@
 """Media alignment tests: posters/media should match resolved movies or be omitted."""
+
 from __future__ import annotations
 
 import types
@@ -13,7 +14,9 @@ from cinemind.media.media_enrichment import (
 
 
 class DummyTMDBCandidate:
-    def __init__(self, title: str, year: int | None = None, movie_id: int | None = None, poster_path: str | None = None):
+    def __init__(
+        self, title: str, year: int | None = None, movie_id: int | None = None, poster_path: str | None = None
+    ):
         self.title = title
         self.year = year
         self.id = movie_id
@@ -21,7 +24,13 @@ class DummyTMDBCandidate:
 
 
 class DummyTMDBResolveResult:
-    def __init__(self, status: str, candidates: list[DummyTMDBCandidate] | None = None, movie_id: int | None = None, poster_path: str | None = None):
+    def __init__(
+        self,
+        status: str,
+        candidates: list[DummyTMDBCandidate] | None = None,
+        movie_id: int | None = None,
+        poster_path: str | None = None,
+    ):
         self.status = status
         self.candidates = candidates or []
         self.movie_id = movie_id
@@ -34,7 +43,11 @@ def test_enrich_returns_empty_when_tmdb_disabled(monkeypatch):
     def fake_is_tmdb_enabled() -> bool:
         return False
 
-    monkeypatch.setattr("cinemind.media.media_enrichment.get_default_media_cache", lambda: types.SimpleNamespace(get_enrich=lambda _k: None, set_enrich=lambda *_a, **_k: None), raising=False)
+    monkeypatch.setattr(
+        "cinemind.media.media_enrichment.get_default_media_cache",
+        lambda: types.SimpleNamespace(get_enrich=lambda _k: None, set_enrich=lambda *_a, **_k: None),
+        raising=False,
+    )
     monkeypatch.setattr("cinemind.media.media_enrichment.is_tmdb_enabled", fake_is_tmdb_enabled, raising=False)
 
     result: MediaEnrichmentResult = enrich("Tell me more about Inception")
@@ -57,7 +70,9 @@ def test_attach_media_uses_resolved_title_not_query(monkeypatch):
 
     # Patch config + resolver
     monkeypatch.setattr("cinemind.media.media_enrichment.is_tmdb_enabled", fake_is_tmdb_enabled, raising=False)
-    monkeypatch.setattr("cinemind.media.media_enrichment.get_tmdb_access_token", fake_get_tmdb_access_token, raising=False)
+    monkeypatch.setattr(
+        "cinemind.media.media_enrichment.get_tmdb_access_token", fake_get_tmdb_access_token, raising=False
+    )
     # Production code reads enabled/token directly from `config` inside enrich().
     monkeypatch.setattr("config.is_tmdb_enabled", fake_is_tmdb_enabled, raising=False)
     # Production code paths also read the token from `config` inside TMDB strip building.
@@ -214,15 +229,31 @@ def test_similar_movies_endpoint_shapes_clusters(monkeypatch):
             "kind": "genre",
             "label": "Similar by genre to Inception",
             "movies": [
-                {"title": "Foo", "year": 2010, "primary_image_url": None, "page_url": None, "tmdbId": 1, "mediaType": "movie"},
-                {"title": "Bar", "year": 2011, "primary_image_url": None, "page_url": None, "tmdbId": 2, "mediaType": "movie"},
+                {
+                    "title": "Foo",
+                    "year": 2010,
+                    "primary_image_url": None,
+                    "page_url": None,
+                    "tmdbId": 1,
+                    "mediaType": "movie",
+                },
+                {
+                    "title": "Bar",
+                    "year": 2011,
+                    "primary_image_url": None,
+                    "page_url": None,
+                    "tmdbId": 2,
+                    "mediaType": "movie",
+                },
             ],
         }
     ]
 
     monkeypatch.setattr(
         "src.api.main.build_similar_movie_clusters",
-        lambda title, year=None, tmdb_id=None, media_type=None, max_results=None, **_kwargs: {"clusters": fake_clusters},
+        lambda title, year=None, tmdb_id=None, media_type=None, max_results=None, **_kwargs: {
+            "clusters": fake_clusters
+        },
         raising=False,
     )
 
@@ -275,4 +306,3 @@ def test_similar_movies_non_numeric_path_passes_title_for_resolve(monkeypatch):
     assert captured.get("year") == 2014
     assert captured.get("tmdb_id") is None
     assert captured.get("media_type") == "movie"
-

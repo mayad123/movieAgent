@@ -1,4 +1,5 @@
 """Service interfaces used by workflows. Workflows depend on these, not on concrete implementations."""
+
 from typing import Any, Protocol
 
 

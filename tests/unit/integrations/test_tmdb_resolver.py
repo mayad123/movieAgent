@@ -1,4 +1,5 @@
 """Unit tests for TMDB Search → ID → Details resolver."""
+
 from __future__ import annotations
 
 import sys
@@ -79,7 +80,11 @@ class TestResolveMovie:
         assert result.movie_id is None
 
     def test_resolved_single_clear_match(self):
-        payload = {"results": [{"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}]}
+        payload = {
+            "results": [
+                {"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}
+            ]
+        }
         with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
             m.return_value = payload
             result = resolve_movie("Inception", year=2010, access_token="t")
@@ -104,7 +109,11 @@ class TestResolveMovie:
         assert 1 in ids and 2 in ids
 
     def test_candidates_have_id_title_year(self):
-        payload = {"results": [{"id": 123, "title": "Test Movie", "release_date": "1999-05-01", "popularity": 1, "vote_count": 10}]}
+        payload = {
+            "results": [
+                {"id": 123, "title": "Test Movie", "release_date": "1999-05-01", "popularity": 1, "vote_count": 10}
+            ]
+        }
         with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
             m.return_value = payload
             result = resolve_movie("Test Movie", access_token="t")
@@ -117,7 +126,9 @@ class TestResolveMovie:
         assert d["id"] == 123 and d["title"] == "Test Movie" and d.get("year") == 1999
 
     def test_second_call_uses_cache(self):
-        payload = {"results": [{"id": 1, "title": "Cached", "release_date": "2000-01-01", "popularity": 10, "vote_count": 100}]}
+        payload = {
+            "results": [{"id": 1, "title": "Cached", "release_date": "2000-01-01", "popularity": 10, "vote_count": 100}]
+        }
         with patch("integrations.tmdb.resolver.tmdb_request_json") as m:
             m.return_value = payload
             r1 = resolve_movie("Cached", access_token="t")
@@ -136,7 +147,9 @@ class TestTMDBResolveResultToDict:
         assert len(d["candidates"]) == 1
 
     def test_to_dict_ambiguous(self):
-        r = TMDBResolveResult(status="ambiguous", confidence=0.5, candidates=[TMDBCandidate(1, "A", None), TMDBCandidate(2, "B", None)])
+        r = TMDBResolveResult(
+            status="ambiguous", confidence=0.5, candidates=[TMDBCandidate(1, "A", None), TMDBCandidate(2, "B", None)]
+        )
         d = r.to_dict()
         assert d["status"] == "ambiguous"
         assert "movie_id" not in d or d.get("movie_id") is None

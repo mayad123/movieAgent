@@ -45,6 +45,7 @@ DEFAULT_CONFIG_TTL_SECONDS = 86400
 @dataclass
 class TMDBImageConfig:
     """Cached image configuration from TMDB /configuration."""
+
     secure_base_url: str = FALLBACK_SECURE_BASE
     backdrop_sizes: list[str] = field(default_factory=lambda: [FALLBACK_BACKDROP_SIZE])
     poster_sizes: list[str] = field(default_factory=lambda: [FALLBACK_POSTER_THUMB_SIZE])
@@ -57,11 +58,17 @@ class TMDBImageConfig:
         if size_key == SIZE_POSTER_THUMBNAIL:
             size = self._pick_first_of(self.poster_sizes, PREFERRED_POSTER_THUMB_SIZES) or FALLBACK_POSTER_THUMB_SIZE
         elif size_key == SIZE_POSTER_GALLERY:
-            size = self._pick_first_of(self.poster_sizes, PREFERRED_POSTER_GALLERY_SIZES) or FALLBACK_POSTER_GALLERY_SIZE
+            size = (
+                self._pick_first_of(self.poster_sizes, PREFERRED_POSTER_GALLERY_SIZES) or FALLBACK_POSTER_GALLERY_SIZE
+            )
         elif size_key == SIZE_BACKDROP_GALLERY:
             size = self._pick_first_of(self.backdrop_sizes, PREFERRED_BACKDROP_SIZES) or FALLBACK_BACKDROP_SIZE
         elif size_key == SIZE_BACKDROP_ORIGINAL:
-            size = "original" if "original" in self.backdrop_sizes else (self.backdrop_sizes[-1] if self.backdrop_sizes else FALLBACK_BACKDROP_SIZE)
+            size = (
+                "original"
+                if "original" in self.backdrop_sizes
+                else (self.backdrop_sizes[-1] if self.backdrop_sizes else FALLBACK_BACKDROP_SIZE)
+            )
         else:
             size = FALLBACK_BACKDROP_SIZE
         self._size_cache[size_key] = size

@@ -5,6 +5,7 @@ Uses FastAPI TestClient (no real server). Run with:
   pytest tests/smoke/test_playground_smoke.py -v
 From repo root with PYTHONPATH=src (or install package).
 """
+
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ if _src.exists() and str(_src) not in sys.path:
 def test_playground_app_imports():
     """Playground server app can be imported (boot check)."""
     from tests.playground.server import app
+
     assert app is not None
 
 

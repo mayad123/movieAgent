@@ -105,6 +105,7 @@ def _score_candidate(
 @dataclass
 class TMDBCandidate:
     """One candidate for display in 'Did you mean?' (id, title, year, optional poster_path)."""
+
     id: int
     title: str
     year: int | None = None
@@ -130,6 +131,7 @@ class TMDBResolveResult:
     - confidence: 0.0-1.0 when resolved
     - candidates: list for "Did you mean?" when ambiguous or for reference
     """
+
     status: str  # "resolved" | "ambiguous" | "not_found"
     movie_id: int | None = None
     poster_path: str | None = None

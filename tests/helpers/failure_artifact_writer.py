@@ -3,6 +3,7 @@ Failure artifact writer for scenario test failures.
 
 Writes detailed JSON artifacts when scenario tests fail to aid in debugging.
 """
+
 import contextlib
 import json
 import re
@@ -22,11 +23,11 @@ def sanitize_filename(name: str) -> str:
         Safe filename string
     """
     # Replace unsafe characters with underscores
-    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", name)
     # Remove leading/trailing dots and spaces
-    sanitized = sanitized.strip('. ')
+    sanitized = sanitized.strip(". ")
     # Replace multiple consecutive underscores with single underscore
-    sanitized = re.sub(r'_+', '_', sanitized)
+    sanitized = re.sub(r"_+", "_", sanitized)
     # Ensure it's not empty
     if not sanitized:
         sanitized = "unknown_scenario"
@@ -36,10 +37,7 @@ def sanitize_filename(name: str) -> str:
     return sanitized
 
 
-def remove_failure_artifact(
-    scenario_name: str,
-    artifacts_dir: Path | None = None
-) -> bool:
+def remove_failure_artifact(scenario_name: str, artifacts_dir: Path | None = None) -> bool:
     """
     Remove a failure artifact file for a scenario that has passed.
 
@@ -80,7 +78,7 @@ def write_failure_artifact(
     timing_ms: float | None = None,
     artifacts_dir: Path | None = None,
     template: Any | None = None,  # ResponseTemplate for building repair instruction
-    kaggle_outcome: dict[str, Any] | None = None  # Kaggle behavior outcome
+    kaggle_outcome: dict[str, Any] | None = None,  # Kaggle behavior outcome
 ) -> Path | None:
     """
     Write a failure artifact JSON file for a failed scenario test.
@@ -122,9 +120,9 @@ def write_failure_artifact(
     if response_format is not None:
         try:
             # Try to get the enum value
-            if hasattr(response_format, 'value'):
+            if hasattr(response_format, "value"):
                 response_format_str = response_format.value
-            elif hasattr(response_format, 'name'):
+            elif hasattr(response_format, "name"):
                 response_format_str = response_format.name
             else:
                 response_format_str = str(response_format)
@@ -145,11 +143,19 @@ def write_failure_artifact(
 
     # Extract formatted evidence data
     evidence_dict = {
-        "text": str(formatted_evidence.text) if formatted_evidence and hasattr(formatted_evidence, 'text') else "",
-        "counts": dict(formatted_evidence.counts) if formatted_evidence and hasattr(formatted_evidence, 'counts') else {"before": 0, "after": 0},
-        "max_snippet_len": int(formatted_evidence.max_snippet_len) if formatted_evidence and hasattr(formatted_evidence, 'max_snippet_len') else 0,
-        "dedupe_removed": int(formatted_evidence.dedupe_removed) if formatted_evidence and hasattr(formatted_evidence, 'dedupe_removed') else 0,
-        "items_count": len(formatted_evidence.items) if formatted_evidence and hasattr(formatted_evidence, 'items') else 0
+        "text": str(formatted_evidence.text) if formatted_evidence and hasattr(formatted_evidence, "text") else "",
+        "counts": dict(formatted_evidence.counts)
+        if formatted_evidence and hasattr(formatted_evidence, "counts")
+        else {"before": 0, "after": 0},
+        "max_snippet_len": int(formatted_evidence.max_snippet_len)
+        if formatted_evidence and hasattr(formatted_evidence, "max_snippet_len")
+        else 0,
+        "dedupe_removed": int(formatted_evidence.dedupe_removed)
+        if formatted_evidence and hasattr(formatted_evidence, "dedupe_removed")
+        else 0,
+        "items_count": len(formatted_evidence.items)
+        if formatted_evidence and hasattr(formatted_evidence, "items")
+        else 0,
     }
 
     # Extract validator result
@@ -169,10 +175,7 @@ def write_failure_artifact(
                 from cinemind.prompting.output_validator import OutputValidator
 
                 validator = OutputValidator()
-                repair_instruction = validator.build_correction_instruction(
-                    validator_result.violations,
-                    template
-                )
+                repair_instruction = validator.build_correction_instruction(validator_result.violations, template)
                 validator_dict["repair_instruction"] = repair_instruction
             except Exception:
                 # If we can't build repair instruction, just leave it out
@@ -185,10 +188,11 @@ def write_failure_artifact(
         kaggle_items_before = kaggle_outcome.get("evidence_count", 0)
         # Count Kaggle items in formatted evidence (after formatter)
         kaggle_items_after = 0
-        if formatted_evidence and hasattr(formatted_evidence, 'items'):
+        if formatted_evidence and hasattr(formatted_evidence, "items"):
             kaggle_items_after = sum(
-                1 for item in formatted_evidence.items
-                if hasattr(item, 'source_label') and 'imdb' in item.source_label.lower()
+                1
+                for item in formatted_evidence.items
+                if hasattr(item, "source_label") and "imdb" in item.source_label.lower()
             )
 
         # Determine reason for fallback if Kaggle was attempted but not used
@@ -213,7 +217,7 @@ def write_failure_artifact(
             "item_count_before_formatter": kaggle_items_before,
             "item_count_after_formatter": kaggle_items_after,
             "fallback_reason": fallback_reason,
-            "warnings": kaggle_outcome.get("warnings", [])
+            "warnings": kaggle_outcome.get("warnings", []),
         }
 
     # Build artifact JSON
@@ -221,7 +225,7 @@ def write_failure_artifact(
         "scenario": {
             "name": scenario_data.get("name", scenario_name),
             "user_query": scenario_data.get("user_query", ""),
-            "expected": scenario_data.get("expected", {})
+            "expected": scenario_data.get("expected", {}),
         },
         "request_plan": request_plan_dict,
         "template_id": template_id,
@@ -231,7 +235,7 @@ def write_failure_artifact(
         "kaggle": kaggle_metadata,  # Kaggle provenance and adapter decision metadata
         "failures": failures,
         "timing_ms": timing_ms,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
 
     # Write JSON file with better error handling
@@ -239,15 +243,15 @@ def write_failure_artifact(
         # Use a custom JSON encoder to handle edge cases
         def json_serial(obj):
             """JSON serializer for objects not serializable by default json code"""
-            if hasattr(obj, '__dict__'):
+            if hasattr(obj, "__dict__"):
                 return obj.__dict__
-            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+            elif hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
                 return list(obj)
             else:
                 return str(obj)
 
         # Write to temporary file first, then rename (atomic write)
-        temp_file = artifact_file.with_suffix('.tmp')
+        temp_file = artifact_file.with_suffix(".tmp")
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(artifact, f, indent=2, ensure_ascii=False, default=json_serial)
@@ -263,6 +267,7 @@ def write_failure_artifact(
     except (TypeError, ValueError) as e:
         # Try to identify what's not serializable
         import traceback
+
         error_msg = f"Failed to serialize artifact: {e}\n"
         error_msg += "Attempting to identify non-serializable objects...\n"
         try:
@@ -283,7 +288,7 @@ def write_failure_artifact(
                 "scenario": artifact.get("scenario", {}),
                 "failures": artifact.get("failures", []),
                 "serialization_error": str(e),
-                "timestamp": artifact.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S"))
+                "timestamp": artifact.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S")),
             }
             with open(artifact_file, "w", encoding="utf-8") as f:
                 json.dump(minimal_artifact, f, indent=2, ensure_ascii=False)
@@ -294,7 +299,7 @@ def write_failure_artifact(
             return None
     except Exception as e:
         import traceback
+
         print(f"Warning: Failed to write failure artifact to {artifact_file}: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         return None
-

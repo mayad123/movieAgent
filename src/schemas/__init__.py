@@ -1,4 +1,5 @@
 """API and shared request/response schemas."""
+
 from .api import (
     DiagnosticResponse,
     HealthResponse,

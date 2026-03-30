@@ -31,6 +31,7 @@ def _env_float(name: str, default: float, *, minimum: float = 1.0) -> float:
     except Exception:
         return max(minimum, default)
 
+
 # Short memo so sequential fetch_movie_genre_names + fetch_movie_cast_names share one HTTP call.
 _bundle_memo: dict[int, tuple[dict[str, Any], float]] = {}
 _bundle_lock = threading.Lock()

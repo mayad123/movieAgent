@@ -2,6 +2,7 @@
 Modular test case organization for CineMind.
 Import all test cases from category modules.
 """
+
 from .base import (
     TestCase,
     contains_all_substrings,
@@ -23,12 +24,7 @@ from .spoilers import SPOILER_TESTS
 
 # Combine all test cases
 TEST_CASES = (
-    SIMPLE_FACT_TESTS +
-    MULTI_HOP_TESTS +
-    RECOMMENDATION_TESTS +
-    COMPARISON_TESTS +
-    SPOILER_TESTS +
-    FACT_CHECK_TESTS
+    SIMPLE_FACT_TESTS + MULTI_HOP_TESTS + RECOMMENDATION_TESTS + COMPARISON_TESTS + SPOILER_TESTS + FACT_CHECK_TESTS
 )
 
 # Test Suite Organization
@@ -43,15 +39,14 @@ TEST_SUITES = {
 }
 
 __all__ = [
-    'TEST_CASES',
-    'TEST_SUITES',
-    'TestCase',
-    'contains_all_substrings',
-    'contains_any_substring',
-    'contains_at_least_n_items',
-    'contains_spoiler_warning',
-    'mentions_director',
-    'mentions_movie',
-    'min_length',
+    "TEST_CASES",
+    "TEST_SUITES",
+    "TestCase",
+    "contains_all_substrings",
+    "contains_any_substring",
+    "contains_at_least_n_items",
+    "contains_spoiler_warning",
+    "mentions_director",
+    "mentions_movie",
+    "min_length",
 ]
-

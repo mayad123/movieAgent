@@ -7,6 +7,7 @@ with confidence scores, working fully offline without any LLM calls.
 Used to automatically infer request_type when not provided externally, enabling
 seamless routing without requiring user selection.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RequestTypeResult:
     """Result of request_type routing with confidence score."""
+
     request_type: str
     confidence: float  # 0.0 to 1.0
     rule_hit: str | None = None  # Which rule matched (for debugging)
@@ -91,24 +93,34 @@ class RequestTypeRouter:
     GUARDRAILS = [
         # "similar" + "recommend" → recs (high confidence)
         (
-            lambda q: bool(re.search(r"\b(similar|like)\b", q, re.IGNORECASE) and
-                          re.search(r"\b(recommend|suggest)\b", q, re.IGNORECASE)),
-            "recs", 0.95, "guardrail: similar+recommend"
+            lambda q: bool(
+                re.search(r"\b(similar|like)\b", q, re.IGNORECASE)
+                and re.search(r"\b(recommend|suggest)\b", q, re.IGNORECASE)
+            ),
+            "recs",
+            0.95,
+            "guardrail: similar+recommend",
         ),
         # "explain ending" → spoiler
         (
             lambda q: bool(re.search(r"\b(explain\s+the\s+ending|explain\s+ending|ending\s+of)\b", q, re.IGNORECASE)),
-            "spoiler", 0.95, "guardrail: explain ending"
+            "spoiler",
+            0.95,
+            "guardrail: explain ending",
         ),
         # "is it out yet" → release-date
         (
             lambda q: bool(re.search(r"\b(is\s+it\s+out\s+yet|out\s+yet|is\s+.*\s+out\s+yet)\b", q, re.IGNORECASE)),
-            "release-date", 0.95, "guardrail: out yet"
+            "release-date",
+            0.95,
+            "guardrail: out yet",
         ),
         # "movies in order" → info (not recs)
         (
             lambda q: bool(re.search(r"\b(movies\s+in\s+order|order\s+of|chronological\s+order)\b", q, re.IGNORECASE)),
-            "info", 0.95, "guardrail: movies in order"
+            "info",
+            0.95,
+            "guardrail: movies in order",
         ),
     ]
 
@@ -137,21 +149,13 @@ class RequestTypeRouter:
 
         # Empty query defaults to info
         if not query_lower:
-            return RequestTypeResult(
-                request_type="info",
-                confidence=0.5,
-                rule_hit="default: empty query"
-            )
+            return RequestTypeResult(request_type="info", confidence=0.5, rule_hit="default: empty query")
 
         # Step 1: Check guardrails (highest priority, override everything)
         for guardrail_fn, req_type, confidence, rule_name in self.GUARDRAILS:
             if guardrail_fn(query):
                 logger.debug(f"RequestTypeRouter: Guardrail hit - {rule_name} → {req_type} (confidence: {confidence})")
-                return RequestTypeResult(
-                    request_type=req_type,
-                    confidence=confidence,
-                    rule_hit=rule_name
-                )
+                return RequestTypeResult(request_type=req_type, confidence=confidence, rule_hit=rule_name)
 
         # Step 2: Check high-confidence patterns (most specific first)
         for req_type, patterns in self.HIGH_CONFIDENCE_PATTERNS.items():
@@ -159,9 +163,7 @@ class RequestTypeRouter:
                 if re.search(pattern, query_lower, re.IGNORECASE):
                     logger.debug(f"RequestTypeRouter: High-confidence match - {pattern[:40]} → {req_type}")
                     return RequestTypeResult(
-                        request_type=req_type,
-                        confidence=0.9,
-                        rule_hit=f"high_confidence:{pattern[:30]}"
+                        request_type=req_type, confidence=0.9, rule_hit=f"high_confidence:{pattern[:30]}"
                     )
 
         # Step 3: Check medium-confidence patterns
@@ -182,16 +184,16 @@ class RequestTypeRouter:
                     pattern = matches_by_type[req_type][0]
                     logger.debug(f"RequestTypeRouter: Medium-confidence match - {pattern[:40]} → {req_type}")
                     return RequestTypeResult(
-                        request_type=req_type,
-                        confidence=0.65,
-                        rule_hit=f"medium_confidence:{pattern[:30]}"
+                        request_type=req_type, confidence=0.65, rule_hit=f"medium_confidence:{pattern[:30]}"
                     )
 
         # Step 4: Check low-confidence patterns (but still assign lower confidence)
         for req_type, patterns in self.LOW_CONFIDENCE_PATTERNS.items():
             for pattern in patterns:
                 if re.search(pattern, query_lower, re.IGNORECASE):
-                    logger.debug(f"RequestTypeRouter: Low-confidence match - {pattern[:40]} → {req_type} (defaulting to info)")
+                    logger.debug(
+                        f"RequestTypeRouter: Low-confidence match - {pattern[:40]} → {req_type} (defaulting to info)"
+                    )
                     # Low confidence, but we matched something - still default to info
                     break
 
@@ -200,7 +202,7 @@ class RequestTypeRouter:
         return RequestTypeResult(
             request_type="info",
             confidence=0.4,  # Low confidence default
-            rule_hit="default: no pattern match"
+            rule_hit="default: no pattern match",
         )
 
     def should_use_inferred_type(self, result: RequestTypeResult) -> bool:
@@ -228,4 +230,3 @@ def get_request_type_router() -> RequestTypeRouter:
     if _router_instance is None:
         _router_instance = RequestTypeRouter()
     return _router_instance
-

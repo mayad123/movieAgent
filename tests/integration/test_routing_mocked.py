@@ -3,6 +3,7 @@ Integration tests for SearchEngine/Agent routing using mocked APIs.
 
 Tests routing decisions between Kaggle and Tavily with mocked results.
 """
+
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
@@ -24,20 +25,22 @@ class TestKaggleHighCorrelationNoTavily:
     def mock_kaggle_high_correlation(self):
         """Mock Kaggle searcher returning high correlation."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            True,  # is_highly_correlated
-            [  # kaggle_results
-                {
-                    "title": "Inglourious Basterds (2009)",
-                    "url": "",
-                    "content": "Director: Quentin Tarantino",
-                    "source": "kaggle_imdb",
-                    "tier": "A",
-                    "score": 0.95
-                }
-            ],
-            0.95  # max_correlation
-        ))
+        mock_searcher.is_highly_correlated = Mock(
+            return_value=(
+                True,  # is_highly_correlated
+                [  # kaggle_results
+                    {
+                        "title": "Inglourious Basterds (2009)",
+                        "url": "",
+                        "content": "Director: Quentin Tarantino",
+                        "source": "kaggle_imdb",
+                        "tier": "A",
+                        "score": 0.95,
+                    }
+                ],
+                0.95,  # max_correlation
+            )
+        )
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -65,26 +68,24 @@ class TestKaggleHighCorrelationNoTavily:
             query=query,
             max_results=5,
             skip_tavily=False,  # Even if allowed, should skip due to Kaggle
-            override_reason=None
+            override_reason=None,
         )
 
         # Should have results from Kaggle
-        assert len(results) > 0, \
-            f"Should have Kaggle results, got: {len(results)}"
-        assert all(r.get("source") == "kaggle_imdb" for r in results), \
+        assert len(results) > 0, f"Should have Kaggle results, got: {len(results)}"
+        assert all(r.get("source") == "kaggle_imdb" for r in results), (
             f"All results should be from Kaggle, got: {[r.get('source') for r in results]}"
+        )
 
         # Tavily should NOT be called
-        assert len(tavily_called) == 0, \
+        assert len(tavily_called) == 0, (
             f"Tavily should not be called when Kaggle has high correlation, got {len(tavily_called)} calls"
+        )
 
         # Decision metadata
-        assert decision.tavily_used is False, \
-            f"tavily_used should be False, got: {decision.tavily_used}"
-        assert decision.override_used is False, \
-            f"override_used should be False, got: {decision.override_used}"
-        assert decision.kaggle_max_score >= 0.7, \
-            f"kaggle_max_score should be high, got: {decision.kaggle_max_score}"
+        assert decision.tavily_used is False, f"tavily_used should be False, got: {decision.tavily_used}"
+        assert decision.override_used is False, f"override_used should be False, got: {decision.override_used}"
+        assert decision.kaggle_max_score >= 0.7, f"kaggle_max_score should be high, got: {decision.kaggle_max_score}"
 
 
 class TestKaggleEmptyWithOverride:
@@ -94,11 +95,13 @@ class TestKaggleEmptyWithOverride:
     def mock_kaggle_empty(self):
         """Mock Kaggle searcher returning empty/unusable results."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            False,  # is_highly_correlated
-            [],  # kaggle_results (empty)
-            0.3  # max_correlation (low)
-        ))
+        mock_searcher.is_highly_correlated = Mock(
+            return_value=(
+                False,  # is_highly_correlated
+                [],  # kaggle_results (empty)
+                0.3,  # max_correlation (low)
+            )
+        )
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -123,7 +126,7 @@ class TestKaggleEmptyWithOverride:
                     "url": "https://example.com",
                     "content": "Test content",
                     "source": "tavily",
-                    "score": 0.8
+                    "score": 0.8,
                 }
             ]
 
@@ -136,28 +139,25 @@ class TestKaggleEmptyWithOverride:
             query=query,
             max_results=5,
             skip_tavily=True,  # Tool plan says skip
-            override_reason=override_reason  # But override is provided
+            override_reason=override_reason,  # But override is provided
         )
 
         # Tavily should be called exactly once
-        assert len(tavily_calls) == 1, \
-            f"Tavily should be called exactly once, got: {len(tavily_calls)}"
-        assert tavily_calls[0][0] == query, \
-            f"Tavily should be called with correct query, got: {tavily_calls[0]}"
+        assert len(tavily_calls) == 1, f"Tavily should be called exactly once, got: {len(tavily_calls)}"
+        assert tavily_calls[0][0] == query, f"Tavily should be called with correct query, got: {tavily_calls[0]}"
 
         # Should have results from Tavily
-        assert len(results) > 0, \
-            f"Should have Tavily results, got: {len(results)}"
-        assert any(r.get("source") == "tavily" for r in results), \
+        assert len(results) > 0, f"Should have Tavily results, got: {len(results)}"
+        assert any(r.get("source") == "tavily" for r in results), (
             f"Should have Tavily results, got: {[r.get('source') for r in results]}"
+        )
 
         # Decision metadata
-        assert decision.tavily_used is True, \
-            f"tavily_used should be True, got: {decision.tavily_used}"
-        assert decision.override_used is True, \
-            f"override_used should be True, got: {decision.override_used}"
-        assert decision.override_reason == override_reason, \
+        assert decision.tavily_used is True, f"tavily_used should be True, got: {decision.tavily_used}"
+        assert decision.override_used is True, f"override_used should be True, got: {decision.override_used}"
+        assert decision.override_reason == override_reason, (
             f"override_reason should match, got: {decision.override_reason}"
+        )
 
     @pytest.mark.asyncio
     async def test_kaggle_empty_without_override_skips_tavily(self, search_engine):
@@ -176,22 +176,18 @@ class TestKaggleEmptyWithOverride:
             query=query,
             max_results=5,
             skip_tavily=True,  # Tool plan says skip
-            override_reason=None  # No override
+            override_reason=None,  # No override
         )
 
         # Tavily should NOT be called
-        assert len(tavily_calls) == 0, \
-            f"Tavily should not be called without override, got: {len(tavily_calls)}"
+        assert len(tavily_calls) == 0, f"Tavily should not be called without override, got: {len(tavily_calls)}"
 
         # Should have no results
-        assert len(results) == 0, \
-            f"Should have no results, got: {len(results)}"
+        assert len(results) == 0, f"Should have no results, got: {len(results)}"
 
         # Decision metadata
-        assert decision.tavily_used is False, \
-            f"tavily_used should be False, got: {decision.tavily_used}"
-        assert decision.override_used is False, \
-            f"override_used should be False, got: {decision.override_used}"
+        assert decision.tavily_used is False, f"tavily_used should be False, got: {decision.tavily_used}"
+        assert decision.override_used is False, f"override_used should be False, got: {decision.override_used}"
 
 
 class TestRequireTierAOverride:
@@ -201,11 +197,13 @@ class TestRequireTierAOverride:
     def mock_kaggle_low_correlation(self):
         """Mock Kaggle searcher returning low correlation."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            False,  # is_highly_correlated
-            [],  # kaggle_results (empty)
-            0.3  # max_correlation (low)
-        ))
+        mock_searcher.is_highly_correlated = Mock(
+            return_value=(
+                False,  # is_highly_correlated
+                [],  # kaggle_results (empty)
+                0.3,  # max_correlation (low)
+            )
+        )
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -219,6 +217,7 @@ class TestRequireTierAOverride:
     @pytest.mark.asyncio
     async def test_require_tier_a_override_to_tavily(self, search_engine):
         """Test that require_tier_a=true with no Tier A evidence overrides to Tavily."""
+
         # Mock Tavily to return Tier B/C results (no Tier A)
         async def mock_tavily_search(query, max_results):
             return [
@@ -228,7 +227,7 @@ class TestRequireTierAOverride:
                     "content": "Test content from Variety",
                     "source": "tavily",
                     "tier": "B",
-                    "score": 0.8
+                    "score": 0.8,
                 },
                 {
                     "title": "Test Result C",
@@ -236,8 +235,8 @@ class TestRequireTierAOverride:
                     "content": "Test content from Reddit",
                     "source": "tavily",
                     "tier": "C",
-                    "score": 0.7
-                }
+                    "score": 0.7,
+                },
             ]
 
         search_engine._search_tavily = mock_tavily_search
@@ -249,20 +248,20 @@ class TestRequireTierAOverride:
             query=query,
             max_results=5,
             skip_tavily=True,  # Tool plan says skip
-            override_reason=override_reason  # But override for Tier A missing
+            override_reason=override_reason,  # But override for Tier A missing
         )
 
         # Tavily should be called
-        assert decision.tavily_used is True, \
+        assert decision.tavily_used is True, (
             f"tavily_used should be True when override for Tier A missing, got: {decision.tavily_used}"
-        assert decision.override_used is True, \
-            f"override_used should be True, got: {decision.override_used}"
-        assert decision.override_reason == override_reason, \
+        )
+        assert decision.override_used is True, f"override_used should be True, got: {decision.override_used}"
+        assert decision.override_reason == override_reason, (
             f"override_reason should be tier_a_missing, got: {decision.override_reason}"
+        )
 
         # Should have results
-        assert len(results) > 0, \
-            f"Should have results from Tavily, got: {len(results)}"
+        assert len(results) > 0, f"Should have results from Tavily, got: {len(results)}"
 
 
 class TestRoutingMetadata:
@@ -272,20 +271,22 @@ class TestRoutingMetadata:
     def mock_kaggle_high_correlation(self):
         """Mock Kaggle searcher returning high correlation."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            True,
-            [
-                {
-                    "title": "The Matrix (1999)",
-                    "url": "",
-                    "content": "Director: Wachowskis",
-                    "source": "kaggle_imdb",
-                    "tier": "A",
-                    "score": 0.95
-                }
-            ],
-            0.95
-        ))
+        mock_searcher.is_highly_correlated = Mock(
+            return_value=(
+                True,
+                [
+                    {
+                        "title": "The Matrix (1999)",
+                        "url": "",
+                        "content": "Director: Wachowskis",
+                        "source": "kaggle_imdb",
+                        "tier": "A",
+                        "score": 0.95,
+                    }
+                ],
+                0.95,
+            )
+        )
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -293,11 +294,7 @@ class TestRoutingMetadata:
     def mock_kaggle_empty(self):
         """Mock Kaggle searcher returning empty."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            False,
-            [],
-            0.3
-        ))
+        mock_searcher.is_highly_correlated = Mock(return_value=(False, [], 0.3))
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -319,30 +316,23 @@ class TestRoutingMetadata:
     async def test_routing_metadata_kaggle_high_correlation(self, search_engine_with_kaggle):
         """Test routing metadata when Kaggle has high correlation."""
         query = "The Matrix"
-        results, decision = await search_engine_with_kaggle.search(
-            query=query,
-            max_results=5,
-            skip_tavily=False
-        )
+        results, decision = await search_engine_with_kaggle.search(query=query, max_results=5, skip_tavily=False)
 
         # Assert routing metadata
-        assert decision.tavily_used is False, \
-            f"tavily_used should be False, got: {decision.tavily_used}"
-        assert decision.override_used is False, \
-            f"override_used should be False, got: {decision.override_used}"
-        assert decision.override_reason is None, \
-            f"override_reason should be None, got: {decision.override_reason}"
-        assert decision.kaggle_query_string is not None, \
+        assert decision.tavily_used is False, f"tavily_used should be False, got: {decision.tavily_used}"
+        assert decision.override_used is False, f"override_used should be False, got: {decision.override_used}"
+        assert decision.override_reason is None, f"override_reason should be None, got: {decision.override_reason}"
+        assert decision.kaggle_query_string is not None, (
             f"kaggle_query_string should be set, got: {decision.kaggle_query_string}"
-        assert decision.kaggle_max_score >= 0.7, \
-            f"kaggle_max_score should be high, got: {decision.kaggle_max_score}"
-        assert decision.kaggle_stage_a_candidates >= 0, \
+        )
+        assert decision.kaggle_max_score >= 0.7, f"kaggle_max_score should be high, got: {decision.kaggle_max_score}"
+        assert decision.kaggle_stage_a_candidates >= 0, (
             f"kaggle_stage_a_candidates should be set, got: {decision.kaggle_stage_a_candidates}"
+        )
 
         # Evidence count
         evidence_used_count = len(results)
-        assert evidence_used_count > 0, \
-            f"evidence_used_count should be > 0, got: {evidence_used_count}"
+        assert evidence_used_count > 0, f"evidence_used_count should be > 0, got: {evidence_used_count}"
 
     @pytest.mark.asyncio
     async def test_routing_metadata_tavily_override(self, search_engine_no_kaggle):
@@ -357,7 +347,7 @@ class TestRoutingMetadata:
                     "url": "https://example.com",
                     "content": "Test content",
                     "source": "tavily",
-                    "score": 0.8
+                    "score": 0.8,
                 }
             ]
 
@@ -367,28 +357,24 @@ class TestRoutingMetadata:
         override_reason = TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value
 
         results, decision = await search_engine_no_kaggle.search(
-            query=query,
-            max_results=5,
-            skip_tavily=True,
-            override_reason=override_reason
+            query=query, max_results=5, skip_tavily=True, override_reason=override_reason
         )
 
         # Assert routing metadata
-        assert decision.tavily_used is True, \
-            f"tavily_used should be True, got: {decision.tavily_used}"
-        assert decision.override_used is True, \
-            f"override_used should be True, got: {decision.override_used}"
-        assert decision.override_reason == override_reason, \
+        assert decision.tavily_used is True, f"tavily_used should be True, got: {decision.tavily_used}"
+        assert decision.override_used is True, f"override_used should be True, got: {decision.override_used}"
+        assert decision.override_reason == override_reason, (
             f"override_reason should match, got: {decision.override_reason}"
+        )
 
         # Evidence count
         evidence_used_count = len(results)
-        assert evidence_used_count > 0, \
-            f"evidence_used_count should be > 0, got: {evidence_used_count}"
+        assert evidence_used_count > 0, f"evidence_used_count should be > 0, got: {evidence_used_count}"
 
     @pytest.mark.asyncio
     async def test_routing_metadata_no_results(self, search_engine_no_kaggle):
         """Test routing metadata when no results are found."""
+
         async def mock_tavily_search(query, max_results):
             return []  # Empty results
 
@@ -397,22 +383,16 @@ class TestRoutingMetadata:
         query = "Unknown Movie"
 
         results, decision = await search_engine_no_kaggle.search(
-            query=query,
-            max_results=5,
-            skip_tavily=True,
-            override_reason=None
+            query=query, max_results=5, skip_tavily=True, override_reason=None
         )
 
         # Assert routing metadata
-        assert decision.tavily_used is False, \
-            f"tavily_used should be False, got: {decision.tavily_used}"
-        assert decision.override_used is False, \
-            f"override_used should be False, got: {decision.override_used}"
+        assert decision.tavily_used is False, f"tavily_used should be False, got: {decision.tavily_used}"
+        assert decision.override_used is False, f"override_used should be False, got: {decision.override_used}"
 
         # Evidence count should be 0
         evidence_used_count = len(results)
-        assert evidence_used_count == 0, \
-            f"evidence_used_count should be 0, got: {evidence_used_count}"
+        assert evidence_used_count == 0, f"evidence_used_count should be 0, got: {evidence_used_count}"
 
 
 class TestAgentRoutingIntegration:
@@ -422,20 +402,22 @@ class TestAgentRoutingIntegration:
     def mock_kaggle_high_correlation(self):
         """Mock Kaggle searcher returning high correlation."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            True,
-            [
-                {
-                    "title": "Inglourious Basterds (2009)",
-                    "url": "",
-                    "content": "Director: Quentin Tarantino",
-                    "source": "kaggle_imdb",
-                    "tier": "A",
-                    "score": 0.95
-                }
-            ],
-            0.95
-        ))
+        mock_searcher.is_highly_correlated = Mock(
+            return_value=(
+                True,
+                [
+                    {
+                        "title": "Inglourious Basterds (2009)",
+                        "url": "",
+                        "content": "Director: Quentin Tarantino",
+                        "source": "kaggle_imdb",
+                        "tier": "A",
+                        "score": 0.95,
+                    }
+                ],
+                0.95,
+            )
+        )
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -574,11 +556,7 @@ class TestOverrideReasonValidation:
     def mock_kaggle_empty(self):
         """Mock Kaggle searcher returning empty."""
         mock_searcher = Mock()
-        mock_searcher.is_highly_correlated = Mock(return_value=(
-            False,
-            [],
-            0.3
-        ))
+        mock_searcher.is_highly_correlated = Mock(return_value=(False, [], 0.3))
         mock_searcher.correlation_threshold = 0.7
         return mock_searcher
 
@@ -603,26 +581,24 @@ class TestOverrideReasonValidation:
         valid_reasons = [
             TavilyOverrideReason.DISAMBIGUATION_NEEDED.value,
             TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value,
-            TavilyOverrideReason.TIER_A_MISSING.value
+            TavilyOverrideReason.TIER_A_MISSING.value,
         ]
 
         for override_reason in valid_reasons:
             tavily_calls.clear()
 
             _results, decision = await search_engine.search(
-                query="Test",
-                max_results=5,
-                skip_tavily=True,
-                override_reason=override_reason
+                query="Test", max_results=5, skip_tavily=True, override_reason=override_reason
             )
 
             # Should accept valid override reason
-            assert decision.override_used is True, \
+            assert decision.override_used is True, (
                 f"Should accept valid override reason '{override_reason}', got: {decision.override_used}"
-            assert decision.override_reason == override_reason, \
+            )
+            assert decision.override_reason == override_reason, (
                 f"override_reason should match, got: {decision.override_reason}"
-            assert len(tavily_calls) > 0, \
-                f"Tavily should be called with valid override reason '{override_reason}'"
+            )
+            assert len(tavily_calls) > 0, f"Tavily should be called with valid override reason '{override_reason}'"
 
     @pytest.mark.asyncio
     async def test_invalid_override_reason_rejected(self, search_engine):
@@ -638,15 +614,11 @@ class TestOverrideReasonValidation:
         invalid_reason = "invalid_reason"
 
         _results, decision = await search_engine.search(
-            query="Test",
-            max_results=5,
-            skip_tavily=True,
-            override_reason=invalid_reason
+            query="Test", max_results=5, skip_tavily=True, override_reason=invalid_reason
         )
 
         # Should reject invalid override reason
-        assert decision.override_used is False, \
-            f"Should reject invalid override reason, got: {decision.override_used}"
-        assert len(tavily_calls) == 0, \
+        assert decision.override_used is False, f"Should reject invalid override reason, got: {decision.override_used}"
+        assert len(tavily_calls) == 0, (
             f"Tavily should not be called with invalid override reason, got: {len(tavily_calls)}"
-
+        )

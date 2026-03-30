@@ -5,6 +5,7 @@ Provides deterministic, offline-capable fuzzy matching for intent detection
 that handles common misspellings and paraphrases while preserving exact-match
 behavior.
 """
+
 import re
 from dataclasses import dataclass
 
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 @dataclass
 class FuzzyMatchResult:
     """Result of fuzzy intent matching."""
+
     intent: str
     match_strength: float  # 0.0 to 1.0, where 1.0 is exact match
     match_type: str  # "exact", "fuzzy_typo", "fuzzy_paraphrase"
@@ -180,7 +182,7 @@ class FuzzyIntentMatcher:
                         intent=intent,
                         match_strength=self.FUZZY_TYPO_STRENGTH,
                         match_type="fuzzy_typo",
-                        matched_pattern=pattern.pattern
+                        matched_pattern=pattern.pattern,
                     )
 
         # Try paraphrase matching (slightly lower confidence)
@@ -192,7 +194,7 @@ class FuzzyIntentMatcher:
                         intent=intent,
                         match_strength=self.FUZZY_PARAPHRASE_STRENGTH,
                         match_type="fuzzy_paraphrase",
-                        matched_pattern=pattern.pattern
+                        matched_pattern=pattern.pattern,
                     )
 
         return None
@@ -217,7 +219,7 @@ class FuzzyIntentMatcher:
                         intent=intent,
                         match_strength=self.EXACT_MATCH_STRENGTH,
                         match_type="exact",
-                        matched_pattern=pattern.pattern
+                        matched_pattern=pattern.pattern,
                     )
 
         return None
@@ -233,4 +235,3 @@ def get_fuzzy_matcher() -> FuzzyIntentMatcher:
     if _matcher_instance is None:
         _matcher_instance = FuzzyIntentMatcher()
     return _matcher_instance
-

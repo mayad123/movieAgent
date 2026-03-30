@@ -1,6 +1,7 @@
 """
 Configuration and env parsing for CineMind.
 """
+
 import os
 from typing import Optional
 
@@ -54,6 +55,7 @@ def is_llm_configured() -> bool:
 def get_llm_base_url() -> str:
     return _CINEMIND_LLM_BASE_URL
 
+
 # --- Watchmode (server-side only; never expose to client / web bundle) ---
 _WATCHMODE_API_KEY_RAW = (os.getenv("WATCHMODE_API_KEY", "") or "").strip()
 
@@ -70,6 +72,7 @@ def is_watchmode_configured() -> bool:
 
 def _log_watchmode_status() -> None:
     import logging
+
     log = logging.getLogger(__name__)
     if not _WATCHMODE_API_KEY_RAW:
         log.info(
@@ -79,28 +82,35 @@ def _log_watchmode_status() -> None:
     else:
         log.info("Watchmode: API key configured (Where-to-watch available).")
 
+
 # --- TMDB (single source of truth for backend) ---
 _TMDB_TOKEN_RAW = (os.getenv("TMDB_READ_ACCESS_TOKEN", "") or "").strip()
 _TMDB_ENABLED_FLAG = _parse_bool_env("ENABLE_TMDB_SCENES", "false")
 
+
 def is_tmdb_enabled() -> bool:
     return bool(_TMDB_TOKEN_RAW and _TMDB_ENABLED_FLAG)
 
+
 def get_tmdb_access_token() -> str:
     return _TMDB_TOKEN_RAW
+
 
 TMDB_POSTER_MODE = (os.getenv("TMDB_POSTER_MODE", "fallback_only") or "fallback_only").strip().lower()
 ENABLE_TMDB_SCENES = is_tmdb_enabled()
 TMDB_READ_ACCESS_TOKEN = _TMDB_TOKEN_RAW
 
+
 def _log_tmdb_status() -> None:
     import logging
+
     log = logging.getLogger(__name__)
     token_present = bool(_TMDB_TOKEN_RAW)
     tmdb_enabled = is_tmdb_enabled()
     log.info("TMDB config: tmdb_enabled=%s, token_present=%s", tmdb_enabled, token_present)
     if not tmdb_enabled and _TMDB_ENABLED_FLAG and not token_present:
         log.debug("TMDB disabled: set TMDB_READ_ACCESS_TOKEN in .env to enable")
+
 
 _log_tmdb_status()
 _log_watchmode_status()
@@ -135,10 +145,12 @@ REAL_AGENT_TIMEOUT_SECONDS = float(os.getenv("CINEMIND_REAL_AGENT_TIMEOUT", "90"
 REAL_AGENT_MAX_TOKENS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOKENS", "2000"))
 REAL_AGENT_MAX_TOOL_CALLS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOOL_CALLS", "10"))
 
+
 def get_system_prompt(version: str | None = None) -> str:
     """Get system prompt for specified version."""
     try:
         from cinemind.prompting.versions import get_prompt_version
+
         version = version or PROMPT_VERSION
         return get_prompt_version(version)
     except ImportError:
@@ -170,5 +182,6 @@ When providing information:
 3. Distinguish facts from rumors
 4. Provide comprehensive but organized responses
 5. Offer additional context when relevant"""
+
 
 SYSTEM_PROMPT = get_system_prompt()

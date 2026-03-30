@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _norm_text(s: Any) -> str:
-    t = (s or "")
+    t = s or ""
     return re.sub(r"[^a-z0-9]+", " ", str(t).lower()).strip()
 
 
@@ -272,11 +272,13 @@ def filter_movie_hub_clusters_by_question(
         if not isinstance(movies, list):
             movies = []
         filtered_movies = [m for m in movies if isinstance(m, dict) and movie_matches(m)]
-        out.append({
-            "kind": kind,
-            "label": label,
-            "movies": filtered_movies,
-        })
+        out.append(
+            {
+                "kind": kind,
+                "label": label,
+                "movies": filtered_movies,
+            }
+        )
 
     # If filtering yields an empty hub, preserve the original candidate universe.
     if not any((c.get("movies") or []) for c in out):
@@ -285,4 +287,3 @@ def filter_movie_hub_clusters_by_question(
 
     logger.debug("TMDB hub_filter applied total_ms=%.1f", (time.perf_counter() - t0) * 1000)
     return out
-

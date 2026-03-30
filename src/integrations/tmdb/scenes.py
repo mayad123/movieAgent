@@ -103,6 +103,7 @@ class ScenesProviderTMDB:
             return []
         try:
             from .resolver import resolve_movie
+
             result = resolve_movie(
                 (title or "").strip(),
                 year=year,
@@ -128,6 +129,7 @@ class ScenesProviderTMDB:
         """
         try:
             import urllib.request
+
             url = f"{self.BASE_URL}/movie/{movie_id}/images"
             req = urllib.request.Request(url, headers=_bearer_headers(self._token))
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
@@ -151,6 +153,7 @@ class ScenesProviderTMDB:
             )
 
             from .image_config import SIZE_BACKDROP_GALLERY, build_image_url, get_config
+
             img_config = get_config(self._token, timeout=self._timeout)
             source_url = f"{self.MOVIE_PAGE_BASE}/{movie_id}"
             seen_urls: set[str] = set()
@@ -183,6 +186,7 @@ class ScenesProviderTMDB:
     @staticmethod
     def _decode_json(payload: bytes) -> Any:
         import json
+
         return json.loads(payload.decode("utf-8"))
 
 
@@ -197,6 +201,7 @@ def get_scenes_provider() -> ScenesProvider:
     does not raise and returns [] on failure. Playground mode never breaks when TMDB is off.
     """
     from config import ENABLE_TMDB_SCENES, TMDB_READ_ACCESS_TOKEN
+
     if ENABLE_TMDB_SCENES and TMDB_READ_ACCESS_TOKEN:
         return ScenesProviderTMDB(access_token=TMDB_READ_ACCESS_TOKEN)
     return ScenesProviderEmpty()

@@ -2,6 +2,7 @@
 REST API wrapper for CineMind agent.
 For operationalization and deployment.
 """
+
 import contextlib
 import json
 import logging
@@ -19,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 try:
     import sys
     from pathlib import Path
+
     # Add src to path for imports
     src_path = Path(__file__).parent.parent
     if str(src_path) not in sys.path:
@@ -47,23 +49,14 @@ try:
     from workflows import run_playground
     from workflows import run_real_agent_with_fallback as run_real_agent_workflow
 except ImportError as e:
-    raise ImportError(
-        f"CineMind module not found. Make sure all dependencies are installed: {e}"
-    ) from e
+    raise ImportError(f"CineMind module not found. Make sure all dependencies are installed: {e}") from e
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
-app = FastAPI(
-    title="CineMind API",
-    description="Real-time Movie Analysis and Discovery Agent API",
-    version="1.0.0"
-)
+app = FastAPI(title="CineMind API", description="Real-time Movie Analysis and Discovery Agent API", version="1.0.0")
 
 # CORS middleware for web frontend
 app.add_middleware(
@@ -103,6 +96,7 @@ def get_agent() -> CineMind:
     if _agent is None:
         _agent = CineMind(enable_observability=True)
     return _agent
+
 
 def get_observability() -> Observability:
     """Get or create observability instance."""
@@ -196,6 +190,7 @@ async def health_diagnostic():
     tmdb_token_present = False
     try:
         from config import get_tmdb_access_token, is_tmdb_enabled
+
         config_loaded = True
         tmdb_enabled = is_tmdb_enabled()
         token = get_tmdb_access_token()
@@ -208,6 +203,7 @@ async def health_diagnostic():
         try:
             from config import get_tmdb_access_token as _get_token
             from integrations.tmdb.image_config import fetch_config
+
             fetch_config(_get_token(), timeout=3.0)
             tmdb_config_reachable = True
         except Exception as e:
@@ -226,6 +222,7 @@ async def health_diagnostic():
 def _watchmode_500_missing_key():
     """Structured 500 for Watchmode routes when API key is not configured."""
     from fastapi.responses import JSONResponse
+
     return JSONResponse(
         status_code=500,
         content={
@@ -237,6 +234,7 @@ def _watchmode_500_missing_key():
 
 def _watchmode_error_response(status_code: int, error: str, message: str):
     from fastapi.responses import JSONResponse
+
     return JSONResponse(status_code=status_code, content={"error": error, "message": message})
 
 
@@ -253,6 +251,7 @@ async def where_to_watch_by_tmdb(
     Provide either tmdbId or title; when only title is provided, Watchmode autocomplete-search is used.
     """
     from fastapi.responses import JSONResponse
+
     if not is_watchmode_configured():
         logger.warning("Where-to-watch called but WATCHMODE_API_KEY is not set.")
         return _watchmode_500_missing_key()
@@ -286,7 +285,9 @@ async def where_to_watch_by_tmdb(
         return _watchmode_error_response(500, "service_error", err)
     request_region = (country or "US").strip().upper()
     response_data = data or {"movie": {}, "region": request_region, "groups": []}
-    title_id_for_response = (tmdbId or "").strip() or (response_data.get("_resolved_tmdb_id") if isinstance(response_data, dict) else None)
+    title_id_for_response = (tmdbId or "").strip() or (
+        response_data.get("_resolved_tmdb_id") if isinstance(response_data, dict) else None
+    )
     payload = normalize_where_to_watch_response(
         response_data,
         title_id=title_id_for_response or None,
@@ -382,6 +383,7 @@ async def where_to_watch(
         logger.warning("Where-to-watch called but WATCHMODE_API_KEY is not set.")
         return _watchmode_500_missing_key()
     from fastapi.responses import JSONResponse
+
     return JSONResponse(
         status_code=501,
         content={
@@ -466,8 +468,11 @@ async def search_movies(query: MovieQuery):
             )
         else:
             result, fallback_reason = await run_real_agent_workflow(
-                query.query, query.request_type, query.use_live_data,
-                REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
+                query.query,
+                query.request_type,
+                query.use_live_data,
+                REAL_AGENT_TIMEOUT_SECONDS,
+                get_agent(),
             )
             if fallback_reason is not None:
                 result = await run_playground(
@@ -491,13 +496,12 @@ async def search_movies(query: MovieQuery):
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Search error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {e!s}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}") from e
 
 
-def _format_hub_conversation_history_block(history: list | None, *, max_per_message: int = 2000, max_block_total: int = 12000) -> str:
+def _format_hub_conversation_history_block(
+    history: list | None, *, max_per_message: int = 2000, max_block_total: int = 12000
+) -> str:
     """
     Bounded prior-turn block for sub-context Movie Hub multi-turn prompts.
     """
@@ -593,10 +597,10 @@ async def query(req: QueryRequest):
                 "Return the Movie Hub structured format (strict contract):\n"
                 + "- Return exactly 4 genre blocks.\n"
                 + "- Each block MUST start with: Genre: <GenreName>\n"
-                + "- Then provide exactly 5 numbered lines formatted exactly as: \"1. Title (Year)\"\n"
+                + '- Then provide exactly 5 numbered lines formatted exactly as: "1. Title (Year)"\n'
                 + "- Total titles: 20.\n"
                 + "- You MUST output exactly 20 titles (4 * 5), even if the Candidate Titles list contains fewer than 20 unique titles.\n"
-                + "- Prefer titles from the Candidate Titles list first. If needed, you MAY add closely similar titles, but any title you add must still follow \"Title (Year)\" format and stay consistent with the anchor movie context.\n"
+                + '- Prefer titles from the Candidate Titles list first. If needed, you MAY add closely similar titles, but any title you add must still follow "Title (Year)" format and stay consistent with the anchor movie context.\n'
                 + "- Return ONLY the genre blocks. No commentary. No markdown."
             )
             question_section = (
@@ -643,11 +647,14 @@ async def query(req: QueryRequest):
                 if hub_max_concurrent > 12:
                     hub_max_concurrent = 12
 
-                enriched_cards = enrich_batch(
-                    bounded_titles,
-                    max_titles=min(len(bounded_titles), max_total),
-                    max_concurrent=hub_max_concurrent,
-                ) or []
+                enriched_cards = (
+                    enrich_batch(
+                        bounded_titles,
+                        max_titles=min(len(bounded_titles), max_total),
+                        max_concurrent=hub_max_concurrent,
+                    )
+                    or []
+                )
 
                 base_title = "this movie"
                 if isinstance(context_movie, dict):
@@ -808,9 +815,7 @@ async def query(req: QueryRequest):
                     expected_items_per_genre = 5
                     max_total = 20
                     total_items = sum(
-                        len((b or {}).get("items") or [])
-                        for b in (parsed_buckets or [])
-                        if isinstance(b, dict)
+                        len((b or {}).get("items") or []) for b in (parsed_buckets or []) if isinstance(b, dict)
                     )
                     if (
                         isinstance(parsed_buckets, list)
@@ -819,7 +824,11 @@ async def query(req: QueryRequest):
                         and total_items >= max_total
                     ):
                         base_genre = str(parsed_buckets[0].get("genre") or "").strip() or "Similar by genre"
-                        all_items = [str(it or "").strip() for it in (parsed_buckets[0].get("items") or []) if str(it or "").strip()]
+                        all_items = [
+                            str(it or "").strip()
+                            for it in (parsed_buckets[0].get("items") or [])
+                            if str(it or "").strip()
+                        ]
                         all_items = all_items[:max_total]
                         rebucketed: list[dict] = []
                         for i in range(expected_genres):
@@ -1039,9 +1048,7 @@ async def query(req: QueryRequest):
             # If deterministic path is already good enough, skip parse/enrich path to save latency.
             min_deterministic = max(1, int(os.getenv("HUB_DETERMINISTIC_MIN_ITEMS", "12")))
             if deterministic_clusters and deterministic_total >= min_deterministic:
-                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(
-                    deterministic_clusters, max_total=20
-                )
+                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(deterministic_clusters, max_total=20)
                 logger.debug(
                     "hub_attach_strategy=deterministic total_items=%s total_ms=%.1f",
                     deterministic_total,
@@ -1053,9 +1060,7 @@ async def query(req: QueryRequest):
             existing = result_dict.get("movieHubClusters")
             existing_total = _count_total_moviehub_items(existing)
             if deterministic_clusters and (not existing or existing_total < 20):
-                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(
-                    deterministic_clusters, max_total=20
-                )
+                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(deterministic_clusters, max_total=20)
             logger.debug(
                 "hub_attach_strategy=parse_then_merge existing_items=%s deterministic_items=%s total_ms=%.1f",
                 existing_total,
@@ -1070,8 +1075,11 @@ async def query(req: QueryRequest):
             )
         else:
             result, fallback_reason = await run_real_agent_workflow(
-                agent_user_query, req.request_type, True,
-                REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
+                agent_user_query,
+                req.request_type,
+                True,
+                REAL_AGENT_TIMEOUT_SECONDS,
+                get_agent(),
             )
             if fallback_reason is not None:
                 result = await run_playground(
@@ -1098,12 +1106,10 @@ async def query(req: QueryRequest):
         result["message_id"] = req.message_id or str(uuid.uuid4())
         result["thread_id"] = req.thread_id or (f"sub-{rid}" if context_movie else f"main-{rid}")
         mode_override_reason = None
-        if (
-            mode == AgentMode.PLAYGROUND.value
-            and req.requested_agent_mode == "REAL_AGENT"
-            and not is_llm_configured()
-        ):
-            mode_override_reason = "LLM not configured (CINEMIND_LLM_BASE_URL + CINEMIND_LLM_MODEL); Real Agent unavailable."
+        if mode == AgentMode.PLAYGROUND.value and req.requested_agent_mode == "REAL_AGENT" and not is_llm_configured():
+            mode_override_reason = (
+                "LLM not configured (CINEMIND_LLM_BASE_URL + CINEMIND_LLM_MODEL); Real Agent unavailable."
+            )
         _inject_mode_metadata(
             result, mode, req.requested_agent_mode, mode_fallback=False, mode_override_reason=mode_override_reason
         )
@@ -1136,7 +1142,11 @@ async def search_movies_get(query: str, use_live_data: bool = True):
             result = await run_playground(user_query=query, request_type=None)
         else:
             result, fallback_reason = await run_real_agent_workflow(
-                query, None, use_live_data, REAL_AGENT_TIMEOUT_SECONDS, get_agent(),
+                query,
+                None,
+                use_live_data,
+                REAL_AGENT_TIMEOUT_SECONDS,
+                get_agent(),
             )
             if fallback_reason is not None:
                 result = await run_playground(user_query=query, request_type=None)
@@ -1193,7 +1203,13 @@ async def search_movies_stream(query: MovieQuery):
                         use_live_data=query.use_live_data,
                     ):
                         yield f"data: {json.dumps({'token': token})}\n\n"
-                    meta = {"agent_mode": mode, "actualAgentMode": mode, "requestedAgentMode": query.requested_agent_mode or mode, "modeFallback": False, "toolsUsed": []}
+                    meta = {
+                        "agent_mode": mode,
+                        "actualAgentMode": mode,
+                        "requestedAgentMode": query.requested_agent_mode or mode,
+                        "modeFallback": False,
+                        "toolsUsed": [],
+                    }
                     yield f"data: {json.dumps(meta)}\n\n"
                 except Exception as e:
                     logger.exception("Real agent stream failed; falling back to PLAYGROUND.")
@@ -1203,7 +1219,12 @@ async def search_movies_stream(query: MovieQuery):
                     )
                     _inject_mode_metadata(fallback, "PLAYGROUND", "REAL_AGENT", mode_fallback=True)
                     fallback["fallback_reason"] = str(e)
-                    payload = {"token": fallback.get("response", ""), "agent_mode": "PLAYGROUND", "modeFallback": True, "fallback_reason": str(e)}
+                    payload = {
+                        "token": fallback.get("response", ""),
+                        "agent_mode": "PLAYGROUND",
+                        "modeFallback": True,
+                        "fallback_reason": str(e),
+                    }
                     payload["actualAgentMode"] = fallback.get("actualAgentMode")
                     payload["requestedAgentMode"] = fallback.get("requestedAgentMode")
                     payload["toolsUsed"] = fallback.get("toolsUsed", [])
@@ -1258,9 +1279,11 @@ async def get_recent_requests(limit: int = Query(100, ge=1, le=1000)):
 
 
 @app.get("/observability/stats")
-async def get_stats(days: int = Query(7, ge=1, le=365),
-                    request_type: str | None = Query(None, description="Filter by request type"),
-                    outcome: str | None = Query(None, description="Filter by outcome")):
+async def get_stats(
+    days: int = Query(7, ge=1, le=365),
+    request_type: str | None = Query(None, description="Filter by request type"),
+    outcome: str | None = Query(None, description="Filter by outcome"),
+):
     """
     Get statistics for the last N days, optionally filtered by type/outcome.
 
@@ -1304,10 +1327,7 @@ async def update_request_outcome(request_id: str, outcome: str = Query(..., desc
     """
     tagger = RequestTagger()
     if not tagger.validate_outcome(outcome):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid outcome. Must be one of: {list(OUTCOMES.keys())}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid outcome. Must be one of: {list(OUTCOMES.keys())}")
 
     try:
         obs = get_observability()
@@ -1325,7 +1345,7 @@ async def shutdown_event():
     if _agent:
         await _agent.close()
         _agent = None
-    if _observability and hasattr(_observability, 'db'):
+    if _observability and hasattr(_observability, "db"):
         _observability.db.close()
         _observability = None
     _projects_store = None
@@ -1345,4 +1365,3 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     run_server(port=port)
-

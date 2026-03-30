@@ -280,11 +280,7 @@ def test_candidate_titles_injected_into_prompt(monkeypatch: pytest.MonkeyPatch):
         "tmdbId": 10,
         "candidateTitles": candidate_titles,
     }
-    marker = (
-        "[[CINEMIND_HUB_CONTEXT]]"
-        + json.dumps(marker_payload)
-        + "[[/CINEMIND_HUB_CONTEXT]]"
-    )
+    marker = "[[CINEMIND_HUB_CONTEXT]]" + json.dumps(marker_payload) + "[[/CINEMIND_HUB_CONTEXT]]"
 
     resp = client.post(
         "/query",
@@ -351,11 +347,7 @@ def test_hub_conversation_history_prepended_to_agent_prompt(monkeypatch: pytest.
         "tmdbId": 10,
         "candidateTitles": candidate_titles,
     }
-    marker = (
-        "[[CINEMIND_HUB_CONTEXT]]"
-        + json.dumps(marker_payload)
-        + "[[/CINEMIND_HUB_CONTEXT]]"
-    )
+    marker = "[[CINEMIND_HUB_CONTEXT]]" + json.dumps(marker_payload) + "[[/CINEMIND_HUB_CONTEXT]]"
 
     resp = client.post(
         "/query",
@@ -378,4 +370,3 @@ def test_hub_conversation_history_prepended_to_agent_prompt(monkeypatch: pytest.
     assert "Current user question:" in q
     assert "Only psychological thrillers" in q
     assert "Candidate Titles (movies currently shown in the hub" in q
-

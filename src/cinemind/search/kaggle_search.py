@@ -6,6 +6,7 @@ and check if results are highly correlated with user queries.
 
 Optimization: Two-stage pipeline with fast candidate retrieval + expensive correlation scorer.
 """
+
 import logging
 import re
 from urllib.parse import quote
@@ -45,10 +46,10 @@ def normalize_title(title: str) -> str:
     normalized = title.lower().strip()
 
     # Remove special characters (keep letters, numbers, spaces)
-    normalized = re.sub(r'[^a-z0-9\s]', '', normalized)
+    normalized = re.sub(r"[^a-z0-9\s]", "", normalized)
 
     # Remove extra whitespace
-    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    normalized = re.sub(r"\s+", " ", normalized).strip()
 
     # Remove leading articles (optional - can be kept for some matching strategies)
     # normalized = re.sub(r'^(the|a|an)\s+', '', normalized).strip()
@@ -134,7 +135,11 @@ class KaggleDatasetSearcher:
                     # Try to load the main dataset file first (usually the first one or one with "Dataset" in name)
                     main_file = None
                     for csv_file in csv_files:
-                        if "Dataset" in csv_file.name and "Dataset_2" not in csv_file.name and "Dataset_3" not in csv_file.name:
+                        if (
+                            "Dataset" in csv_file.name
+                            and "Dataset_2" not in csv_file.name
+                            and "Dataset_3" not in csv_file.name
+                        ):
                             main_file = csv_file
                             break
 
@@ -158,13 +163,7 @@ class KaggleDatasetSearcher:
                 except Exception as e:
                     logger.error(f"Failed to auto-detect and load dataset file: {e}")
                     # Fallback: try common file names
-                    common_files = [
-                        "IMDb_Dataset.csv",
-                        "imdb_movies.csv",
-                        "movies.csv",
-                        "imdb.csv",
-                        "dataset.csv"
-                    ]
+                    common_files = ["IMDb_Dataset.csv", "imdb_movies.csv", "movies.csv", "imdb.csv", "dataset.csv"]
 
                     df = None
                     for file_path in common_files:
@@ -211,11 +210,7 @@ class KaggleDatasetSearcher:
 
         This is a simple extraction - could be enhanced with NER or LLM.
         """
-        entities = {
-            "movies": [],
-            "people": [],
-            "keywords": []
-        }
+        entities = {"movies": [], "people": [], "keywords": []}
 
         query_lower = query.lower()
 
@@ -226,7 +221,7 @@ class KaggleDatasetSearcher:
         # Look for movie titles (capitalized phrases)
         title_patterns = [
             r'"([^"]+)"',  # Quoted titles
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',  # Capitalized phrases
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",  # Capitalized phrases
         ]
 
         for pattern in title_patterns:
@@ -237,8 +232,21 @@ class KaggleDatasetSearcher:
 
         # Extract common movie-related keywords
         movie_keywords = [
-            "directed", "director", "released", "release", "cast", "actor", "actress",
-            "movie", "film", "cinema", "who", "when", "what", "where", "year"
+            "directed",
+            "director",
+            "released",
+            "release",
+            "cast",
+            "actor",
+            "actress",
+            "movie",
+            "film",
+            "cinema",
+            "who",
+            "when",
+            "what",
+            "where",
+            "year",
         ]
 
         for keyword in movie_keywords:
@@ -251,7 +259,7 @@ class KaggleDatasetSearcher:
             if indicator in query_lower:
                 idx = query_lower.find(indicator)
                 # Get words after the indicator
-                after = query[idx + len(indicator):].strip()
+                after = query[idx + len(indicator) :].strip()
                 # Simple heuristic: capitalized words are potential names
                 potential_names = [w for w in after.split() if w and w[0].isupper()]
                 if potential_names:
@@ -286,7 +294,7 @@ class KaggleDatasetSearcher:
         if not title_col:
             # Fallback: use first string column
             for col in df.columns:
-                if df[col].dtype == 'object':
+                if df[col].dtype == "object":
                     title_col = col
                     break
 
@@ -316,9 +324,13 @@ class KaggleDatasetSearcher:
                         self._token_index[token].add(pos_idx)
 
         self._title_index_loaded = True
-        logger.info(f"Built title index: {len(self._normalized_title_index)} titles, {len(self._token_index)} unique tokens")
+        logger.info(
+            f"Built title index: {len(self._normalized_title_index)} titles, {len(self._token_index)} unique tokens"
+        )
 
-    def _stage_a_candidate_retrieval(self, query: str, top_n: int = STAGE_A_CANDIDATE_LIMIT) -> list[tuple[int, float, str]]:
+    def _stage_a_candidate_retrieval(
+        self, query: str, top_n: int = STAGE_A_CANDIDATE_LIMIT
+    ) -> list[tuple[int, float, str]]:
         """
         Stage A: Fast candidate retrieval using title normalization + simple lookup.
 
@@ -348,9 +360,8 @@ class KaggleDatasetSearcher:
             if query_normalized == normalized_title:
                 candidates[row_idx] = (1.0, "exact_title")
             elif (
-                (query_normalized in normalized_title or normalized_title in query_normalized)
-                and row_idx not in candidates
-            ):
+                query_normalized in normalized_title or normalized_title in query_normalized
+            ) and row_idx not in candidates:
                 # Substring match (one contains the other), unless exact match already exists.
                 candidates[row_idx] = (0.9, "substring_match")
 
@@ -372,16 +383,26 @@ class KaggleDatasetSearcher:
         # Strategy 3: Optional fuzzy matching with rapidfuzz (if available)
         try:
             from rapidfuzz import fuzz, process
+
             # Use rapidfuzz to find fuzzy matches if we don't have enough candidates
             if len(candidates) < top_n:
                 # Extract titles and indices for fuzzy matching
-                title_list = [(idx, normalized) for idx, normalized in self._normalized_title_index.items() if idx not in candidates]
+                title_list = [
+                    (idx, normalized)
+                    for idx, normalized in self._normalized_title_index.items()
+                    if idx not in candidates
+                ]
 
                 if title_list:
                     # Use rapidfuzz to get best matches
                     # Extract just the titles for process.extract
                     titles_only = [t[1] for t in title_list]
-                    matches = process.extract(query_normalized, titles_only, limit=min(top_n - len(candidates), len(titles_only)), scorer=fuzz.ratio)
+                    matches = process.extract(
+                        query_normalized,
+                        titles_only,
+                        limit=min(top_n - len(candidates), len(titles_only)),
+                        scorer=fuzz.ratio,
+                    )
 
                     # Map back to row indices
                     for match_title, score, _ in matches:
@@ -508,7 +529,9 @@ class KaggleDatasetSearcher:
             logger.info(f"No candidates found in Stage A for query: {query}")
             return [], 0.0
 
-        logger.debug(f"Stage A found {len(candidates)} candidates, running Stage B correlation on top {min(len(candidates), STAGE_A_CANDIDATE_LIMIT)}")
+        logger.debug(
+            f"Stage A found {len(candidates)} candidates, running Stage B correlation on top {min(len(candidates), STAGE_A_CANDIDATE_LIMIT)}"
+        )
 
         # Stage B: Run expensive correlation scorer only on top N candidates
         correlations = []
@@ -526,14 +549,16 @@ class KaggleDatasetSearcher:
                 combined_score = (stage_a_score * 0.3) + (correlation * 0.7)
 
                 if combined_score > 0.0:  # Only store non-zero correlations
-                    correlations.append({
-                        "index": row_idx,
-                        "correlation": correlation,
-                        "combined_score": combined_score,
-                        "match_reason": match_reason,
-                        "stage_a_score": stage_a_score,
-                        "row_data": row_dict
-                    })
+                    correlations.append(
+                        {
+                            "index": row_idx,
+                            "correlation": correlation,
+                            "combined_score": combined_score,
+                            "match_reason": match_reason,
+                            "stage_a_score": stage_a_score,
+                            "row_data": row_dict,
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Error calculating correlation for row {row_idx}: {e}")
                 continue
@@ -591,7 +616,7 @@ class KaggleDatasetSearcher:
                 "Rating": ["IMDb Rating", "Rating", "rating", "IMDB Rating", "Score"],
                 "MetaScore": ["MetaScore", "metascore", "Metascore"],
                 "Duration": ["Duration (minutes)", "Duration", "duration", "Runtime", "runtime"],
-                "Certificates": ["Certificates", "certificate", "Rating", "MPAA Rating"]
+                "Certificates": ["Certificates", "certificate", "Rating", "MPAA Rating"],
             }
 
             content_lines = []
@@ -607,12 +632,13 @@ class KaggleDatasetSearcher:
                             if field_name == "Star Cast" and isinstance(val, str):
                                 # Try to detect concatenated names (capital letters without spaces before them)
                                 import re
+
                                 # Add space before capital letters that follow lowercase
-                                formatted_val = re.sub(r'(?<=[a-z])(?=[A-Z])', ', ', val)
+                                formatted_val = re.sub(r"(?<=[a-z])(?=[A-Z])", ", ", val)
                                 # Also handle cases where names might be separated by other patterns
-                                if ',' not in formatted_val and ' and ' not in formatted_val.lower():
+                                if "," not in formatted_val and " and " not in formatted_val.lower():
                                     # Try to split on patterns like "Name1Name2" -> "Name1, Name2"
-                                    formatted_val = re.sub(r'([a-z])([A-Z])', r'\1, \2', formatted_val)
+                                    formatted_val = re.sub(r"([a-z])([A-Z])", r"\1, \2", formatted_val)
                                 val = formatted_val
                             content_lines.append(f"{field_name}: {val}")
                             used_cols.add(col)
@@ -651,7 +677,8 @@ class KaggleDatasetSearcher:
                         elif isinstance(year_val, str):
                             # Try to extract 4-digit year
                             import re
-                            year_match = re.search(r'\b(19|20)\d{2}\b', year_val)
+
+                            year_match = re.search(r"\b(19|20)\d{2}\b", year_val)
                             if year_match:
                                 year = int(year_match.group())
                         break
@@ -679,21 +706,23 @@ class KaggleDatasetSearcher:
                 else:
                     url = ""
 
-            results.append({
-                "title": title or "IMDB Dataset Result",
-                "url": url,  # Dataset identifier for deduplication
-                "content": content,  # Must be non-empty (EvidenceFormatter requirement)
-                "score": correlation,  # Use correlation for backward compatibility
-                "source": "kaggle_imdb",  # EvidenceFormatter maps to "Structured IMDb dataset"
-                "correlation": correlation,
-                "match_score": combined_score,  # Combined Stage A + Stage B score
-                "match_reason": match_reason,  # "exact_title", "token_overlap", "substring_match", etc.
-                "stage_a_score": stage_a_score,  # Fast lookup score from Stage A
-                "published_date": None,
-                "year": year,  # For deduplication (EvidenceFormatter uses title+year)
-                "row_data": row_data,  # Include for adapter to extract additional fields
-                "row_index": item["index"]
-            })
+            results.append(
+                {
+                    "title": title or "IMDB Dataset Result",
+                    "url": url,  # Dataset identifier for deduplication
+                    "content": content,  # Must be non-empty (EvidenceFormatter requirement)
+                    "score": correlation,  # Use correlation for backward compatibility
+                    "source": "kaggle_imdb",  # EvidenceFormatter maps to "Structured IMDb dataset"
+                    "correlation": correlation,
+                    "match_score": combined_score,  # Combined Stage A + Stage B score
+                    "match_reason": match_reason,  # "exact_title", "token_overlap", "substring_match", etc.
+                    "stage_a_score": stage_a_score,  # Fast lookup score from Stage A
+                    "published_date": None,
+                    "year": year,  # For deduplication (EvidenceFormatter uses title+year)
+                    "row_data": row_data,  # Include for adapter to extract additional fields
+                    "row_index": item["index"],
+                }
+            )
 
         logger.info(f"Kaggle search returned {len(results)} results (max correlation: {max_correlation:.3f})")
 
@@ -715,9 +744,12 @@ class KaggleDatasetSearcher:
         is_correlated = max_correlation >= self.correlation_threshold
 
         if is_correlated:
-            logger.info(f"Kaggle dataset has highly correlated results (score: {max_correlation:.3f} >= {self.correlation_threshold})")
+            logger.info(
+                f"Kaggle dataset has highly correlated results (score: {max_correlation:.3f} >= {self.correlation_threshold})"
+            )
         else:
-            logger.info(f"Kaggle dataset results not highly correlated (score: {max_correlation:.3f} < {self.correlation_threshold})")
+            logger.info(
+                f"Kaggle dataset results not highly correlated (score: {max_correlation:.3f} < {self.correlation_threshold})"
+            )
 
         return is_correlated, results, max_correlation
-

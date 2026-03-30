@@ -21,11 +21,7 @@ def fake_llm_client():
 def agent_offline(fake_llm_client):
     """Create CineMind agent with FakeLLM for offline testing."""
     # Disable observability to avoid DB dependencies
-    agent = CineMind(
-        openai_api_key="fake-key",
-        enable_observability=False,
-        llm_client=fake_llm_client
-    )
+    agent = CineMind(openai_api_key="fake-key", enable_observability=False, llm_client=fake_llm_client)
     # Note: We still need to handle planning, so we'll use request_type parameter
     # to bypass planning in tests
     return agent
@@ -40,7 +36,7 @@ async def test_director_info_pass_through(agent_offline):
     result = await agent_offline.search_and_analyze(
         user_query=user_query,
         use_live_data=False,  # Disable live data to avoid API calls
-        request_type="info"  # Bypass planning
+        request_type="info",  # Bypass planning
     )
 
     assert result is not None
@@ -59,11 +55,7 @@ async def test_forbidden_terms_repair(agent_offline):
     """Test that validator detects and repairs forbidden terms."""
     user_query = "Who directed The Matrix? forbidden_test"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -82,11 +74,7 @@ async def test_verbosity_violation_repair(agent_offline):
     """Test that validator detects and repairs verbosity violations."""
     user_query = "Who directed The Matrix? verbosity_test"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -101,11 +89,7 @@ async def test_freshness_timestamp_included(agent_offline):
     """Test that freshness-sensitive queries include timestamp."""
     user_query = "Where can I watch Dune?"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -126,11 +110,7 @@ async def test_freshness_missing_repair(agent_offline):
     """
     user_query = "Where can I watch Dune? freshness_test"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -145,11 +125,7 @@ async def test_cast_info_pass_through(agent_offline):
     """Test cast_info query with pass-through."""
     user_query = "Who starred in Inglourious Basterds?"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -165,11 +141,7 @@ async def test_recommendation_pass_through(agent_offline):
     """Test recommendation query with pass-through."""
     user_query = "Recommend movies like The Matrix"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="recs"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="recs")
 
     assert result is not None
     response_text = result.get("response") or result.get("answer", "")
@@ -192,9 +164,7 @@ async def test_release_date_pass_through(agent_offline):
     user_query = "When was Dune released?"
 
     result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="release-date"
+        user_query=user_query, use_live_data=False, request_type="release-date"
     )
 
     assert result is not None
@@ -212,11 +182,7 @@ async def test_routing_decision_record(agent_offline):
     """Test that routing decision record is produced (if implemented)."""
     user_query = "Who directed The Matrix?"
 
-    result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="info"
-    )
+    result = await agent_offline.search_and_analyze(user_query=user_query, use_live_data=False, request_type="info")
 
     assert result is not None
     # Check if routing decision metadata is present
@@ -231,9 +197,7 @@ async def test_comparison_pass_through(agent_offline):
     user_query = "Compare The Matrix and Inception"
 
     result = await agent_offline.search_and_analyze(
-        user_query=user_query,
-        use_live_data=False,
-        request_type="comparison"
+        user_query=user_query, use_live_data=False, request_type="comparison"
     )
 
     assert result is not None
@@ -248,4 +212,3 @@ async def test_comparison_pass_through(agent_offline):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

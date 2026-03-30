@@ -7,6 +7,7 @@ Tests:
 - Kaggle disabled mode
 - Kaggle timeout fallback
 """
+
 import asyncio
 import sys
 from pathlib import Path
@@ -103,11 +104,11 @@ class TestKaggleHit:
                 "content": "Director: Wachowskis, Year: 1999, Genre: Sci-Fi",
                 "correlation": 0.85,
                 "match_score": 0.9,
-                "match_reason": "exact_title"
+                "match_reason": "exact_title",
             }
         ]
 
-        with patch.object(adapter_enabled, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter_enabled, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
             mock_searcher_instance.search = Mock(return_value=(mock_results, 0.85))
             mock_searcher.return_value = mock_searcher_instance
@@ -116,7 +117,7 @@ class TestKaggleHit:
                 prompt="Rank the best sci-fi movies",
                 intent="recommendation",
                 entities={"movies": [], "people": []},
-                max_results=5
+                max_results=5,
             )
 
             assert result.success
@@ -134,20 +135,17 @@ class TestKaggleHit:
                 "content": "Director: Wachowskis" * 100,  # Very long content
                 "correlation": 0.85,
                 "match_score": 0.9,
-                "match_reason": "exact_title"
+                "match_reason": "exact_title",
             }
         ]
 
-        with patch.object(adapter_enabled, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter_enabled, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
             mock_searcher_instance.search = Mock(return_value=(mock_results, 0.85))
             mock_searcher.return_value = mock_searcher_instance
 
             result = await adapter_enabled.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert result.success
@@ -168,20 +166,17 @@ class TestKaggleMissFallback:
                 "content": "Unrelated content",
                 "correlation": 0.3,  # Below threshold (0.6)
                 "match_score": 0.4,
-                "match_reason": "fuzzy_match"
+                "match_reason": "fuzzy_match",
             }
         ]
 
-        with patch.object(adapter_enabled, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter_enabled, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
             mock_searcher_instance.search = Mock(return_value=(mock_results, 0.3))
             mock_searcher.return_value = mock_searcher_instance
 
             result = await adapter_enabled.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert not result.success
@@ -191,16 +186,13 @@ class TestKaggleMissFallback:
     @pytest.mark.asyncio
     async def test_kaggle_miss_no_results(self, adapter_enabled):
         """Test Kaggle miss with no results returned."""
-        with patch.object(adapter_enabled, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter_enabled, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
             mock_searcher_instance.search = Mock(return_value=([], 0.0))
             mock_searcher.return_value = mock_searcher_instance
 
             result = await adapter_enabled.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert not result.success
@@ -209,16 +201,13 @@ class TestKaggleMissFallback:
     @pytest.mark.asyncio
     async def test_kaggle_miss_searcher_error(self, adapter_enabled):
         """Test Kaggle miss due to searcher error (clean fallback)."""
-        with patch.object(adapter_enabled, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter_enabled, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
             mock_searcher_instance.search = Mock(side_effect=Exception("Dataset not found"))
             mock_searcher.return_value = mock_searcher_instance
 
             result = await adapter_enabled.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert not result.success
@@ -234,10 +223,7 @@ class TestKaggleDisabledMode:
     async def test_disabled_mode_returns_no_results(self, adapter_disabled):
         """Test that disabled adapter returns no results."""
         result = await adapter_disabled.retrieve_evidence(
-            prompt="Best movies",
-            intent="recommendation",
-            entities={"movies": [], "people": []},
-            max_results=5
+            prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
         )
 
         assert not result.success
@@ -249,10 +235,7 @@ class TestKaggleDisabledMode:
         """Test that disabled adapter doesn't check relevance."""
         # Even with relevant query, disabled adapter should skip
         result = await adapter_disabled.retrieve_evidence(
-            prompt="Top 10 movies",
-            intent="recommendation",
-            entities={"movies": [], "people": []},
-            max_results=5
+            prompt="Top 10 movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
         )
 
         assert not result.success
@@ -272,11 +255,13 @@ class TestKaggleTimeoutFallback:
             await asyncio.sleep(1.0)  # Longer than 0.1s timeout
             return ([], 0.0)
 
-        with patch.object(adapter, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
+
             # Use run_in_executor to simulate blocking call
             def blocking_search(*args, **kwargs):
                 import time
+
                 time.sleep(1.0)  # Block for 1 second
                 return ([], 0.0)
 
@@ -284,10 +269,7 @@ class TestKaggleTimeoutFallback:
             mock_searcher.return_value = mock_searcher_instance
 
             result = await adapter.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert not result.success
@@ -300,10 +282,12 @@ class TestKaggleTimeoutFallback:
         """Test that timeout results in clean fallback (no exceptions)."""
         adapter = KaggleRetrievalAdapter(enabled=True, timeout_seconds=0.1)
 
-        with patch.object(adapter, '_get_kaggle_searcher') as mock_searcher:
+        with patch.object(adapter, "_get_kaggle_searcher") as mock_searcher:
             mock_searcher_instance = Mock()
+
             def blocking_search(*args, **kwargs):
                 import time
+
                 time.sleep(1.0)
                 return ([], 0.0)
 
@@ -312,10 +296,7 @@ class TestKaggleTimeoutFallback:
 
             # Should not raise exception
             result = await adapter.retrieve_evidence(
-                prompt="Best movies",
-                intent="recommendation",
-                entities={"movies": [], "people": []},
-                max_results=5
+                prompt="Best movies", intent="recommendation", entities={"movies": [], "people": []}, max_results=5
             )
 
             assert not result.success
@@ -335,10 +316,10 @@ class TestEvidenceBundleConversion:
                     url="https://kaggle.com/dataset",
                     content="Director: Wachowskis",
                     source="kaggle_imdb",
-                    metadata={"correlation_score": 0.85}
+                    metadata={"correlation_score": 0.85},
                 )
             ],
-            relevance_score=0.8
+            relevance_score=0.8,
         )
 
         bundle = adapter_enabled.convert_to_evidence_bundle(result)
@@ -352,10 +333,7 @@ class TestEvidenceBundleConversion:
     def test_convert_to_evidence_bundle_none_on_failure(self, adapter_enabled):
         """Test that failed results return None."""
         result = KaggleRetrievalResult(
-            success=False,
-            evidence_items=[],
-            relevance_score=0.3,
-            error_message="Not relevant"
+            success=False, evidence_items=[], relevance_score=0.3, error_message="Not relevant"
         )
 
         bundle = adapter_enabled.convert_to_evidence_bundle(result)
@@ -386,4 +364,3 @@ class TestSingletonPattern:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

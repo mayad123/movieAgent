@@ -1,4 +1,5 @@
 """CineMind agent package."""
+
 from config import AGENT_NAME, AGENT_VERSION, LLM_MODEL, SYSTEM_PROMPT
 
 from .agent.core import CineMind
@@ -19,18 +20,18 @@ from .media.media_enrichment import (
 )
 
 __all__ = [
-    'AGENT_NAME',
-    'AGENT_VERSION',
-    'LLM_MODEL',
-    'SYSTEM_PROMPT',
-    'CineMind',
-    'MediaCache',
-    'MediaEnrichmentResult',
-    'TitleExtractionResult',
-    'attach_media_to_result',
-    'enrich',
-    'enrich_batch',
-    'extract_movie_titles',
-    'get_default_media_cache',
-    'get_search_phrases',
+    "AGENT_NAME",
+    "AGENT_VERSION",
+    "LLM_MODEL",
+    "SYSTEM_PROMPT",
+    "CineMind",
+    "MediaCache",
+    "MediaEnrichmentResult",
+    "TitleExtractionResult",
+    "attach_media_to_result",
+    "enrich",
+    "enrich_batch",
+    "extract_movie_titles",
+    "get_default_media_cache",
+    "get_search_phrases",
 ]

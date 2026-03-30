@@ -9,6 +9,7 @@ Playground-only attachment behavior (single movie → poster + scenes; multi →
 is applied here via apply_playground_attachment_behavior. The switch is: this code path
 is only used when running the playground; real agent mode does not use it.
 """
+
 import logging
 from typing import Any
 

@@ -1,4 +1,5 @@
 """Unit tests for hero vs did_you_mean dedup and attachment invariants."""
+
 from __future__ import annotations
 
 import sys

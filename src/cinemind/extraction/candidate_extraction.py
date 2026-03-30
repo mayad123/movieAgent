@@ -2,6 +2,7 @@
 Candidate extraction for fact/list questions.
 Extracts candidate items from search results before verification.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -10,15 +11,38 @@ logger = logging.getLogger(__name__)
 
 # Common award/category phrases that should not be treated as movie titles
 AWARD_PHRASES = {
-    "best picture", "academy award", "oscar", "golden globe",
-    "best actor", "best actress", "best director", "best screenplay",
-    "best supporting actor", "best supporting actress", "best cinematography",
-    "best original score", "best visual effects", "best editing",
-    "best costume design", "best production design", "best sound",
-    "best foreign language film", "best animated feature", "best documentary",
-    "emmy award", "grammy award", "tony award", "sag award",
-    "palme d'or", "golden bear", "venice film festival", "cannes film festival",
-    "best film", "best movie", "film of the year", "movie of the year"
+    "best picture",
+    "academy award",
+    "oscar",
+    "golden globe",
+    "best actor",
+    "best actress",
+    "best director",
+    "best screenplay",
+    "best supporting actor",
+    "best supporting actress",
+    "best cinematography",
+    "best original score",
+    "best visual effects",
+    "best editing",
+    "best costume design",
+    "best production design",
+    "best sound",
+    "best foreign language film",
+    "best animated feature",
+    "best documentary",
+    "emmy award",
+    "grammy award",
+    "tony award",
+    "sag award",
+    "palme d'or",
+    "golden bear",
+    "venice film festival",
+    "cannes film festival",
+    "best film",
+    "best movie",
+    "film of the year",
+    "movie of the year",
 }
 
 
@@ -53,10 +77,10 @@ def normalize_title(title: str) -> str:
     normalized = re.sub(r"[\u2014\u2013\u2212]", "-", normalized)
 
     # Normalize middle dots and other separators
-    normalized = re.sub(r'[·•]', '·', normalized)  # Keep middle dot as-is for titles like WALL·E
+    normalized = re.sub(r"[·•]", "·", normalized)  # Keep middle dot as-is for titles like WALL·E
 
     # Collapse multiple spaces to single space
-    normalized = re.sub(r'\s+', ' ', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
 
     # Final strip
     normalized = normalized.strip()
@@ -94,6 +118,7 @@ def is_award_phrase(text: str) -> bool:
 @dataclass
 class Candidate:
     """A candidate item extracted from search results."""
+
     value: str  # The candidate value (title, year, etc.)
     source_url: str
     source_tier: str
@@ -173,7 +198,7 @@ class CandidateExtractor:
             matches.append((title, year, match.start(), match.end()))
 
         # Pattern 4: Title with comma: Title, Year
-        pattern4 = r'([A-Z][A-Za-z0-9:·\-\'\"\s]+?),\s*(\d{4})\b'
+        pattern4 = r"([A-Z][A-Za-z0-9:·\-\'\"\s]+?),\s*(\d{4})\b"
         for match in re.finditer(pattern4, text):
             title = match.group(1).strip()
             year = match.group(2)
@@ -182,15 +207,17 @@ class CandidateExtractor:
             # Additional check: make sure comma isn't part of a list (e.g., "Actor, Director, 1999")
             # If title is very short and contains common words, skip
             title_words = title.split()
-            if len(title_words) <= 2 and any(word.lower() in ["actor", "director", "writer", "producer", "star", "stars"]
-                                            for word in title_words):
+            if len(title_words) <= 2 and any(
+                word.lower() in ["actor", "director", "writer", "producer", "star", "stars"] for word in title_words
+            ):
                 continue
             matches.append((title, year, match.start(), match.end()))
 
         return matches
 
-    def extract_movie_candidates(self, search_results: list[dict],
-                                 entities: list[str] | None = None) -> list[Candidate]:
+    def extract_movie_candidates(
+        self, search_results: list[dict], entities: list[str] | None = None
+    ) -> list[Candidate]:
         """
         Extract candidate movie titles from search results.
 
@@ -232,17 +259,24 @@ class CandidateExtractor:
                 # Filter by entities if provided
                 if entities:
                     title_lower = normalized_title.lower()
-                    if not any(entity.lower() in title_lower or title_lower in entity.lower()
-                              for entity in entities if len(entity) > 2):
+                    if not any(
+                        entity.lower() in title_lower or title_lower in entity.lower()
+                        for entity in entities
+                        if len(entity) > 2
+                    ):
                         continue
 
-                candidates.append(Candidate(
-                    value=f"{normalized_title} ({year})",
-                    source_url=url,
-                    source_tier=tier,
-                    confidence=0.7,  # Medium confidence for extraction
-                    context=content[max(0, start_pos-50):min(len(content), end_pos+50)]  # Context around match
-                ))
+                candidates.append(
+                    Candidate(
+                        value=f"{normalized_title} ({year})",
+                        source_url=url,
+                        source_tier=tier,
+                        confidence=0.7,  # Medium confidence for extraction
+                        context=content[
+                            max(0, start_pos - 50) : min(len(content), end_pos + 50)
+                        ],  # Context around match
+                    )
+                )
 
             # Also extract from result title if it looks like a movie
             if title:
@@ -255,13 +289,15 @@ class CandidateExtractor:
                     key = f"{normalized_title.lower()}_{year}"
                     if key not in seen_titles:
                         seen_titles.add(key)
-                        candidates.append(Candidate(
-                            value=f"{normalized_title} ({year})",
-                            source_url=url,
-                            source_tier=tier,
-                            confidence=0.8,  # Higher confidence for title field
-                            context=title
-                        ))
+                        candidates.append(
+                            Candidate(
+                                value=f"{normalized_title} ({year})",
+                                source_url=url,
+                                source_tier=tier,
+                                confidence=0.8,  # Higher confidence for title field
+                                context=title,
+                            )
+                        )
 
         # Sort by confidence and source tier (Tier A first)
         tier_priority = {"A": 3, "B": 2, "C": 1, "UNKNOWN": 0}
@@ -269,8 +305,9 @@ class CandidateExtractor:
 
         return candidates[:20]  # Limit to top 20 candidates
 
-    def extract_collaboration_candidates(self, search_results: list[dict],
-                                        person1: str, person2: str) -> list[Candidate]:
+    def extract_collaboration_candidates(
+        self, search_results: list[dict], person1: str, person2: str
+    ) -> list[Candidate]:
         """
         Extract candidate movies where two people collaborated.
 
@@ -319,13 +356,15 @@ class CandidateExtractor:
                     continue
                 seen_titles.add(key)
 
-                candidates.append(Candidate(
-                    value=f"{normalized_title} ({year})",
-                    source_url=url,
-                    source_tier=tier,
-                    confidence=0.6,  # Lower confidence - needs verification
-                    context=content[max(0, start_pos-50):min(len(content), end_pos+100)]
-                ))
+                candidates.append(
+                    Candidate(
+                        value=f"{normalized_title} ({year})",
+                        source_url=url,
+                        source_tier=tier,
+                        confidence=0.6,  # Lower confidence - needs verification
+                        context=content[max(0, start_pos - 50) : min(len(content), end_pos + 100)],
+                    )
+                )
 
         # Sort by confidence and tier
         tier_priority = {"A": 3, "B": 2, "C": 1, "UNKNOWN": 0}
@@ -333,8 +372,7 @@ class CandidateExtractor:
 
         return candidates[:15]  # Limit to top 15 candidates
 
-    def extract_release_year_candidates(self, search_results: list[dict],
-                                        movie_title: str) -> list[Candidate]:
+    def extract_release_year_candidates(self, search_results: list[dict], movie_title: str) -> list[Candidate]:
         """
         Extract candidate release years for a movie.
 
@@ -359,15 +397,14 @@ class CandidateExtractor:
 
             # Check if movie title is mentioned
             title_mentioned = (
-                title_lower in content_lower or
-                all(word in content_lower for word in title_words[:3])  # First 3 words
+                title_lower in content_lower or all(word in content_lower for word in title_words[:3])  # First 3 words
             )
 
             if not title_mentioned:
                 continue
 
             # Extract years
-            year_pattern = r'\b(19\d{2}|20\d{2})\b'
+            year_pattern = r"\b(19\d{2}|20\d{2})\b"
             years = re.findall(year_pattern, content)
 
             for year_str in years:
@@ -382,17 +419,12 @@ class CandidateExtractor:
                 context_end = min(len(content), year_pos + len(year_str) + 50)
                 context = content[context_start:context_end]
 
-                candidates.append(Candidate(
-                    value=str(year),
-                    source_url=url,
-                    source_tier=tier,
-                    confidence=0.7,
-                    context=context
-                ))
+                candidates.append(
+                    Candidate(value=str(year), source_url=url, source_tier=tier, confidence=0.7, context=context)
+                )
 
         # Sort by tier and confidence
         tier_priority = {"A": 3, "B": 2, "C": 1, "UNKNOWN": 0}
         candidates.sort(key=lambda c: (tier_priority.get(c.source_tier, 0), c.confidence), reverse=True)
 
         return candidates[:10]  # Limit to top 10 years
-

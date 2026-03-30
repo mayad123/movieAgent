@@ -200,9 +200,7 @@ def _map_related_results(
             continue
         year = _safe_year(r.get("release_date"))
         poster_path = r.get("poster_path")
-        primary_image_url = (
-            build_image_url(str(poster_path or ""), SIZE_POSTER_GALLERY, cfg) if poster_path else ""
-        )
+        primary_image_url = build_image_url(str(poster_path or ""), SIZE_POSTER_GALLERY, cfg) if poster_path else ""
         item = {
             "movie_title": title,
             "year": year,
@@ -267,4 +265,3 @@ def build_movie_details_payload(
 
 
 __all__ = ["build_movie_details_payload"]
-

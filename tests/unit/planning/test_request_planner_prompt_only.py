@@ -4,6 +4,7 @@ Unit tests for prompt-only RequestPlan creation.
 Tests that RequestPlanner can build complete RequestPlans from only the user prompt,
 without requiring a UI-provided request_type.
 """
+
 import sys
 from pathlib import Path
 
@@ -257,4 +258,3 @@ class TestStability:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

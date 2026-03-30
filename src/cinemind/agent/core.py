@@ -6,6 +6,7 @@ Performance optimizations:
 - Parallel search execution (multiple searches run concurrently)
 - Non-blocking database writes (runs in background thread pool)
 """
+
 import asyncio
 import logging
 import os
@@ -47,10 +48,7 @@ from ..search.search_engine import MovieDataAggregator, SearchEngine
 from ..verification.fact_verifier import FactVerifier, VerifiedFact
 
 # Configure logging (simple format, request_id added in observability)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -138,11 +136,15 @@ class CineMind:
 
         logger.info(f"Initialized {self.agent_name} v{self.version} (observability: {enable_observability})")
 
-    async def search_and_analyze(self, user_query: str, use_live_data: bool = True,
-                                request_id: str | None = None,
-                                request_type: str | None = None,
-                                outcome: str | None = None,
-                                playground_mode: bool = False) -> dict:
+    async def search_and_analyze(
+        self,
+        user_query: str,
+        use_live_data: bool = True,
+        request_id: str | None = None,
+        request_type: str | None = None,
+        outcome: str | None = None,
+        playground_mode: bool = False,
+    ) -> dict:
         """
         Search for real-time movie data and provide analysis.
 
@@ -164,6 +166,7 @@ class CineMind:
 
         # Safety: cap tool calls per request (backend-enforced)
         _tool_calls = {"n": 0}
+
         def _check_tool_limit():
             _tool_calls["n"] += 1
             if _tool_calls["n"] > REAL_AGENT_MAX_TOOL_CALLS:
@@ -200,22 +203,26 @@ class CineMind:
                     entities=[],  # Empty for now - exact match doesn't need entities
                     need_freshness=False,  # Default - exact match doesn't need this
                     current_agent_version=self.version,
-                    current_prompt_version=PROMPT_VERSION
+                    current_prompt_version=PROMPT_VERSION,
                 )
 
                 # If cache hit, reconstruct RequestPlan from cached data
                 if cache_hit:
                     # Reconstruct plan from cache entry (no OpenAI calls needed)
                     request_plan = RequestPlan(
-                        intent=cache_hit.structured_facts.get("type", "general_info") if cache_hit.structured_facts else "general_info",
+                        intent=cache_hit.structured_facts.get("type", "general_info")
+                        if cache_hit.structured_facts
+                        else "general_info",
                         request_type=cache_hit.predicted_type,
                         entities=cache_hit.entities or [],
-                        need_freshness=cache_hit.structured_facts.get("need_freshness", False) if cache_hit.structured_facts else False,
+                        need_freshness=cache_hit.structured_facts.get("need_freshness", False)
+                        if cache_hit.structured_facts
+                        else False,
                         freshness_ttl_hours=6.0 if cache_hit.predicted_type == "release-date" else 168.0,
                         original_query=user_query,
                         rule_hit="cached",  # Mark as from cache
                         llm_used=False,  # No LLM used for cached response
-                        confidence=1.0
+                        confidence=1.0,
                     )
                     request_type = request_plan.request_type
 
@@ -233,11 +240,7 @@ class CineMind:
                 logger.warning(f"[{request_id}] Planning failed: {e}, defaulting to 'info'")
                 request_type = "info"
                 # Create minimal plan as fallback
-                request_plan = RequestPlan(
-                    intent="general_info",
-                    request_type="info",
-                    original_query=user_query
-                )
+                request_plan = RequestPlan(intent="general_info", request_type="info", original_query=user_query)
 
         # Log classification metadata (from plan)
         if request_plan and self.observability:
@@ -248,7 +251,7 @@ class CineMind:
                 llm_used=request_plan.llm_used,
                 confidence=request_plan.confidence,
                 entities=request_plan.entities,
-                need_freshness=request_plan.need_freshness
+                need_freshness=request_plan.need_freshness,
             )
 
         # If cache hit, check decision tree using RequestPlan
@@ -263,8 +266,12 @@ class CineMind:
                 cache_hit, plan_dict, cache_hit.similarity_score
             )
 
-            logger.info(f"[{request_id}] Cache {cache_hit.cache_tier} hit! (similarity: {cache_hit.similarity_score:.3f})")
-            logger.info(f"[{request_id}] Decision: {'Call LLM' if should_call_llm else 'Serve cached'} - Reason: {reason}")
+            logger.info(
+                f"[{request_id}] Cache {cache_hit.cache_tier} hit! (similarity: {cache_hit.similarity_score:.3f})"
+            )
+            logger.info(
+                f"[{request_id}] Decision: {'Call LLM' if should_call_llm else 'Serve cached'} - Reason: {reason}"
+            )
 
             # If decision tree says NO LLM, serve cached directly
             if not should_call_llm:
@@ -274,12 +281,16 @@ class CineMind:
                         request_id, user_query, use_live_data, LLM_MODEL, request_type=request_type
                     )
                     tracker = track_ctx.__enter__()
-                    tracker.log_metric("cache_hit", 1.0, {
-                        "cache_tier": cache_hit.cache_tier,
-                        "similarity_score": cache_hit.similarity_score,
-                        "llm_skipped": True,
-                        "skip_reason": reason
-                    })
+                    tracker.log_metric(
+                        "cache_hit",
+                        1.0,
+                        {
+                            "cache_tier": cache_hit.cache_tier,
+                            "similarity_score": cache_hit.similarity_score,
+                            "llm_skipped": True,
+                            "skip_reason": reason,
+                        },
+                    )
                     tracker.log_metric("cache_savings_usd", cache_hit.cost_metrics.get("saved_cost", 0))
                 else:
                     tracker = None
@@ -308,7 +319,7 @@ class CineMind:
                     "cache_tier": cache_hit.cache_tier,
                     "cache_similarity": cache_hit.similarity_score,
                     "llm_skipped": True,
-                    "skip_reason": reason
+                    "skip_reason": reason,
                 }
 
                 # Media enrichment via TMDB (skip in playground_mode; playground applies its own rule)
@@ -349,8 +360,13 @@ class CineMind:
             if request_plan:
                 # Reconstruct StructuredIntent from RequestPlan (no OpenAI call needed)
                 from ..extraction.intent_extraction import StructuredIntent
+
                 # Use typed entities from RequestPlan (preferred over flat list)
-                typed_entities = request_plan.entities_typed if hasattr(request_plan, 'entities_typed') and request_plan.entities_typed else {"movies": [], "people": []}
+                typed_entities = (
+                    request_plan.entities_typed
+                    if hasattr(request_plan, "entities_typed") and request_plan.entities_typed
+                    else {"movies": [], "people": []}
+                )
                 # Ensure required keys exist
                 if "movies" not in typed_entities:
                     typed_entities["movies"] = []
@@ -365,10 +381,12 @@ class CineMind:
                     confidence=request_plan.confidence,
                     requires_disambiguation=False,  # RequestPlan doesn't store this
                     need_freshness=request_plan.need_freshness,
-                    freshness_ttl_hours=request_plan.freshness_ttl_hours
+                    freshness_ttl_hours=request_plan.freshness_ttl_hours,
                 )
                 all_entities = structured_intent.get_all_entities()
-                logger.info(f"[{request_id}] Using intent from RequestPlan: {structured_intent.intent}, entities: {all_entities}")
+                logger.info(
+                    f"[{request_id}] Using intent from RequestPlan: {structured_intent.intent}, entities: {all_entities}"
+                )
             else:
                 # Fallback: only extract if RequestPlan wasn't created (shouldn't happen)
                 logger.warning(f"[{request_id}] No RequestPlan available, extracting intent as fallback")
@@ -377,7 +395,9 @@ class CineMind:
                         user_query, self.client, request_type
                     )
                     all_entities = structured_intent.get_all_entities()
-                    logger.info(f"[{request_id}] Extracted intent: {structured_intent.intent}, entities: {all_entities}")
+                    logger.info(
+                        f"[{request_id}] Extracted intent: {structured_intent.intent}, entities: {all_entities}"
+                    )
                 except Exception as e:
                     logger.warning(f"Intent extraction failed: {e}, using pattern-based")
                     structured_intent = self.intent_extractor.extract(user_query, request_type)
@@ -388,12 +408,14 @@ class CineMind:
                 tool_plan = self.tool_planner.plan_tools(
                     intent=structured_intent.intent,
                     need_freshness=structured_intent.need_freshness,
-                    freshness_reason=getattr(structured_intent, 'freshness_reason', None),
+                    freshness_reason=getattr(structured_intent, "freshness_reason", None),
                     entities=structured_intent.entities,
                     candidate_year=structured_intent.candidate_year,
-                    requires_disambiguation=structured_intent.requires_disambiguation
+                    requires_disambiguation=structured_intent.requires_disambiguation,
                 )
-                logger.info(f"[{request_id}] Tool plan: Tavily={tool_plan.use_tavily}, Reason: {tool_plan.freshness_reason or tool_plan.skip_reason}")
+                logger.info(
+                    f"[{request_id}] Tool plan: Tavily={tool_plan.use_tavily}, Reason: {tool_plan.freshness_reason or tool_plan.skip_reason}"
+                )
 
             # Step 0.5: Try Kaggle retrieval (works for both live and offline modes)
             # This runs before normal search to potentially use Kaggle datasets
@@ -402,33 +424,37 @@ class CineMind:
             if structured_intent:
                 # Try Kaggle retrieval adapter (configurable, with timeout)
                 from ..search.kaggle_retrieval_adapter import get_kaggle_adapter
+
                 # Get Kaggle adapter (can be enabled/disabled via environment or config)
                 kaggle_enabled = os.getenv("CINEMIND_KAGGLE_ENABLED", "true").lower() == "true"
                 kaggle_timeout = float(os.getenv("CINEMIND_KAGGLE_TIMEOUT", "5.0"))
 
                 if kaggle_enabled:
                     try:
-                        kaggle_adapter = get_kaggle_adapter(
-                            enabled=kaggle_enabled,
-                            timeout_seconds=kaggle_timeout
-                        )
+                        kaggle_adapter = get_kaggle_adapter(enabled=kaggle_enabled, timeout_seconds=kaggle_timeout)
 
                         kaggle_result = await kaggle_adapter.retrieve_evidence(
                             prompt=user_query,
                             intent=structured_intent.intent,
                             entities=structured_intent.entities,
-                            max_results=5
+                            max_results=5,
                         )
 
                         if kaggle_result.success and kaggle_result.evidence_items:
-                            logger.info(f"[{request_id}] Kaggle retrieval successful: {len(kaggle_result.evidence_items)} items")
+                            logger.info(
+                                f"[{request_id}] Kaggle retrieval successful: {len(kaggle_result.evidence_items)} items"
+                            )
                             # Convert to evidence bundle format (normalized for EvidenceFormatter)
                             kaggle_evidence_bundle = kaggle_adapter.convert_to_evidence_bundle(kaggle_result)
                             if kaggle_evidence_bundle:
                                 kaggle_search_results = kaggle_evidence_bundle.get("search_results", [])
-                                logger.info(f"[{request_id}] Kaggle evidence retrieved: {len(kaggle_search_results)} results (will merge with web search if applicable)")
+                                logger.info(
+                                    f"[{request_id}] Kaggle evidence retrieved: {len(kaggle_search_results)} results (will merge with web search if applicable)"
+                                )
                         else:
-                            logger.debug(f"[{request_id}] Kaggle retrieval: {kaggle_result.error_message or 'no relevant results'}, continuing with web search")
+                            logger.debug(
+                                f"[{request_id}] Kaggle retrieval: {kaggle_result.error_message or 'no relevant results'}, continuing with web search"
+                            )
                     except Exception as e:
                         logger.warning(f"[{request_id}] Kaggle retrieval failed: {e}, continuing with web search")
 
@@ -454,7 +480,7 @@ class CineMind:
                     should_skip_tavily, skip_reason = self.tool_planner.should_skip_tavily(
                         tool_plan,
                         cache_hit=False,  # We're in the live data path, so no cache hit yet
-                        need_freshness=need_freshness
+                        need_freshness=need_freshness,
                     )
 
                     if should_skip_tavily:
@@ -465,7 +491,11 @@ class CineMind:
                 from ..search.search_engine import TavilyOverrideReason
 
                 # Check for disambiguation_needed
-                if structured_intent and hasattr(structured_intent, 'requires_disambiguation') and structured_intent.requires_disambiguation:
+                if (
+                    structured_intent
+                    and hasattr(structured_intent, "requires_disambiguation")
+                    and structured_intent.requires_disambiguation
+                ):
                     override_reason = TavilyOverrideReason.DISAMBIGUATION_NEEDED.value
                     logger.info(f"[{request_id}] Override reason: {override_reason}")
 
@@ -495,10 +525,12 @@ class CineMind:
                                 skip_tavily=should_skip_tavily,
                                 override_reason=override_reason,
                                 request_plan=request_plan,
-                                entities_typed=entities_typed
+                                entities_typed=entities_typed,
                             )
                     else:
-                        logger.info(f"[{request_id}] Performing search (Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})...")
+                        logger.info(
+                            f"[{request_id}] Performing search (Tavily: {'enabled' if not should_skip_tavily else ('override' if override_reason else 'skipped')})..."
+                        )
                         _check_tool_limit()
                         movie_info = await self.aggregator.get_movie_info(
                             user_query,
@@ -509,7 +541,7 @@ class CineMind:
                             skip_tavily=should_skip_tavily,
                             override_reason=override_reason,
                             request_plan=request_plan,
-                            entities_typed=entities_typed
+                            entities_typed=entities_typed,
                         )
 
                     web_search_results = movie_info.get("results", [])
@@ -521,7 +553,9 @@ class CineMind:
                         # Add web search results (EvidenceFormatter will dedupe by url/title/year)
                         search_results.extend(web_search_results)
                         source_summary.update(web_source_summary)
-                        logger.info(f"[{request_id}] Merged Kaggle ({len(kaggle_search_results)}) + web ({len(web_search_results)}) = {len(search_results)} total results")
+                        logger.info(
+                            f"[{request_id}] Merged Kaggle ({len(kaggle_search_results)}) + web ({len(web_search_results)}) = {len(search_results)} total results"
+                        )
                     else:
                         # No Kaggle results, just use web search
                         search_results = web_search_results
@@ -540,21 +574,22 @@ class CineMind:
                         if request_type in ["info", "fact-check"] and structured_intent:
                             # Convert search results to SourceMetadata for candidate extraction
                             from ..planning.source_policy import SourceMetadata
+
                             source_metadata_list = []
                             for r in search_results:
                                 tier = self.source_policy.classify_source(
-                                    r.get("url", ""),
-                                    r.get("title", ""),
-                                    r.get("content", "")
+                                    r.get("url", ""), r.get("title", ""), r.get("content", "")
                                 )
-                                source_metadata_list.append(SourceMetadata(
-                                    url=r.get("url", ""),
-                                    domain=r.get("domain", ""),
-                                    tier=tier,
-                                    title=r.get("title", ""),
-                                    content=r.get("content", ""),
-                                    score=r.get("score", 0.0)
-                                ))
+                                source_metadata_list.append(
+                                    SourceMetadata(
+                                        url=r.get("url", ""),
+                                        domain=r.get("domain", ""),
+                                        tier=tier,
+                                        title=r.get("title", ""),
+                                        content=r.get("content", ""),
+                                        score=r.get("score", 0.0),
+                                    )
+                                )
 
                             # Extract candidates to check if we have any usable evidence
                             people = structured_intent.entities.get("people", [])
@@ -567,7 +602,7 @@ class CineMind:
                                 candidates_retrieved = len(candidates)
                                 # Count verified candidates
                                 for candidate in candidates:
-                                    title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                    title_year_match = re.match(r"(.+?)\s*\((\d{4})\)", candidate.value)
                                     if title_year_match:
                                         movie_title = title_year_match.group(1)
                                         year = int(title_year_match.group(2))
@@ -587,7 +622,7 @@ class CineMind:
                                 candidates_retrieved = len(candidates)
                                 # Count verified candidates
                                 for candidate in candidates:
-                                    title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                    title_year_match = re.match(r"(.+?)\s*\((\d{4})\)", candidate.value)
                                     if title_year_match and people:
                                         movie_title = title_year_match.group(1)
                                         year = int(title_year_match.group(2))
@@ -604,16 +639,16 @@ class CineMind:
                                 )
                                 candidates_retrieved = len(candidates)
                                 # Count verified candidates (if year was verified)
-                                year, _, _ = self.verifier.verify_release_year(
-                                    movie_title, source_metadata_list
-                                )
+                                year, _, _ = self.verifier.verify_release_year(movie_title, source_metadata_list)
                                 if year:
                                     candidates_used = 1
 
                         # Check for structured_lookup_empty (no results OR no candidates after filtering)
                         if not search_results or (candidates_retrieved > 0 and candidates_used == 0):
                             final_override_reason = TavilyOverrideReason.STRUCTURED_LOOKUP_EMPTY.value
-                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (no usable evidence: {candidates_retrieved} candidates retrieved, {candidates_used} used)")
+                            logger.info(
+                                f"[{request_id}] Override reason after search: {final_override_reason} (no usable evidence: {candidates_retrieved} candidates retrieved, {candidates_used} used)"
+                            )
                             # Preserve Kaggle results before retry
                             kaggle_results_preserved = [r for r in search_results if r.get("source") == "kaggle_imdb"]
                             # Retry with override
@@ -629,7 +664,7 @@ class CineMind:
                                 skip_tavily=True,
                                 override_reason=final_override_reason,
                                 request_plan=request_plan,
-                                entities_typed=entities_typed_for_search
+                                entities_typed=entities_typed_for_search,
                             )
                             web_search_results_retry = movie_info.get("results", [])
                             # Merge preserved Kaggle results with retry web search results
@@ -640,7 +675,9 @@ class CineMind:
                         # Check for tier_a_missing (require_tier_a=True but no Tier A sources found)
                         elif source_summary.get("missing_required_tier", False):
                             final_override_reason = TavilyOverrideReason.TIER_A_MISSING.value
-                            logger.info(f"[{request_id}] Override reason after search: {final_override_reason} (require_tier_a=True but no Tier A sources found)")
+                            logger.info(
+                                f"[{request_id}] Override reason after search: {final_override_reason} (require_tier_a=True but no Tier A sources found)"
+                            )
                             # Preserve Kaggle results before retry
                             kaggle_results_preserved = [r for r in search_results if r.get("source") == "kaggle_imdb"]
                             # Retry with override
@@ -656,7 +693,7 @@ class CineMind:
                                 skip_tavily=True,
                                 override_reason=final_override_reason,
                                 request_plan=request_plan,
-                                entities_typed=entities_typed_for_search
+                                entities_typed=entities_typed_for_search,
                             )
                             web_search_results_retry = movie_info.get("results", [])
                             # Merge preserved Kaggle results with retry web search results
@@ -678,15 +715,16 @@ class CineMind:
                         if tool_plan.tavily_used:
                             search_metadata_parts.append("tavily_used=true")
                         if tool_plan.fallback_used:
-                            search_metadata_parts.append(f"fallback_used=true, fallback_provider={tool_plan.fallback_provider}")
+                            search_metadata_parts.append(
+                                f"fallback_used=true, fallback_provider={tool_plan.fallback_provider}"
+                            )
                         if tool_plan.override_used:
-                            search_metadata_parts.append(f"override_used=true, override_reason={tool_plan.override_reason}")
+                            search_metadata_parts.append(
+                                f"override_used=true, override_reason={tool_plan.override_reason}"
+                            )
 
                         if search_metadata_parts:
-                            logger.info(
-                                f"[{request_id}] Search metadata: "
-                                + ", ".join(search_metadata_parts)
-                            )
+                            logger.info(f"[{request_id}] Search metadata: " + ", ".join(search_metadata_parts))
                         else:
                             logger.info(
                                 f"[{request_id}] Search metadata: "
@@ -702,17 +740,12 @@ class CineMind:
                         cache_hit=cache_hit,
                         movie_info=movie_info,
                         source_summary=source_summary,
-                        search_results=search_results
+                        search_results=search_results,
                     )
 
                     # Persist routing decision to DB
                     if tracker:
-                        tracker.log_metric(
-                            "routing_decision",
-                            1.0,
-                            routing_decision,
-                            metric_type="decision"
-                        )
+                        tracker.log_metric("routing_decision", 1.0, routing_decision, metric_type="decision")
 
                     # Log compact routing decision summary
                     self._log_routing_decision_summary(request_id, routing_decision)
@@ -729,7 +762,9 @@ class CineMind:
                             tracker.log_metric(f"override_reason_{tool_plan.override_reason}", 1.0)
 
                     if should_skip_tavily and search_results:
-                        logger.info(f"[{request_id}] Kaggle provided {len(search_results)} results (Tavily skipped per tool plan)")
+                        logger.info(
+                            f"[{request_id}] Kaggle provided {len(search_results)} results (Tavily skipped per tool plan)"
+                        )
 
                     # Log source transparency
                     if tracker and source_summary:
@@ -741,21 +776,22 @@ class CineMind:
                     if request_type in ["info", "fact-check"] and structured_intent:
                         # Convert search results to SourceMetadata for verification
                         from ..planning.source_policy import SourceMetadata
+
                         source_metadata_list = []
                         for r in search_results:
                             tier = self.source_policy.classify_source(
-                                r.get("url", ""),
-                                r.get("title", ""),
-                                r.get("content", "")
+                                r.get("url", ""), r.get("title", ""), r.get("content", "")
                             )
-                            source_metadata_list.append(SourceMetadata(
-                                url=r.get("url", ""),
-                                domain=r.get("domain", ""),
-                                tier=tier,
-                                title=r.get("title", ""),
-                                content=r.get("content", ""),
-                                score=r.get("score", 0.0)
-                            ))
+                            source_metadata_list.append(
+                                SourceMetadata(
+                                    url=r.get("url", ""),
+                                    domain=r.get("domain", ""),
+                                    tier=tier,
+                                    title=r.get("title", ""),
+                                    content=r.get("content", ""),
+                                    score=r.get("score", 0.0),
+                                )
+                            )
 
                         # Step 1: Extract candidates based on intent
                         people = structured_intent.entities.get("people", [])
@@ -764,9 +800,7 @@ class CineMind:
                         if structured_intent.intent == "filmography_overlap" and len(people) >= 2:
                             # Extract collaboration candidates
                             candidates = self.candidate_extractor.extract_collaboration_candidates(
-                                search_results,
-                                people[0],
-                                people[1]
+                                search_results, people[0], people[1]
                             )
 
                             logger.info(f"[{request_id}] Extracted {len(candidates)} collaboration candidates")
@@ -775,7 +809,7 @@ class CineMind:
                             verified_facts = []
                             for candidate in candidates:
                                 # Parse title and year from candidate value
-                                title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                title_year_match = re.match(r"(.+?)\s*\((\d{4})\)", candidate.value)
                                 if title_year_match:
                                     movie_title = title_year_match.group(1)
                                     year = int(title_year_match.group(2))
@@ -793,32 +827,33 @@ class CineMind:
                                         best_source = source1 if conf1 >= conf2 else source2
                                         best_conf = max(conf1, conf2)
 
-                                        verified_facts.append(VerifiedFact(
-                                            fact_type="collaboration",
-                                            value=candidate.value,
-                                            verified=True,
-                                            source_url=best_source,
-                                            source_tier="A",
-                                            confidence=best_conf
-                                        ))
+                                        verified_facts.append(
+                                            VerifiedFact(
+                                                fact_type="collaboration",
+                                                value=candidate.value,
+                                                verified=True,
+                                                source_url=best_source,
+                                                source_tier="A",
+                                                confidence=best_conf,
+                                            )
+                                        )
                                         logger.info(f"[{request_id}] Verified collaboration: {candidate.value}")
 
-                            logger.info(f"[{request_id}] Verified {len([f for f in verified_facts if f.verified])} collaborations out of {len(candidates)} candidates")
+                            logger.info(
+                                f"[{request_id}] Verified {len([f for f in verified_facts if f.verified])} collaborations out of {len(candidates)} candidates"
+                            )
 
                         elif structured_intent.intent in ["director_info", "cast_info"]:
                             # Extract movie candidates
                             all_entities = structured_intent.get_all_entities()
-                            candidates = self.candidate_extractor.extract_movie_candidates(
-                                search_results,
-                                all_entities
-                            )
+                            candidates = self.candidate_extractor.extract_movie_candidates(search_results, all_entities)
 
                             logger.info(f"[{request_id}] Extracted {len(candidates)} movie candidates")
 
                             # Verify each candidate
                             verified_facts = []
                             for candidate in candidates:
-                                title_year_match = re.match(r'(.+?)\s*\((\d{4})\)', candidate.value)
+                                title_year_match = re.match(r"(.+?)\s*\((\d{4})\)", candidate.value)
                                 if title_year_match:
                                     movie_title = title_year_match.group(1)
                                     year = int(title_year_match.group(2))
@@ -831,25 +866,28 @@ class CineMind:
                                         )
 
                                         if verified:
-                                            verified_facts.append(VerifiedFact(
-                                                fact_type="credit",
-                                                value=candidate.value,
-                                                verified=True,
-                                                source_url=source,
-                                                source_tier="A",
-                                                confidence=conf
-                                            ))
+                                            verified_facts.append(
+                                                VerifiedFact(
+                                                    fact_type="credit",
+                                                    value=candidate.value,
+                                                    verified=True,
+                                                    source_url=source,
+                                                    source_tier="A",
+                                                    confidence=conf,
+                                                )
+                                            )
 
                         elif structured_intent.intent == "release_date":
                             # Extract release year candidates
                             if movies:
                                 movie_title = movies[0]
                                 candidates = self.candidate_extractor.extract_release_year_candidates(
-                                    search_results,
-                                    movie_title
+                                    search_results, movie_title
                                 )
 
-                                logger.info(f"[{request_id}] Extracted {len(candidates)} year candidates for {movie_title}")
+                                logger.info(
+                                    f"[{request_id}] Extracted {len(candidates)} year candidates for {movie_title}"
+                                )
 
                                 # Verify release year
                                 verified_facts = []
@@ -858,14 +896,16 @@ class CineMind:
                                 )
 
                                 if year:
-                                    verified_facts.append(VerifiedFact(
-                                        fact_type="release_year",
-                                        value=str(year),
-                                        verified=True,
-                                        source_url=source,
-                                        source_tier="A",
-                                        confidence=conf
-                                    ))
+                                    verified_facts.append(
+                                        VerifiedFact(
+                                            fact_type="release_year",
+                                            value=str(year),
+                                            verified=True,
+                                            source_url=source,
+                                            source_tier="A",
+                                            confidence=conf,
+                                        )
+                                    )
                                     logger.info(f"[{request_id}] Verified release year: {year} for {movie_title}")
 
                         # Verified facts will be included in EvidenceBundle by PromptBuilder
@@ -875,11 +915,9 @@ class CineMind:
 
                     # Step 2: Filter for relevance based on query entities
                     query_entities = structured_intent.entities if structured_intent else {"movies": [], "people": []}
-                    mentioned_year = getattr(structured_intent, 'mentioned_year', None) if structured_intent else None
+                    mentioned_year = getattr(structured_intent, "mentioned_year", None) if structured_intent else None
                     relevant_results, exclusion_reasons = self._filter_relevant_results(
-                        deduplicated_results,
-                        query_entities,
-                        mentioned_year
+                        deduplicated_results, query_entities, mentioned_year
                     )
 
                     # Step 3: Log search operation with detailed stats (single call, no duplicates)
@@ -888,7 +926,7 @@ class CineMind:
                             query=user_query,
                             provider="mixed",  # Combined Kaggle + Tavily
                             results_count=len(relevant_results),
-                            search_time_ms=search_time_ms
+                            search_time_ms=search_time_ms,
                         )
 
                     # Log detailed stats for debugging
@@ -912,7 +950,7 @@ class CineMind:
 
             # Build messages using PromptBuilder
             # Initialize relevant_results if not already defined (for cache hit case)
-            if 'relevant_results' not in locals():
+            if "relevant_results" not in locals():
                 relevant_results = []
 
             # Build evidence bundle from all sources (Kaggle + web search)
@@ -920,16 +958,18 @@ class CineMind:
             # Both live and offline modes use the same methodology: merge all results into EvidenceBundle
             evidence_bundle = EvidenceBundle(
                 search_results=search_results if search_results else [],
-                verified_facts=verified_facts if verified_facts else None
+                verified_facts=verified_facts if verified_facts else None,
             )
 
-            logger.info(f"[{request_id}] Evidence bundle: {len(evidence_bundle.search_results)} total results (will be deduplicated and formatted by EvidenceFormatter)")
+            logger.info(
+                f"[{request_id}] Evidence bundle: {len(evidence_bundle.search_results)} total results (will be deduplicated and formatted by EvidenceFormatter)"
+            )
 
             messages, prompt_artifacts = self.prompt_builder.build_messages(
                 request_plan=request_plan,
                 evidence=evidence_bundle,
                 user_query=user_query,
-                structured_intent=structured_intent
+                structured_intent=structured_intent,
             )
 
             # Construct full prompt for storage (legacy format for observability)
@@ -942,11 +982,15 @@ class CineMind:
                 self.observability.update_request_prompt(request_id, full_prompt)
                 # Log prompt artifacts
                 if tracker:
-                    tracker.log_metric("prompt_artifacts", 1.0, {
-                        "prompt_version": prompt_artifacts.prompt_version,
-                        "instruction_template_id": prompt_artifacts.instruction_template_id,
-                        "verbosity_budget": prompt_artifacts.verbosity_budget
-                    })
+                    tracker.log_metric(
+                        "prompt_artifacts",
+                        1.0,
+                        {
+                            "prompt_version": prompt_artifacts.prompt_version,
+                            "instruction_template_id": prompt_artifacts.instruction_template_id,
+                            "verbosity_budget": prompt_artifacts.verbosity_budget,
+                        },
+                    )
 
             # Generate response using LLM client
             llm_start = time.time()
@@ -954,17 +998,11 @@ class CineMind:
                 if tracker:
                     with tracker.time_operation("llm_chat"):
                         llm_response = await self.client.chat_completions_create(
-                            model=LLM_MODEL,
-                            messages=messages,
-                            temperature=0.7,
-                            max_tokens=REAL_AGENT_MAX_TOKENS
+                            model=LLM_MODEL, messages=messages, temperature=0.7, max_tokens=REAL_AGENT_MAX_TOKENS
                         )
                 else:
                     llm_response = await self.client.chat_completions_create(
-                        model=LLM_MODEL,
-                        messages=messages,
-                        temperature=0.7,
-                        max_tokens=REAL_AGENT_MAX_TOKENS
+                        model=LLM_MODEL, messages=messages, temperature=0.7, max_tokens=REAL_AGENT_MAX_TOKENS
                     )
 
                 agent_response = llm_response.content
@@ -973,16 +1011,12 @@ class CineMind:
                 # Validate response against template contract
                 response_template = get_template(request_plan.request_type, request_plan.intent)
                 validation_result = self.output_validator.validate(
-                    response_text=agent_response,
-                    template=response_template,
-                    need_freshness=request_plan.need_freshness
+                    response_text=agent_response, template=response_template, need_freshness=request_plan.need_freshness
                 )
 
                 # Log validation violations
                 if validation_result.has_violations():
-                    logger.warning(
-                        f"[{request_id}] Response validation violations: {validation_result.violations}"
-                    )
+                    logger.warning(f"[{request_id}] Response validation violations: {validation_result.violations}")
                     if tracker:
                         tracker.log_metric("validation_violations", len(validation_result.violations))
 
@@ -991,7 +1025,7 @@ class CineMind:
                 token_usage = {
                     "prompt_tokens": usage.get("prompt_tokens", 0),
                     "completion_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0)
+                    "total_tokens": usage.get("total_tokens", 0),
                 }
 
                 # Use corrected text if auto-fix was applied, otherwise re-prompt if needed
@@ -1002,12 +1036,15 @@ class CineMind:
                     # Re-prompt with strict correction instruction
                     logger.info(f"[{request_id}] Re-prompting due to validation violations")
                     correction_instruction = self.output_validator.build_correction_instruction(
-                        validation_result.violations,
-                        response_template
+                        validation_result.violations, response_template
                     )
 
                     # Add correction instruction to messages
-                    correction_messages = [*messages, {"role": "assistant", "content": agent_response}, {"role": "user", "content": correction_instruction}]
+                    correction_messages = [
+                        *messages,
+                        {"role": "assistant", "content": agent_response},
+                        {"role": "user", "content": correction_instruction},
+                    ]
 
                     # Re-prompt
                     if tracker:
@@ -1016,14 +1053,14 @@ class CineMind:
                                 model=LLM_MODEL,
                                 messages=correction_messages,
                                 temperature=0.3,  # Lower temperature for corrections
-                                max_tokens=REAL_AGENT_MAX_TOKENS
+                                max_tokens=REAL_AGENT_MAX_TOKENS,
                             )
                     else:
                         correction_llm_response = await self.client.chat_completions_create(
                             model=LLM_MODEL,
                             messages=correction_messages,
                             temperature=0.3,
-                            max_tokens=REAL_AGENT_MAX_TOKENS
+                            max_tokens=REAL_AGENT_MAX_TOKENS,
                         )
 
                     agent_response = correction_llm_response.content
@@ -1032,9 +1069,11 @@ class CineMind:
                     correction_usage = correction_llm_response.usage or {}
                     initial_usage = llm_response.usage or {}
                     token_usage = {
-                        "prompt_tokens": initial_usage.get("prompt_tokens", 0) + correction_usage.get("prompt_tokens", 0),
-                        "completion_tokens": initial_usage.get("completion_tokens", 0) + correction_usage.get("completion_tokens", 0),
-                        "total_tokens": initial_usage.get("total_tokens", 0) + correction_usage.get("total_tokens", 0)
+                        "prompt_tokens": initial_usage.get("prompt_tokens", 0)
+                        + correction_usage.get("prompt_tokens", 0),
+                        "completion_tokens": initial_usage.get("completion_tokens", 0)
+                        + correction_usage.get("completion_tokens", 0),
+                        "total_tokens": initial_usage.get("total_tokens", 0) + correction_usage.get("total_tokens", 0),
                     }
                     logger.info(f"[{request_id}] Re-prompt completed, using corrected response")
                 # token_usage already defined above
@@ -1051,11 +1090,7 @@ class CineMind:
 
                 # Save response to database (non-blocking)
                 sources_list = [
-                    {
-                        "title": r.get("title", ""),
-                        "url": r.get("url", ""),
-                        "source": r.get("source", "unknown")
-                    }
+                    {"title": r.get("title", ""), "url": r.get("url", ""), "source": r.get("source", "unknown")}
                     for r in search_results
                 ]
 
@@ -1097,22 +1132,22 @@ class CineMind:
                         else:
                             source_name = source_name.capitalize()
 
-                        search_results_formatted.append({
-                            "rank": rank,
-                            "source": source_name,
-                            "url": result.get("url", ""),
-                            "title": result.get("title", ""),
-                            "published_at": result.get("published_date") or result.get("published_at"),
-                            "last_updated_at": result.get("last_updated_at") or search_timestamp
-                        })
+                        search_results_formatted.append(
+                            {
+                                "rank": rank,
+                                "source": source_name,
+                                "url": result.get("url", ""),
+                                "title": result.get("title", ""),
+                                "published_at": result.get("published_date") or result.get("published_at"),
+                                "last_updated_at": result.get("last_updated_at") or search_timestamp,
+                            }
+                        )
 
-                    formatted_searches.append({
-                        "query": search_query,
-                        "results": search_results_formatted
-                    })
+                    formatted_searches.append({"query": search_query, "results": search_results_formatted})
 
                 # Run database writes in background to avoid blocking
                 if self.observability:
+
                     def save_to_db():
                         try:
                             self.observability.db.save_response(
@@ -1120,7 +1155,7 @@ class CineMind:
                                 response_text=agent_response,
                                 sources=sources_list,
                                 token_usage=token_usage,
-                                cost_usd=cost_usd
+                                cost_usd=cost_usd,
                             )
                             if outcome:
                                 self.observability.db.update_request(request_id, outcome=outcome)
@@ -1135,14 +1170,14 @@ class CineMind:
                                     freshness_reason = None
                                     freshness_ttl_hours = None
                                     if structured_intent:
-                                        freshness_reason = getattr(structured_intent, 'freshness_reason', None)
-                                        freshness_ttl_hours = getattr(structured_intent, 'freshness_ttl_hours', None)
+                                        freshness_reason = getattr(structured_intent, "freshness_reason", None)
+                                        freshness_ttl_hours = getattr(structured_intent, "freshness_ttl_hours", None)
 
                                     # Extract intent signature components for cache keying
                                     intent = request_plan.intent if request_plan else None
                                     entities_typed = request_plan.entities_typed if request_plan else None
                                     constraints = None
-                                    if structured_intent and hasattr(structured_intent, 'constraints'):
+                                    if structured_intent and hasattr(structured_intent, "constraints"):
                                         constraints = structured_intent.constraints
 
                                     self.cache.put(
@@ -1158,14 +1193,14 @@ class CineMind:
                                         prompt_version=PROMPT_VERSION,
                                         cost_metrics={
                                             "saved_cost": cost_usd,  # Cost that would be saved on cache hit
-                                            "original_cost": cost_usd
+                                            "original_cost": cost_usd,
                                         },
                                         freshness_reason=freshness_reason,
                                         freshness_ttl_hours=freshness_ttl_hours,
                                         request_plan=request_plan,
                                         intent=intent,
                                         entities_typed=entities_typed,
-                                        constraints=constraints
+                                        constraints=constraints,
                                     )
                                 except Exception as e:
                                     logger.warning(f"Failed to cache response: {e}")
@@ -1209,15 +1244,19 @@ class CineMind:
                     "fallback_used": tool_plan.fallback_used if tool_plan else False,
                     "fallback_provider": tool_plan.fallback_provider if tool_plan else None,
                     "override_used": tool_plan.override_used if tool_plan else False,
-                    "override_reason": tool_plan.override_reason if tool_plan else None
+                    "override_reason": tool_plan.override_reason if tool_plan else None,
                 }
 
                 # Add structured-only response payload if browsing was blocked
                 if should_skip_tavily and tool_plan and not tool_plan.tavily_used and not tool_plan.override_used:
                     result["structured_only"] = {
-                        "candidates_retrieved": candidates_retrieved if 'candidates_retrieved' in locals() else len(search_results),
-                        "candidates_used": candidates_used if 'candidates_used' in locals() else len([r for r in search_results if r.get("tier") == "A"]),
-                        "no_browse_reason": "skip_tavily_enforced"
+                        "candidates_retrieved": candidates_retrieved
+                        if "candidates_retrieved" in locals()
+                        else len(search_results),
+                        "candidates_used": candidates_used
+                        if "candidates_used" in locals()
+                        else len([r for r in search_results if r.get("tier") == "A"]),
+                        "no_browse_reason": "skip_tavily_enforced",
                     }
 
                 # Pass recommended_movies for batch enrichment (e.g. similar movies from FakeLLM)
@@ -1247,7 +1286,9 @@ class CineMind:
                 logger.error(f"[{request_id}] LLM error: {e}")
                 error_msg = str(e)
 
-                if "model" in error_msg.lower() and ("not found" in error_msg.lower() or "does not exist" in error_msg.lower()):
+                if "model" in error_msg.lower() and (
+                    "not found" in error_msg.lower() or "does not exist" in error_msg.lower()
+                ):
                     raise Exception(
                         f"Model '{LLM_MODEL}' not found or not accessible on the LLM server.\n"
                         f"Set CINEMIND_LLM_MODEL to the id your server expects."
@@ -1267,8 +1308,9 @@ class CineMind:
                 track_ctx.__exit__(type(e), e, e.__traceback__)
             raise
 
-    async def stream_response(self, user_query: str, use_live_data: bool = True,
-                             request_id: str | None = None) -> AsyncGenerator[str, None]:
+    async def stream_response(
+        self, user_query: str, use_live_data: bool = True, request_id: str | None = None
+    ) -> AsyncGenerator[str, None]:
         """
         Stream response token by token.
 
@@ -1308,8 +1350,7 @@ class CineMind:
         # Save request with prompt if observability is enabled
         if self.observability:
             self.observability.db.save_request(
-                request_id, user_query, use_live_data, LLM_MODEL, "pending",
-                prompt=full_prompt
+                request_id, user_query, use_live_data, LLM_MODEL, "pending", prompt=full_prompt
             )
 
         try:
@@ -1374,7 +1415,7 @@ class CineMind:
 
             # Extract year from title if present (e.g., "The Matrix (1999)")
             year = None
-            year_match = re.search(r'\((\d{4})\)', title)
+            year_match = re.search(r"\((\d{4})\)", title)
             if year_match:
                 year = year_match.group(1)
 
@@ -1382,7 +1423,7 @@ class CineMind:
             # Use source_name for Kaggle, url for others
             source_key = source_name if source_name == "kaggle_imdb" else url
             # Normalize title: remove year, trim, lowercase
-            title_normalized = re.sub(r'\s*\(\d{4}\)', '', title).strip()
+            title_normalized = re.sub(r"\s*\(\d{4}\)", "", title).strip()
             dedup_key = (source_key, title_normalized, year)
 
             # Check if we've seen this key
@@ -1396,16 +1437,13 @@ class CineMind:
         stats = {
             "candidates_retrieved": len(results),
             "duplicates_removed": duplicate_count,
-            "candidates_deduped": len(deduplicated)
+            "candidates_deduped": len(deduplicated),
         }
 
         return deduplicated, stats
 
     def _filter_relevant_results(
-        self,
-        results: list[dict],
-        query_entities: dict[str, list[str]],
-        mentioned_year: int | None = None
+        self, results: list[dict], query_entities: dict[str, list[str]], mentioned_year: int | None = None
     ) -> tuple[list[dict], list[dict[str, str]]]:
         """
         Filter search results for relevance to query entities.
@@ -1431,7 +1469,7 @@ class CineMind:
 
             # Extract year from result title if present
             result_year = None
-            year_match = re.search(r'\((\d{4})\)', title)
+            year_match = re.search(r"\((\d{4})\)", title)
             if year_match:
                 result_year = int(year_match.group(1))
 
@@ -1442,8 +1480,8 @@ class CineMind:
             if movies:
                 for movie in movies:
                     # Exact title match (with or without year)
-                    title_normalized = re.sub(r'\s*\(\d{4}\)', '', title).strip()
-                    movie_normalized = re.sub(r'\s*\(\d{4}\)', '', movie).strip()
+                    title_normalized = re.sub(r"\s*\(\d{4}\)", "", title).strip()
+                    movie_normalized = re.sub(r"\s*\(\d{4}\)", "", movie).strip()
                     if movie_normalized in title_normalized or title_normalized in movie_normalized:
                         is_relevant = True
                         break
@@ -1482,12 +1520,14 @@ class CineMind:
             if is_relevant:
                 relevant.append(result)
             else:
-                exclusion_reasons.append({
-                    "reason": "low_relevance",
-                    "title": result.get("title", "")[:50],
-                    "source": source,
-                    "details": "no_match_for_entities"
-                })
+                exclusion_reasons.append(
+                    {
+                        "reason": "low_relevance",
+                        "title": result.get("title", "")[:50],
+                        "source": source,
+                        "details": "no_match_for_entities",
+                    }
+                )
 
         return relevant, exclusion_reasons
 
@@ -1500,7 +1540,7 @@ class CineMind:
         cache_hit,
         movie_info: dict,
         source_summary: dict,
-        search_results: list[dict]
+        search_results: list[dict],
     ) -> dict:
         """
         Assemble routing decision record (single canonical decision object).
@@ -1512,25 +1552,29 @@ class CineMind:
         request_type = None
         intent = None
         if request_plan:
-            if hasattr(request_plan, 'to_dict'):
+            if hasattr(request_plan, "to_dict"):
                 plan_dict = request_plan.to_dict()
             elif isinstance(request_plan, dict):
                 plan_dict = request_plan
             else:
                 plan_dict = {}
-            request_type = plan_dict.get('request_type')
-            intent = plan_dict.get('intent')
+            request_type = plan_dict.get("request_type")
+            intent = plan_dict.get("intent")
 
         # Extract typed entities
         entities_typed = {"movies": [], "people": []}
-        if structured_intent and hasattr(structured_intent, 'entities'):
-            entities_typed = structured_intent.entities if isinstance(structured_intent.entities, dict) else {"movies": [], "people": []}
+        if structured_intent and hasattr(structured_intent, "entities"):
+            entities_typed = (
+                structured_intent.entities
+                if isinstance(structured_intent.entities, dict)
+                else {"movies": [], "people": []}
+            )
         elif request_plan:
-            entities_typed = plan_dict.get('entities_typed', {"movies": [], "people": []})
+            entities_typed = plan_dict.get("entities_typed", {"movies": [], "people": []})
 
         # Extract mentioned_year
         mentioned_year = None
-        if structured_intent and hasattr(structured_intent, 'mentioned_year'):
+        if structured_intent and hasattr(structured_intent, "mentioned_year"):
             mentioned_year = structured_intent.mentioned_year
 
         # Count Kaggle results used (just for tracking - no Kaggle-specific logic)
@@ -1542,29 +1586,29 @@ class CineMind:
         freshness_reason = None
         freshness_ttl_hours = None
         if tool_plan:
-            skip_tavily = tool_plan.tool_plan_skip_tavily if hasattr(tool_plan, 'tool_plan_skip_tavily') else False
-            need_freshness = tool_plan.need_freshness if hasattr(tool_plan, 'need_freshness') else False
-            freshness_reason = tool_plan.freshness_reason if hasattr(tool_plan, 'freshness_reason') else None
-            freshness_ttl_hours = tool_plan.freshness_ttl_hours if hasattr(tool_plan, 'freshness_ttl_hours') else None
+            skip_tavily = tool_plan.tool_plan_skip_tavily if hasattr(tool_plan, "tool_plan_skip_tavily") else False
+            need_freshness = tool_plan.need_freshness if hasattr(tool_plan, "need_freshness") else False
+            freshness_reason = tool_plan.freshness_reason if hasattr(tool_plan, "freshness_reason") else None
+            freshness_ttl_hours = tool_plan.freshness_ttl_hours if hasattr(tool_plan, "freshness_ttl_hours") else None
         elif request_plan:
-            need_freshness = plan_dict.get('need_freshness', False)
-            freshness_reason = plan_dict.get('freshness_reason')
-            freshness_ttl_hours = plan_dict.get('freshness_ttl_hours')
+            need_freshness = plan_dict.get("need_freshness", False)
+            freshness_reason = plan_dict.get("freshness_reason")
+            freshness_ttl_hours = plan_dict.get("freshness_ttl_hours")
 
         # Extract override fields
         override_used = movie_info.get("override_used", False)
         override_reason = movie_info.get("override_reason")
         if tool_plan:
-            override_used = tool_plan.override_used if hasattr(tool_plan, 'override_used') else override_used
-            override_reason = tool_plan.override_reason if hasattr(tool_plan, 'override_reason') else override_reason
+            override_used = tool_plan.override_used if hasattr(tool_plan, "override_used") else override_used
+            override_reason = tool_plan.override_reason if hasattr(tool_plan, "override_reason") else override_reason
 
         # Extract final tool usage
         cache_hit_bool = cache_hit is not None
         tavily_used = movie_info.get("tavily_used", False)
         fallback_used = movie_info.get("fallback_used", False)
         if tool_plan:
-            tavily_used = tool_plan.tavily_used if hasattr(tool_plan, 'tavily_used') else tavily_used
-            fallback_used = tool_plan.fallback_used if hasattr(tool_plan, 'fallback_used') else fallback_used
+            tavily_used = tool_plan.tavily_used if hasattr(tool_plan, "tavily_used") else tavily_used
+            fallback_used = tool_plan.fallback_used if hasattr(tool_plan, "fallback_used") else fallback_used
 
         # Extract evidence summary (tier counts)
         tier_counts_present = source_summary.get("tier_counts", {"A": 0, "B": 0, "C": 0, "UNKNOWN": 0})
@@ -1586,21 +1630,11 @@ class CineMind:
                 "skip_tavily": skip_tavily,
                 "need_freshness": need_freshness,
                 "freshness_reason": freshness_reason,
-                "freshness_ttl_hours": freshness_ttl_hours
+                "freshness_ttl_hours": freshness_ttl_hours,
             },
-            "override": {
-                "override_used": override_used,
-                "override_reason": override_reason
-            },
-            "tool_usage": {
-                "cache_hit": cache_hit_bool,
-                "tavily_used": tavily_used,
-                "fallback_used": fallback_used
-            },
-            "evidence_summary": {
-                "tier_counts_present": tier_counts_present,
-                "tier_counts_used": tier_counts_used
-            }
+            "override": {"override_used": override_used, "override_reason": override_reason},
+            "tool_usage": {"cache_hit": cache_hit_bool, "tavily_used": tavily_used, "fallback_used": fallback_used},
+            "evidence_summary": {"tier_counts_present": tier_counts_present, "tier_counts_used": tier_counts_used},
         }
 
         return routing_decision
@@ -1631,12 +1665,10 @@ class CineMind:
             f"kaggle_results={kaggle_results_used}",
             f"tavily_used={tavily_used}",
             f"override_reason={override_reason or 'none'}",
-            f"tiers_used={tiers_used}"
+            f"tiers_used={tiers_used}",
         ]
 
-        logger.info(
-            f"[{request_id}] Routing decision: " + ", ".join(summary_parts)
-        )
+        logger.info(f"[{request_id}] Routing decision: " + ", ".join(summary_parts))
 
     async def close(self) -> None:
         """Close connections and cleanup."""
@@ -1697,7 +1729,7 @@ async def main():
                 try:
                     query = input("[You]: ").strip()
 
-                    if query.lower() in ['exit', 'quit', 'q']:
+                    if query.lower() in ["exit", "quit", "q"]:
                         break
 
                     if not query:
@@ -1730,5 +1762,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
 
+    asyncio.run(main())

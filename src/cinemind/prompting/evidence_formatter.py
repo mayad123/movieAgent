@@ -2,6 +2,7 @@
 Evidence formatter for CineMind.
 Standardizes evidence formatting: deduplication, snippet length limits, user-friendly source labels.
 """
+
 import logging
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FormattedEvidenceItem:
     """Metadata for a single formatted evidence item."""
+
     url: str
     title: str
     source_label: str
@@ -23,6 +25,7 @@ class FormattedEvidenceItem:
 @dataclass
 class EvidenceFormatResult:
     """Structured result from evidence formatting."""
+
     text: str  # The formatted evidence string (for backward compatibility)
     items: list[FormattedEvidenceItem] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=lambda: {"before": 0, "after": 0})
@@ -67,11 +70,7 @@ class EvidenceFormatter:
         """
         if not evidence_bundle.search_results:
             return EvidenceFormatResult(
-                text="",
-                items=[],
-                counts={"before": 0, "after": 0},
-                max_snippet_len=0,
-                dedupe_removed=0
+                text="", items=[], counts={"before": 0, "after": 0}, max_snippet_len=0, dedupe_removed=0
             )
 
         # Track counts before deduplication
@@ -87,7 +86,7 @@ class EvidenceFormatter:
         formatted_item_metadata = []
         max_snippet_len = 0
 
-        for i, result in enumerate(deduplicated_results[:self.max_items], 1):
+        for i, result in enumerate(deduplicated_results[: self.max_items], 1):
             formatted_item_text, item_metadata = self._format_item_with_metadata(result, i)
             if formatted_item_text and item_metadata:
                 formatted_item_strings.append(formatted_item_text)
@@ -100,7 +99,7 @@ class EvidenceFormatter:
                 items=[],
                 counts={"before": before_count, "after": 0},
                 max_snippet_len=0,
-                dedupe_removed=dedupe_removed
+                dedupe_removed=dedupe_removed,
             )
 
         # Build evidence section
@@ -110,10 +109,7 @@ class EvidenceFormatter:
 
         # Add verified facts if available
         if evidence_bundle.verified_facts:
-            verified_items = [
-                f.value for f in evidence_bundle.verified_facts
-                if hasattr(f, 'verified') and f.verified
-            ]
+            verified_items = [f.value for f in evidence_bundle.verified_facts if hasattr(f, "verified") and f.verified]
             if verified_items:
                 evidence_text += "\n\nVERIFIED INFORMATION:\n"
                 for item in verified_items[:5]:  # Limit to top 5
@@ -124,7 +120,7 @@ class EvidenceFormatter:
             items=formatted_item_metadata,
             counts={"before": before_count, "after": len(formatted_item_metadata)},
             max_snippet_len=max_snippet_len,
-            dedupe_removed=dedupe_removed
+            dedupe_removed=dedupe_removed,
         )
 
     def _deduplicate(self, search_results: list[dict]) -> list[dict]:
@@ -158,7 +154,7 @@ class EvidenceFormatter:
             # Normalize URL (remove query params, fragments, trailing slashes)
             if url:
                 parsed = urlparse(url)
-                normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/').lower()
+                normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/").lower()
             else:
                 normalized_url = ""
 
@@ -258,12 +254,7 @@ class EvidenceFormatter:
 
         # Create metadata
         metadata = FormattedEvidenceItem(
-            url=url,
-            title=title,
-            source_label=source_label,
-            year=year,
-            snippet_len=snippet_len,
-            index=index
+            url=url, title=title, source_label=source_label, year=year, snippet_len=snippet_len, index=index
         )
 
         # Format item
@@ -301,18 +292,18 @@ class EvidenceFormatter:
 
         # Try to truncate at sentence boundary
         truncated = content[:max_length]
-        last_period = truncated.rfind('.')
-        last_exclamation = truncated.rfind('!')
-        last_question = truncated.rfind('?')
+        last_period = truncated.rfind(".")
+        last_exclamation = truncated.rfind("!")
+        last_question = truncated.rfind("?")
 
         # Find last sentence-ending punctuation
         last_sentence_end = max(last_period, last_exclamation, last_question)
 
         if last_sentence_end > max_length * 0.7:  # Only use sentence boundary if not too short
-            truncated = truncated[:last_sentence_end + 1]
+            truncated = truncated[: last_sentence_end + 1]
         else:
             # Truncate at word boundary
-            last_space = truncated.rfind(' ')
+            last_space = truncated.rfind(" ")
             truncated = truncated[:last_space] + "..." if last_space > max_length * 0.8 else truncated.rstrip() + "..."
 
         return truncated
@@ -410,4 +401,3 @@ class EvidenceFormatter:
 
         # If we can't infer, return empty to avoid showing technical source name
         return ""
-

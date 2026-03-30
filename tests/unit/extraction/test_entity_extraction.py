@@ -4,6 +4,7 @@ Unit tests for entity extraction hygiene.
 Tests that interrogatives, punctuation, and multi-title extraction work correctly.
 All tests use the real extraction functions from production (rules path).
 """
+
 import sys
 from pathlib import Path
 
@@ -25,10 +26,18 @@ class TestInterrogativeFiltering:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: Check that "Who" is not in movies or people
-        assert "Who" not in intent.entities["movies"], f"'Who' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "who" not in intent.entities["movies"], f"'who' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "Who" not in intent.entities["people"], f"'Who' should not be extracted as a person, but got: {intent.entities['people']}"
-        assert "who" not in intent.entities["people"], f"'who' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "Who" not in intent.entities["movies"], (
+            f"'Who' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "who" not in intent.entities["movies"], (
+            f"'who' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "Who" not in intent.entities["people"], (
+            f"'Who' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
+        assert "who" not in intent.entities["people"], (
+            f"'who' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Check that the movie title is extracted (if rule-based extractor can handle it)
         # Note: Rule-based extractor may not extract multi-word titles, which is acceptable
@@ -42,10 +51,18 @@ class TestInterrogativeFiltering:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: Check that "What" is not in movies or people
-        assert "What" not in intent.entities["movies"], f"'What' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "what" not in intent.entities["movies"], f"'what' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "What" not in intent.entities["people"], f"'What' should not be extracted as a person, but got: {intent.entities['people']}"
-        assert "what" not in intent.entities["people"], f"'what' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "What" not in intent.entities["movies"], (
+            f"'What' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "what" not in intent.entities["movies"], (
+            f"'what' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "What" not in intent.entities["people"], (
+            f"'What' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
+        assert "what" not in intent.entities["people"], (
+            f"'what' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Check that the movie title is extracted (if rule-based extractor can handle it)
         # Note: "The Matrix" might be extracted since it starts with "The"
@@ -58,10 +75,18 @@ class TestInterrogativeFiltering:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: Check that "When" is not in movies or people
-        assert "When" not in intent.entities["movies"], f"'When' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "when" not in intent.entities["movies"], f"'when' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "When" not in intent.entities["people"], f"'When' should not be extracted as a person, but got: {intent.entities['people']}"
-        assert "when" not in intent.entities["people"], f"'when' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "When" not in intent.entities["movies"], (
+            f"'When' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "when" not in intent.entities["movies"], (
+            f"'when' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "When" not in intent.entities["people"], (
+            f"'When' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
+        assert "when" not in intent.entities["people"], (
+            f"'when' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Check that the movie title is extracted (if rule-based extractor can handle it)
         # Note: "The Matrix" might be extracted since it starts with "The"
@@ -147,8 +172,12 @@ class TestPunctuationTitles:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: Check that "director" is not extracted as an entity
-        assert "director" not in intent.entities["movies"], f"'director' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "director" not in intent.entities["people"], f"'director' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "director" not in intent.entities["movies"], (
+            f"'director' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "director" not in intent.entities["people"], (
+            f"'director' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Check that WALL·E is extracted (if rule-based extractor can handle it)
         # Note: Rule-based extractor may not extract titles with special characters
@@ -162,8 +191,12 @@ class TestPunctuationTitles:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: Check that "cast" is not extracted as an entity
-        assert "cast" not in intent.entities["movies"], f"'cast' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "cast" not in intent.entities["people"], f"'cast' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "cast" not in intent.entities["movies"], (
+            f"'cast' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "cast" not in intent.entities["people"], (
+            f"'cast' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Check that Se7en is extracted (if rule-based extractor can handle it)
         # Note: Rule-based extractor may not extract titles with numbers
@@ -304,12 +337,19 @@ class TestEntityExtractionEdgeCases:
         intent = extractor.extract(query, request_type="info")
 
         # PRIMARY GOAL: "What" should not be extracted
-        assert "What" not in intent.entities["movies"], f"'What' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "what" not in intent.entities["movies"], f"'what' should not be extracted as a movie, but got: {intent.entities['movies']}"
-        assert "What" not in intent.entities["people"], f"'What' should not be extracted as a person, but got: {intent.entities['people']}"
-        assert "what" not in intent.entities["people"], f"'what' should not be extracted as a person, but got: {intent.entities['people']}"
+        assert "What" not in intent.entities["movies"], (
+            f"'What' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "what" not in intent.entities["movies"], (
+            f"'what' should not be extracted as a movie, but got: {intent.entities['movies']}"
+        )
+        assert "What" not in intent.entities["people"], (
+            f"'What' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
+        assert "what" not in intent.entities["people"], (
+            f"'what' should not be extracted as a person, but got: {intent.entities['people']}"
+        )
 
         # SECONDARY: Se7en should be extracted (if rule-based extractor can handle it)
         # Note: Rule-based extractor may not extract titles with numbers
         # The main goal is ensuring "What" is filtered out
-

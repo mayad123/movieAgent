@@ -1,4 +1,5 @@
 """Unit tests for response_movie_extractor (deterministic response parsing)."""
+
 import sys
 from pathlib import Path
 
@@ -75,12 +76,7 @@ class TestParseMovies:
     """Extraction of ordered distinct movies."""
 
     def test_bullet_list_extraction(self):
-        r = parse_response(
-            "Movies similar to Dune:\n"
-            "- Inception (2010)\n"
-            "- Interstellar (2014)\n"
-            "- The Matrix (1999)"
-        )
+        r = parse_response("Movies similar to Dune:\n- Inception (2010)\n- Interstellar (2014)\n- The Matrix (1999)")
         assert len(r.movies) >= 2
         titles = [m.title for m in r.movies]
         assert "Inception" in titles or any("Inception" in t for t in titles)
@@ -93,9 +89,7 @@ class TestParseMovies:
         assert any("Dune" in t for t in titles)
 
     def test_title_year_dash_blurb(self):
-        r = parse_response(
-            "Inception (2010) - A mind-bending sci-fi. Dune (2021): Epic adaptation."
-        )
+        r = parse_response("Inception (2010) - A mind-bending sci-fi. Dune (2021): Epic adaptation.")
         assert len(r.movies) >= 1
         by_title = {m.title: m for m in r.movies}
         assert any("Inception" in t for t in by_title) or "Inception" in str(by_title)
@@ -113,9 +107,7 @@ class TestParseMovies:
         assert any(y == 2010 for y in years.values())
 
     def test_dedupe_first_seen_order(self):
-        r = parse_response(
-            "**Inception** (2010) - great. Also:\n- Inception (2010)\n- Dune (2021)"
-        )
+        r = parse_response("**Inception** (2010) - great. Also:\n- Inception (2010)\n- Dune (2021)")
         # Inception should appear once (first from bold/title-year), then Dune
         titles = [m.title for m in r.movies]
         assert titles.count("Inception") <= 1
@@ -131,9 +123,7 @@ class TestSignals:
     """Deep dive and scene indicators."""
 
     def test_deep_dive_indicators(self):
-        r = parse_response(
-            "Below is an overview. In depth analysis. Summary: we have key points."
-        )
+        r = parse_response("Below is an overview. In depth analysis. Summary: we have key points.")
         assert len(r.signals.deep_dive_indicators) >= 1
         assert any("overview" in s or "summary" in s or "key points" in s for s in r.signals.deep_dive_indicators)
 
@@ -149,9 +139,7 @@ class TestSignals:
         assert hasattr(r.signals, "scene_indicators")
 
     def test_the_film_movie_references(self):
-        r = parse_response(
-            "The film is great. The movie has stunning visuals. The film won awards."
-        )
+        r = parse_response("The film is great. The movie has stunning visuals. The film won awards.")
         assert r.signals.the_film_movie_references >= 2
 
     def test_scene_like_enumeration_bullet_descriptions(self):
@@ -203,16 +191,16 @@ class TestExtractTitlesForEnrichment:
 
     RECOMMENDATION_RESPONSE = (
         'To give you recommendations similar to "Inception," here are some movies:\n'
-        '\n'
+        "\n"
         '- "Interstellar" (2014) - Directed by Christopher Nolan\n'
         '- "The Matrix" (1999) - A classic sci-fi film\n'
         '- "Donnie Darko" (2001) - A psychological thriller\n'
         '- "Eternal Sunshine of the Spotless Mind" (2004) - Romantic sci-fi\n'
         '- "Primer" (2004) - An intricate time travel plot\n'
-        '\n'
+        "\n"
         'These movies offer intricate plots, much like "Inception."\n'
-        '\n'
-        '(Source: IMDb)'
+        "\n"
+        "(Source: IMDb)"
     )
 
     def test_quoted_titles_with_years(self):
@@ -261,11 +249,7 @@ class TestExtractTitlesForEnrichment:
         assert any("tenet" in t for t in lower)
 
     def test_numbered_list(self):
-        response = (
-            "1. The Shawshank Redemption (1994)\n"
-            "2. The Godfather (1972)\n"
-            "3. Pulp Fiction (1994)"
-        )
+        response = "1. The Shawshank Redemption (1994)\n2. The Godfather (1972)\n3. Pulp Fiction (1994)"
         titles = extract_titles_for_enrichment(response)
         assert len(titles) >= 3
 
@@ -289,10 +273,7 @@ class TestExtractTitlesForEnrichment:
 
     def test_quoted_titles_no_years(self):
         response = (
-            "Check out these films:\n"
-            '- "The Matrix" - A classic\n'
-            '- "Inception" - Mind-bending\n'
-            '- "Tenet" - Time bending'
+            'Check out these films:\n- "The Matrix" - A classic\n- "Inception" - Mind-bending\n- "Tenet" - Time bending'
         )
         titles = extract_titles_for_enrichment(response)
         assert len(titles) >= 3
@@ -302,9 +283,6 @@ class TestExtractTitlesForEnrichment:
 
     def test_bold_colon_format(self):
         """Format: **Title**: description"""
-        response = (
-            "- **The Matrix**: A reality-bending classic\n"
-            "- **Inception**: Dream heist thriller"
-        )
+        response = "- **The Matrix**: A reality-bending classic\n- **Inception**: Dream heist thriller"
         titles = extract_titles_for_enrichment(response)
         assert len(titles) >= 2

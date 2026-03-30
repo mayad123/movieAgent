@@ -10,6 +10,7 @@ Key features:
 - Configurable: Can be enabled/disabled for testing
 - Graceful degradation: Never fails, always falls back to FakeLLM
 """
+
 import asyncio
 import logging
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ KAGGLE_RELEVANT_KEYWORDS = {
     "statistics": ["statistics", "stats", "statistical", "average", "median", "percentile"],
     "trends": ["trend", "trending", "over time", "historical", "over years", "evolution"],
     "comparisons": ["compare", "comparison", "versus", "vs", "difference", "similar"],
-    "large_scope": ["all movies", "every movie", "entire catalog", "complete list"]
+    "large_scope": ["all movies", "every movie", "entire catalog", "complete list"],
 }
 
 # Intent types that benefit from Kaggle datasets
@@ -40,6 +41,7 @@ KAGGLE_RELEVANT_INTENTS = [
 @dataclass
 class KaggleEvidenceItem:
     """Normalized evidence item from Kaggle dataset."""
+
     title: str
     url: str  # Dataset URL or source URL
     content: str  # Short snippet/description (must be non-empty for EvidenceFormatter)
@@ -51,6 +53,7 @@ class KaggleEvidenceItem:
 @dataclass
 class KaggleRetrievalResult:
     """Result of Kaggle retrieval attempt."""
+
     success: bool
     evidence_items: list[KaggleEvidenceItem]
     relevance_score: float  # 0.0 to 1.0
@@ -66,10 +69,7 @@ class KaggleRetrievalAdapter:
     """
 
     def __init__(
-        self,
-        enabled: bool = True,
-        timeout_seconds: float = DEFAULT_KAGGLE_TIMEOUT,
-        correlation_threshold: float = 0.6
+        self, enabled: bool = True, timeout_seconds: float = DEFAULT_KAGGLE_TIMEOUT, correlation_threshold: float = 0.6
     ):
         """
         Initialize Kaggle retrieval adapter.
@@ -89,9 +89,8 @@ class KaggleRetrievalAdapter:
         if self._kaggle_searcher is None:
             try:
                 from .kaggle_search import KaggleDatasetSearcher
-                self._kaggle_searcher = KaggleDatasetSearcher(
-                    correlation_threshold=self.correlation_threshold
-                )
+
+                self._kaggle_searcher = KaggleDatasetSearcher(correlation_threshold=self.correlation_threshold)
             except Exception as e:
                 logger.warning(f"Failed to initialize Kaggle searcher: {e}")
                 self._kaggle_searcher = None
@@ -144,11 +143,7 @@ class KaggleRetrievalAdapter:
 
         return is_relevant, min(1.0, relevance_score)
 
-    def _normalize_kaggle_results(
-        self,
-        kaggle_results: list[dict],
-        dataset_url: str = ""
-    ) -> list[KaggleEvidenceItem]:
+    def _normalize_kaggle_results(self, kaggle_results: list[dict], dataset_url: str = "") -> list[KaggleEvidenceItem]:
         """
         Normalize Kaggle search results into EvidenceItem format compatible with EvidenceFormatter.
 
@@ -195,7 +190,8 @@ class KaggleRetrievalAdapter:
                                 elif isinstance(year_val, str):
                                     # Try to extract 4-digit year
                                     import re
-                                    year_match = re.search(r'\b(19|20)\d{2}\b', year_val)
+
+                                    year_match = re.search(r"\b(19|20)\d{2}\b", year_val)
                                     if year_match:
                                         year = int(year_match.group())
                                 break
@@ -209,7 +205,7 @@ class KaggleRetrievalAdapter:
                 "correlation_score": result.get("correlation", 0.0),
                 "match_score": result.get("match_score", 0.0),
                 "match_reason": result.get("match_reason", ""),
-                "source_type": "kaggle_dataset"
+                "source_type": "kaggle_dataset",
             }
 
             # Ensure content is not too long (EvidenceFormatter will truncate, but keep reasonable)
@@ -225,18 +221,14 @@ class KaggleRetrievalAdapter:
                     content=content,
                     source="kaggle_imdb",  # EvidenceFormatter maps this to "Structured IMDb dataset"
                     year=year,  # For deduplication
-                    metadata=metadata
+                    metadata=metadata,
                 )
             )
 
         return evidence_items
 
     async def retrieve_evidence(
-        self,
-        prompt: str,
-        intent: str,
-        entities: dict,
-        max_results: int = 5
+        self, prompt: str, intent: str, entities: dict, max_results: int = 5
     ) -> KaggleRetrievalResult:
         """
         Retrieve evidence from Kaggle datasets.
@@ -254,10 +246,7 @@ class KaggleRetrievalAdapter:
         if not self.enabled:
             logger.debug("Kaggle retrieval disabled, skipping")
             return KaggleRetrievalResult(
-                success=False,
-                evidence_items=[],
-                relevance_score=0.0,
-                error_message="Kaggle retrieval disabled"
+                success=False, evidence_items=[], relevance_score=0.0, error_message="Kaggle retrieval disabled"
             )
 
         # Check relevance gate
@@ -269,7 +258,7 @@ class KaggleRetrievalAdapter:
                 success=False,
                 evidence_items=[],
                 relevance_score=relevance_score,
-                error_message="Query not relevant for Kaggle datasets"
+                error_message="Query not relevant for Kaggle datasets",
             )
 
         logger.info(f"Kaggle retrieval relevant (score: {relevance_score:.2f}), attempting search...")
@@ -282,7 +271,7 @@ class KaggleRetrievalAdapter:
                 success=False,
                 evidence_items=[],
                 relevance_score=relevance_score,
-                error_message="Kaggle searcher not available"
+                error_message="Kaggle searcher not available",
             )
 
         # Perform search with timeout
@@ -291,37 +280,32 @@ class KaggleRetrievalAdapter:
             loop = asyncio.get_event_loop()
 
             # Create search task
-            search_task = loop.run_in_executor(
-                None,
-                lambda: searcher.search(prompt, max_results=max_results)
-            )
+            search_task = loop.run_in_executor(None, lambda: searcher.search(prompt, max_results=max_results))
 
             # Wait with timeout
-            results, max_correlation = await asyncio.wait_for(
-                search_task,
-                timeout=self.timeout_seconds
-            )
+            results, max_correlation = await asyncio.wait_for(search_task, timeout=self.timeout_seconds)
 
             # Check if results meet correlation threshold
             if max_correlation < self.correlation_threshold:
-                logger.info(f"Kaggle results below threshold (correlation: {max_correlation:.3f} < {self.correlation_threshold})")
+                logger.info(
+                    f"Kaggle results below threshold (correlation: {max_correlation:.3f} < {self.correlation_threshold})"
+                )
                 return KaggleRetrievalResult(
                     success=False,
                     evidence_items=[],
                     relevance_score=relevance_score,
-                    error_message=f"Correlation below threshold ({max_correlation:.3f} < {self.correlation_threshold})"
+                    error_message=f"Correlation below threshold ({max_correlation:.3f} < {self.correlation_threshold})",
                 )
 
             # Normalize results
             evidence_items = self._normalize_kaggle_results(results)
 
-            logger.info(f"Kaggle retrieval successful: {len(evidence_items)} evidence items (correlation: {max_correlation:.3f})")
+            logger.info(
+                f"Kaggle retrieval successful: {len(evidence_items)} evidence items (correlation: {max_correlation:.3f})"
+            )
 
             return KaggleRetrievalResult(
-                success=True,
-                evidence_items=evidence_items,
-                relevance_score=relevance_score,
-                error_message=None
+                success=True, evidence_items=evidence_items, relevance_score=relevance_score, error_message=None
             )
 
         except TimeoutError:
@@ -331,15 +315,12 @@ class KaggleRetrievalAdapter:
                 evidence_items=[],
                 relevance_score=relevance_score,
                 error_message="Kaggle search timed out",
-                timeout=True
+                timeout=True,
             )
         except Exception as e:
             logger.warning(f"Kaggle search failed: {e}, falling back to FakeLLM")
             return KaggleRetrievalResult(
-                success=False,
-                evidence_items=[],
-                relevance_score=relevance_score,
-                error_message=str(e)
+                success=False, evidence_items=[], relevance_score=relevance_score, error_message=str(e)
             )
 
     def convert_to_evidence_bundle(self, result: KaggleRetrievalResult) -> dict | None:
@@ -381,21 +362,14 @@ class KaggleRetrievalAdapter:
 
             search_results.append(search_result)
 
-        return {
-            "search_results": search_results,
-            "verified_facts": None,
-            "source": "kaggle"
-        }
+        return {"search_results": search_results, "verified_facts": None, "source": "kaggle"}
 
 
 # Global singleton instance (configurable)
 _kaggle_adapter_instance: KaggleRetrievalAdapter | None = None
 
 
-def get_kaggle_adapter(
-    enabled: bool = True,
-    timeout_seconds: float = DEFAULT_KAGGLE_TIMEOUT
-) -> KaggleRetrievalAdapter:
+def get_kaggle_adapter(enabled: bool = True, timeout_seconds: float = DEFAULT_KAGGLE_TIMEOUT) -> KaggleRetrievalAdapter:
     """
     Get singleton instance of KaggleRetrievalAdapter.
 
@@ -408,13 +382,11 @@ def get_kaggle_adapter(
     """
     global _kaggle_adapter_instance
 
-    if _kaggle_adapter_instance is None or \
-       _kaggle_adapter_instance.enabled != enabled or \
-       _kaggle_adapter_instance.timeout_seconds != timeout_seconds:
-        _kaggle_adapter_instance = KaggleRetrievalAdapter(
-            enabled=enabled,
-            timeout_seconds=timeout_seconds
-        )
+    if (
+        _kaggle_adapter_instance is None
+        or _kaggle_adapter_instance.enabled != enabled
+        or _kaggle_adapter_instance.timeout_seconds != timeout_seconds
+    ):
+        _kaggle_adapter_instance = KaggleRetrievalAdapter(enabled=enabled, timeout_seconds=timeout_seconds)
 
     return _kaggle_adapter_instance
-

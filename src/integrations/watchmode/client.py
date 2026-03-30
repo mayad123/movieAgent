@@ -7,6 +7,7 @@ Watchmode API client for Where to Watch (server-side only).
 - Response caching for availability per title+country (TTL 6h).
 - Normalizes to UI contract: groups by access type, provider name, price, webUrl, deeplink.
 """
+
 import logging
 import time
 from typing import Any
@@ -69,7 +70,11 @@ class WatchmodeClient:
             r.raise_for_status()
             data = r.json()
         if isinstance(data, list):
-            return {int(s.get("id", 0)): str(s.get("name", "") or "").strip() or f"Source {s.get('id')}" for s in data if s.get("id") is not None}
+            return {
+                int(s.get("id", 0)): str(s.get("name", "") or "").strip() or f"Source {s.get('id')}"
+                for s in data
+                if s.get("id") is not None
+            }
         return {}
 
     async def get_sources_catalog(self) -> dict[int, str]:
@@ -321,9 +326,7 @@ class WatchmodeClient:
         self._availability_cache[ck] = (now_sec, normalized)
         return None, normalized
 
-    def _normalize_sources_response(
-        self, raw: Any, region: str, provider_names: dict[int, str]
-    ) -> dict[str, Any]:
+    def _normalize_sources_response(self, raw: Any, region: str, provider_names: dict[int, str]) -> dict[str, Any]:
         """Convert Watchmode sources response to UI contract: movie, region, groups[].accessType, label, offers[]."""
         out = {
             "movie": {},
@@ -337,12 +340,7 @@ class WatchmodeClient:
                 return out
         else:
             # Watchmode may use "sources", "title_sources", "results", or "data"
-            sources = (
-                raw.get("sources")
-                or raw.get("title_sources")
-                or raw.get("results")
-                or raw.get("data")
-            )
+            sources = raw.get("sources") or raw.get("title_sources") or raw.get("results") or raw.get("data")
             if not isinstance(sources, list):
                 sources = []
         if not isinstance(sources, list):
@@ -357,7 +355,11 @@ class WatchmodeClient:
             wm_type = (s.get("type") or s.get("access_type") or "").strip().lower()
             access_type, label = _normalize_access_type(wm_type)
             source_id = s.get("source_id") or s.get("sourceId") or s.get("id")
-            name = (s.get("name") or "").strip() or provider_names.get(int(source_id) if source_id is not None else 0) or "Unknown"
+            name = (
+                (s.get("name") or "").strip()
+                or provider_names.get(int(source_id) if source_id is not None else 0)
+                or "Unknown"
+            )
             web_url = (s.get("web_url") or s.get("webUrl") or s.get("url") or "").strip() or None
             deeplink = (s.get("deeplink") or s.get("deeplink_url") or "").strip() or None
             if not deeplink and isinstance(s.get("deeplinks"), dict):
@@ -394,11 +396,13 @@ class WatchmodeClient:
             if not unique_offers:
                 continue
             group_label = labels_offers[0][0] if labels_offers else at.title()
-            out["groups"].append({
-                "accessType": at,
-                "label": group_label,
-                "offers": unique_offers,
-            })
+            out["groups"].append(
+                {
+                    "accessType": at,
+                    "label": group_label,
+                    "offers": unique_offers,
+                }
+            )
         for at, labels_offers in by_type.items():
             if at in order:
                 continue
@@ -410,6 +414,7 @@ class WatchmodeClient:
 def get_watchmode_client(api_key: str | None = None) -> WatchmodeClient | None:
     """Factory: returns WatchmodeClient if api_key is set, else None."""
     from config import get_watchmode_api_key
+
     key = (api_key or get_watchmode_api_key() or "").strip()
     if not key:
         return None

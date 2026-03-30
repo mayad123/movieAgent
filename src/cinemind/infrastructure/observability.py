@@ -2,6 +2,7 @@
 Observability and monitoring for CineMind.
 Handles logging, metrics, and tracing.
 """
+
 import logging
 import time
 import uuid
@@ -13,32 +14,36 @@ from .database import Database
 # Create custom formatter that safely handles missing request_id
 class SafeRequestFormatter(logging.Formatter):
     """Formatter that safely handles missing request_id field."""
+
     def format(self, record):
         # Ensure request_id exists - default to 'system' if missing
-        if not hasattr(record, 'request_id'):
-            record.request_id = getattr(record, 'request_id', 'system')
+        if not hasattr(record, "request_id"):
+            record.request_id = getattr(record, "request_id", "system")
         # If request_id is None, set to 'system'
         if record.request_id is None:
-            record.request_id = 'system'
+            record.request_id = "system"
         try:
             return super().format(record)
         except KeyError:
             # Fallback if there's still an issue
-            record.request_id = 'system'
+            record.request_id = "system"
             return super().format(record)
+
 
 # Create custom filter for request IDs
 class RequestContextFilter(logging.Filter):
     """Add request_id to log records if missing."""
+
     def filter(self, record):
-        if not hasattr(record, 'request_id') or record.request_id is None:
-            record.request_id = 'system'
+        if not hasattr(record, "request_id") or record.request_id is None:
+            record.request_id = "system"
         return True
 
-# Configure structured logging with safe formatter
-formatter = SafeRequestFormatter('%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s')
 
-file_handler = logging.FileHandler('cinemind.log')
+# Configure structured logging with safe formatter
+formatter = SafeRequestFormatter("%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s")
+
+file_handler = logging.FileHandler("cinemind.log")
 file_handler.setFormatter(formatter)
 file_handler.addFilter(RequestContextFilter())
 
@@ -50,7 +55,7 @@ console_handler.addFilter(RequestContextFilter())
 logging.basicConfig(
     level=logging.INFO,
     handlers=[file_handler, console_handler],
-    force=True  # Override any existing configuration
+    force=True,  # Override any existing configuration
 )
 
 logger = logging.getLogger(__name__)
@@ -74,9 +79,15 @@ class Observability:
         return str(uuid.uuid4())
 
     @contextmanager
-    def track_request(self, request_id: str, user_query: str, use_live_data: bool = True,
-                     model: str | None = None, request_type: str | None = None,
-                     prompt: str | None = None):
+    def track_request(
+        self,
+        request_id: str,
+        user_query: str,
+        use_live_data: bool = True,
+        model: str | None = None,
+        request_type: str | None = None,
+        prompt: str | None = None,
+    ):
         """
         Context manager for tracking a request from start to finish.
 
@@ -88,8 +99,9 @@ class Observability:
         start_time = time.time()
 
         # Save initial request with type
-        self.db.save_request(request_id, user_query, use_live_data, model, "pending",
-                            request_type=request_type, prompt=prompt)
+        self.db.save_request(
+            request_id, user_query, use_live_data, model, "pending", request_type=request_type, prompt=prompt
+        )
 
         # Create track object
         track = RequestTracker(request_id, self.db, self.logger)
@@ -100,17 +112,21 @@ class Observability:
 
             # Mark as success
             response_time_ms = (time.time() - start_time) * 1000
-            self.db.update_request(request_id, status="success", response_time_ms=response_time_ms,
-                                  request_type=request_type)
+            self.db.update_request(
+                request_id, status="success", response_time_ms=response_time_ms, request_type=request_type
+            )
             track.log_metric("total_response_time_ms", response_time_ms)
 
         except Exception as e:
             # Mark as error
             response_time_ms = (time.time() - start_time) * 1000
-            self.db.update_request(request_id, status="error",
-                                 response_time_ms=response_time_ms,
-                                 error_message=str(e),
-                                 request_type=request_type)
+            self.db.update_request(
+                request_id,
+                status="error",
+                response_time_ms=response_time_ms,
+                error_message=str(e),
+                request_type=request_type,
+            )
             track.log_error(str(e))
             raise
 
@@ -124,10 +140,16 @@ class Observability:
         log_func = getattr(self.logger, level.lower(), self.logger.info)
         log_func(message, extra=extra)
 
-    def log_classification_metadata(self, request_id: str, predicted_type: str,
-                                   rule_hit: str | None = None, llm_used: bool = False,
-                                   confidence: float = 1.0, entities: list | None = None,
-                                   need_freshness: bool = False):
+    def log_classification_metadata(
+        self,
+        request_id: str,
+        predicted_type: str,
+        rule_hit: str | None = None,
+        llm_used: bool = False,
+        confidence: float = 1.0,
+        entities: list | None = None,
+        need_freshness: bool = False,
+    ):
         """
         Log classification metadata for a request.
 
@@ -146,7 +168,7 @@ class Observability:
             "llm_used": llm_used,
             "confidence": confidence,
             "entities": entities or [],
-            "need_freshness": need_freshness
+            "need_freshness": need_freshness,
         }
 
         # Save as metric for querying
@@ -155,13 +177,13 @@ class Observability:
             metric_type="classification",
             metric_name="classification_metadata",
             metric_value=confidence,
-            metric_data=metadata
+            metric_data=metadata,
         )
 
         self.logger.info(
             f"Classification: type={predicted_type}, rule={rule_hit}, llm={llm_used}, "
             f"confidence={confidence:.2f}, freshness={need_freshness}",
-            extra={"request_id": request_id}
+            extra={"request_id": request_id},
         )
 
     def get_request_trace(self, request_id: str) -> dict:
@@ -213,12 +235,7 @@ class Observability:
             else:
                 searches = [dict(zip([col[0] for col in cursor.description], row, strict=False)) for row in search_rows]
 
-        return {
-            "request": request,
-            "response": response,
-            "metrics": metrics,
-            "search_operations": searches
-        }
+        return {"request": request, "response": response, "metrics": metrics, "search_operations": searches}
 
 
 class RequestTracker:
@@ -233,22 +250,14 @@ class RequestTracker:
     def log_metric(self, name: str, value: float, metadata: dict | None = None, metric_type: str = "gauge"):
         """Log a metric."""
         self.db.save_metric(
-            self.request_id,
-            metric_type=metric_type,
-            metric_name=name,
-            metric_value=value,
-            metric_data=metadata
+            self.request_id, metric_type=metric_type, metric_name=name, metric_value=value, metric_data=metadata
         )
         self.logger.info(f"Metric: {name}={value}", extra={"request_id": self.request_id})
 
     def log_counter(self, name: str, value: float = 1.0, metadata: dict | None = None):
         """Log a counter metric."""
         self.db.save_metric(
-            self.request_id,
-            metric_type="counter",
-            metric_name=name,
-            metric_value=value,
-            metric_data=metadata
+            self.request_id, metric_type="counter", metric_name=name, metric_value=value, metric_data=metadata
         )
         self.logger.info(f"Counter: {name}+={value}", extra={"request_id": self.request_id})
 
@@ -259,11 +268,11 @@ class RequestTracker:
             search_query=query,
             search_provider=provider,
             results_count=results_count,
-            search_time_ms=search_time_ms
+            search_time_ms=search_time_ms,
         )
         self.logger.info(
             f"Search: {provider} found {results_count} results in {search_time_ms:.2f}ms",
-            extra={"request_id": self.request_id}
+            extra={"request_id": self.request_id},
         )
 
     def log_error(self, error_message: str, metadata: dict | None = None):
@@ -273,12 +282,9 @@ class RequestTracker:
             metric_type="error",
             metric_name="error_occurred",
             metric_value=1.0,
-            metric_data={"error_message": error_message, **(metadata or {})}
+            metric_data={"error_message": error_message, **(metadata or {})},
         )
-        self.logger.error(
-            f"Error: {error_message}",
-            extra={"request_id": self.request_id}
-        )
+        self.logger.error(f"Error: {error_message}", extra={"request_id": self.request_id})
 
     def time_operation(self, operation_name: str):
         """Context manager for timing an operation."""
@@ -333,4 +339,3 @@ def estimate_llm_cost(usage: dict, model: str) -> float:
 def calculate_openai_cost(usage: dict, model: str) -> float:
     """Deprecated alias for :func:`estimate_llm_cost`."""
     return estimate_llm_cost(usage, model)
-

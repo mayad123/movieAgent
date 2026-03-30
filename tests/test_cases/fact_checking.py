@@ -1,4 +1,5 @@
 """Fact-checking query test cases."""
+
 from .base import TestCase, contains_all_substrings, contains_any_substring
 
 FACT_CHECK_TESTS = [
@@ -8,8 +9,8 @@ FACT_CHECK_TESTS = [
         expected_type="fact-check",
         acceptance_criteria=[
             contains_all_substrings("heath", "ledger", "joker", "dark knight"),
-            contains_any_substring("yes", "won", "posthumous", "best supporting actor", "2009")
-        ]
+            contains_any_substring("yes", "won", "posthumous", "best supporting actor", "2009"),
+        ],
     ),
     TestCase(
         name="fact_check_lotr_sweep",
@@ -17,8 +18,8 @@ FACT_CHECK_TESTS = [
         expected_type="fact-check",
         acceptance_criteria=[
             contains_all_substrings("return of the king", "11"),
-            contains_any_substring("clean sweep", "won all", "tied the record", "eleven")
-        ]
+            contains_any_substring("clean sweep", "won all", "tied the record", "eleven"),
+        ],
     ),
     TestCase(
         name="fact_check_titanic_release",
@@ -27,8 +28,8 @@ FACT_CHECK_TESTS = [
         # It was famously a December 1997 release after being delayed from summer
         acceptance_criteria=[
             contains_all_substrings("titanic", "1997"),
-            contains_any_substring("yes", "correct", "december")
-        ]
+            contains_any_substring("yes", "correct", "december"),
+        ],
     ),
     TestCase(
         name="fact_check_avatar_release",
@@ -36,8 +37,8 @@ FACT_CHECK_TESTS = [
         expected_type="release-date",
         acceptance_criteria=[
             contains_all_substrings("avatar", "2009"),
-            contains_any_substring("december", "december 18", "james cameron")
-        ]
+            contains_any_substring("december", "december 18", "james cameron"),
+        ],
     ),
     TestCase(
         name="fact_check_star_wars_first",
@@ -46,8 +47,8 @@ FACT_CHECK_TESTS = [
         # It was just "Star Wars", renamed "A New Hope" later
         acceptance_criteria=[
             contains_all_substrings("star wars"),
-            contains_any_substring("new hope", "original title", "episode iv")
-        ]
+            contains_any_substring("new hope", "original title", "episode iv"),
+        ],
     ),
     TestCase(
         name="fact_check_pulp_fiction_winner",
@@ -56,8 +57,7 @@ FACT_CHECK_TESTS = [
         # It lost to Forrest Gump, which is a classic fact-check 'trap'
         acceptance_criteria=[
             contains_all_substrings("pulp fiction", "forrest gump"),
-            contains_any_substring("no", "lost", "did not win", "best original screenplay")
-        ]
+            contains_any_substring("no", "lost", "did not win", "best original screenplay"),
+        ],
     ),
 ]
-

@@ -1,4 +1,5 @@
 """Persistent JSON-backed store for projects and project assets."""
+
 from __future__ import annotations
 
 import json

@@ -7,6 +7,7 @@ Tests request_type inference covering:
 - Ambiguous prompts
 - Edge cases
 """
+
 import sys
 from pathlib import Path
 
@@ -264,4 +265,3 @@ class TestRealWorldExamples:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

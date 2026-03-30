@@ -1,6 +1,7 @@
 """
 Fixture loader utility for loading scenario JSON/YAML files.
 """
+
 import json
 from pathlib import Path
 from typing import Any
@@ -70,4 +71,3 @@ def list_scenarios(format: str | None = None) -> list[str]:
 
     # Remove duplicates while preserving order
     return list(dict.fromkeys(scenarios))
-

@@ -1,4 +1,5 @@
 """Spoiler handling test cases."""
+
 from .base import TestCase, contains_all_substrings, contains_spoiler_warning, min_length
 
 SPOILER_TESTS = [
@@ -9,8 +10,7 @@ SPOILER_TESTS = [
         acceptance_criteria=[
             contains_all_substrings("shutter island", "ending"),
             contains_spoiler_warning(),
-            min_length(100)
-        ]
+            min_length(100),
+        ],
     ),
 ]
-

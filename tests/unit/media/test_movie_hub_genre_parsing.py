@@ -111,10 +111,12 @@ def test_parse_movie_hub_genre_buckets_strips_leading_numbering_from_fallback_ti
     """Fallback extraction should not treat list numbering as part of the title."""
     from src.cinemind.media.movie_hub_genre_parsing import parse_movie_hub_genre_buckets
 
-    response = "\n".join([
-        "1. Movie A (2010)",
-        "2. Movie B (2011)",
-    ])
+    response = "\n".join(
+        [
+            "1. Movie A (2010)",
+            "2. Movie B (2011)",
+        ]
+    )
     buckets = parse_movie_hub_genre_buckets(response, min_total_items=2)
     assert buckets and buckets[0]["genre"] == "Similar by genre"
     items = buckets[0]["items"]
@@ -127,13 +129,14 @@ def test_parse_movie_hub_genre_buckets_accepts_dot_numbering_with_bullet_prefix(
     """Structured parsing should accept bullet-style prefixes like '• 1.'."""
     from src.cinemind.media.movie_hub_genre_parsing import parse_movie_hub_genre_buckets
 
-    response = "\n".join([
-        "Genre: Action",
-        "• 1. Movie A (2010)",
-        "• 2. Movie B (2011)",
-        "",
-    ]).strip()
+    response = "\n".join(
+        [
+            "Genre: Action",
+            "• 1. Movie A (2010)",
+            "• 2. Movie B (2011)",
+            "",
+        ]
+    ).strip()
     buckets = parse_movie_hub_genre_buckets(response, expected_genres=1, expected_items_per_genre=2, min_total_items=2)
     assert buckets and buckets[0]["genre"] == "Action"
     assert buckets[0]["items"] == ["Movie A (2010)", "Movie B (2011)"]
-

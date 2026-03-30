@@ -1,4 +1,5 @@
 """Unit tests for title_extraction (deterministic movie title extraction)."""
+
 import sys
 from pathlib import Path
 

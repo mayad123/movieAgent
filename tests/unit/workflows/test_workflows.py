@@ -1,4 +1,5 @@
 """Unit tests for workflow orchestration (real agent + playground)."""
+
 import asyncio
 
 # Ensure src on path
@@ -22,9 +23,7 @@ async def test_run_real_agent_workflow_success():
     runner = AsyncMock()
     runner.search_and_analyze = AsyncMock(return_value=result)
 
-    out, reason = await run_real_agent_with_fallback(
-        "test query", None, True, 30.0, runner
-    )
+    out, reason = await run_real_agent_with_fallback("test query", None, True, 30.0, runner)
     assert out == result
     assert reason is None
     runner.search_and_analyze.assert_awaited_once()
@@ -41,9 +40,7 @@ async def test_run_real_agent_workflow_timeout():
     runner = AsyncMock()
     runner.search_and_analyze = AsyncMock(side_effect=slow)
 
-    out, reason = await run_real_agent_with_fallback(
-        "test", None, True, 0.01, runner
-    )
+    out, reason = await run_real_agent_with_fallback("test", None, True, 0.01, runner)
     assert out is None
     assert reason is not None
     assert "timed out" in reason or "Playground" in reason

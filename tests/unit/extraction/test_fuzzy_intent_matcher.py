@@ -7,6 +7,7 @@ Tests fuzzy matching covering:
 - False positives are controlled
 - Paraphrases are recognized
 """
+
 import re
 import sys
 from pathlib import Path
@@ -184,9 +185,7 @@ class TestExactOverridesFuzzy:
         query = "Who directed The Matrix"
 
         # Check exact match
-        exact_patterns = {
-            "director_info": [re.compile(r"who directed", re.IGNORECASE)]
-        }
+        exact_patterns = {"director_info": [re.compile(r"who directed", re.IGNORECASE)]}
         exact_result = matcher.match_exact(query.lower(), exact_patterns)
         assert exact_result is not None
         assert exact_result.match_type == "exact"
@@ -200,9 +199,7 @@ class TestExactOverridesFuzzy:
         """Test that exact match wins over paraphrase."""
         query = "Who directed The Matrix"
 
-        exact_patterns = {
-            "director_info": [re.compile(r"who directed", re.IGNORECASE)]
-        }
+        exact_patterns = {"director_info": [re.compile(r"who directed", re.IGNORECASE)]}
         exact_result = matcher.match_exact(query.lower(), exact_patterns)
         assert exact_result is not None
         assert exact_result.match_strength == 1.0
@@ -251,9 +248,7 @@ class TestMatchStrengthScores:
     def test_exact_match_strength(self, matcher):
         """Test that exact matches have strength 1.0."""
         query = "who directed"
-        exact_patterns = {
-            "director_info": [re.compile(r"who directed", re.IGNORECASE)]
-        }
+        exact_patterns = {"director_info": [re.compile(r"who directed", re.IGNORECASE)]}
         result = matcher.match_exact(query.lower(), exact_patterns)
         assert result is not None
         assert result.match_strength == 1.0
@@ -309,4 +304,3 @@ class TestRealWorldScenarios:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

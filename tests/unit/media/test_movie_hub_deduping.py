@@ -161,4 +161,3 @@ def test_movie_hub_rebucketing_single_fallback_bucket_to_four_genres(monkeypatch
     for c in genre_clusters:
         all_movies.extend(c.get("movies") or [])
     assert len(all_movies) == 20
-

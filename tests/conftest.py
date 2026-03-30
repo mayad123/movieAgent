@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for CineMind tests.
 """
+
 import pytest
 from freezegun import freeze_time
 
@@ -50,6 +51,7 @@ def pytest_sessionfinish(session, exitstatus):
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def minimal_request_plan():

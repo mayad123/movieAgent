@@ -1,6 +1,7 @@
 """
 Prompt building pipeline for CineMind.
 """
+
 from .evidence_formatter import EvidenceFormatResult, EvidenceFormatter, FormattedEvidenceItem
 from .output_validator import OutputValidator, ValidationResult
 from .prompt_builder import EvidenceBundle, PromptArtifacts, PromptBuilder
@@ -23,6 +24,5 @@ __all__ = [
     "get_prompt_version",
     "get_template",
     "list_all_templates",
-    "list_versions"
+    "list_versions",
 ]
-

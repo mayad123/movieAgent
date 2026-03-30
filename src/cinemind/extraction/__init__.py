@@ -1,4 +1,5 @@
 """Text and entity extraction modules."""
+
 from .candidate_extraction import Candidate, CandidateExtractor, normalize_title
 from .fuzzy_intent_matcher import FuzzyIntentMatcher, FuzzyMatchResult, get_fuzzy_matcher
 from .intent_extraction import IntentExtractor, StructuredIntent

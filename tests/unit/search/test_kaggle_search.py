@@ -3,6 +3,7 @@ Unit tests for Kaggle search regression tests.
 
 Tests matching, normalization, Stage A/B pipeline, and row indexing.
 """
+
 import sys
 from pathlib import Path
 
@@ -37,7 +38,7 @@ class TestKaggleSearchFixtures:
                 "Se7en",
                 "WALL·E",
                 "The Shawshank Redemption",
-                "Forrest Gump"
+                "Forrest Gump",
             ],
             "Year": [2009, 1999, 2010, 1994, 2008, 1999, 1995, 2008, 1994, 1994],
             "Director": [
@@ -50,7 +51,7 @@ class TestKaggleSearchFixtures:
                 "David Fincher",
                 "Andrew Stanton",
                 "Frank Darabont",
-                "Robert Zemeckis"
+                "Robert Zemeckis",
             ],
             "Genre": [
                 "Action, Drama, War",
@@ -62,7 +63,7 @@ class TestKaggleSearchFixtures:
                 "Crime, Drama, Mystery",
                 "Animation, Adventure, Family",
                 "Drama",
-                "Drama, Romance"
+                "Drama, Romance",
             ],
             "Star Cast": [
                 "Brad Pitt, Christoph Waltz, Mélanie Laurent",
@@ -74,9 +75,9 @@ class TestKaggleSearchFixtures:
                 "Brad Pitt, Morgan Freeman, Gwyneth Paltrow",
                 "Ben Burtt, Elissa Knight, Jeff Garlin",
                 "Tim Robbins, Morgan Freeman, Bob Gunton",
-                "Tom Hanks, Robin Wright, Gary Sinise"
+                "Tom Hanks, Robin Wright, Gary Sinise",
             ],
-            "Rating": [8.3, 8.7, 8.8, 8.9, 9.0, 8.8, 8.6, 8.4, 9.3, 8.8]
+            "Rating": [8.3, 8.7, 8.8, 8.9, 9.0, 8.8, 8.6, 8.4, 9.3, 8.8],
         }
         return pd.DataFrame(data)
 
@@ -84,24 +85,18 @@ class TestKaggleSearchFixtures:
     def create_dataframe_with_punctuation() -> pd.DataFrame:
         """Create dataframe with titles that have punctuation."""
         data = {
-            "Title": [
-                "WALL·E",
-                "Se7en",
-                "The Matrix: Reloaded",
-                "Spider-Man: Homecoming",
-                "Dr. Strangelove"
-            ],
+            "Title": ["WALL·E", "Se7en", "The Matrix: Reloaded", "Spider-Man: Homecoming", "Dr. Strangelove"],
             "Year": [2008, 1995, 2003, 2017, 1964],
             "Director": [
                 "Andrew Stanton",
                 "David Fincher",
                 "Lana Wachowski, Lilly Wachowski",
                 "Jon Watts",
-                "Stanley Kubrick"
+                "Stanley Kubrick",
             ],
             "Genre": ["Animation", "Crime", "Action", "Action", "Comedy"],
             "Star Cast": ["Ben Burtt", "Brad Pitt", "Keanu Reeves", "Tom Holland", "Peter Sellers"],
-            "Rating": [8.4, 8.6, 7.2, 7.4, 8.4]
+            "Rating": [8.4, 8.6, 7.2, 7.4, 8.4],
         }
         return pd.DataFrame(data)
 
@@ -130,21 +125,21 @@ class TestExactMatch:
         results, max_correlation = searcher.search(query, max_results=5)
 
         # Should return at least one result
-        assert len(results) > 0, \
-            f"Should return results for exact match, got: {len(results)}"
+        assert len(results) > 0, f"Should return results for exact match, got: {len(results)}"
 
         # Check that the result is correct
         top_result = results[0]
-        assert "Inglourious Basterds" in top_result["title"], \
+        assert "Inglourious Basterds" in top_result["title"], (
             f"Top result should be 'Inglourious Basterds', got: {top_result['title']}"
+        )
 
         # Check director field
-        assert "Quentin Tarantino" in top_result["content"], \
+        assert "Quentin Tarantino" in top_result["content"], (
             f"Result should contain director 'Quentin Tarantino', got: {top_result['content']}"
+        )
 
         # Check correlation is high for exact match
-        assert max_correlation >= 0.7, \
-            f"Exact match should have high correlation, got: {max_correlation}"
+        assert max_correlation >= 0.7, f"Exact match should have high correlation, got: {max_correlation}"
 
     def test_exact_match_returns_correct_row_data(self, searcher, test_df):
         """Test that exact match returns correct row data fields."""
@@ -159,12 +154,11 @@ class TestExactMatch:
         top_result = results[0]
 
         # Check that key fields are present
-        assert "The Matrix" in top_result["title"], \
-            f"Title should match, got: {top_result['title']}"
-        assert "1999" in top_result["content"] or "Year: 1999" in top_result["content"], \
+        assert "The Matrix" in top_result["title"], f"Title should match, got: {top_result['title']}"
+        assert "1999" in top_result["content"] or "Year: 1999" in top_result["content"], (
             f"Should contain year 1999, got: {top_result['content']}"
-        assert "Wachowski" in top_result["content"], \
-            f"Should contain director, got: {top_result['content']}"
+        )
+        assert "Wachowski" in top_result["content"], f"Should contain director, got: {top_result['content']}"
 
 
 class TestQueryNormalization:
@@ -191,10 +185,10 @@ class TestQueryNormalization:
         results, _ = searcher.search(query, max_results=5)
 
         # Should find WALL·E despite punctuation
-        assert len(results) > 0, \
-            f"Should find results for 'WALL·E', got: {len(results)}"
-        assert any("WALL" in r["title"] or "wall" in r["title"].lower() for r in results), \
+        assert len(results) > 0, f"Should find results for 'WALL·E', got: {len(results)}"
+        assert any("WALL" in r["title"] or "wall" in r["title"].lower() for r in results), (
             f"Should find WALL·E, got: {[r['title'] for r in results]}"
+        )
 
     def test_normalization_handles_casing(self, searcher, test_df):
         """Test that query normalization handles casing correctly."""
@@ -207,10 +201,10 @@ class TestQueryNormalization:
         results, _ = searcher.search(query, max_results=5)
 
         # Should find WALL·E despite different casing
-        assert len(results) > 0, \
-            f"Should find results for lowercase query, got: {len(results)}"
-        assert any("WALL" in r["title"] or "wall" in r["title"].lower() for r in results), \
+        assert len(results) > 0, f"Should find results for lowercase query, got: {len(results)}"
+        assert any("WALL" in r["title"] or "wall" in r["title"].lower() for r in results), (
             f"Should find WALL·E with lowercase query, got: {[r['title'] for r in results]}"
+        )
 
     def test_normalization_se7en(self, searcher, test_df):
         """Test normalization with Se7en (number in title)."""
@@ -222,28 +216,27 @@ class TestQueryNormalization:
         results, _ = searcher.search(query, max_results=5)
 
         # Should find Se7en
-        assert len(results) > 0, \
-            f"Should find Se7en, got: {len(results)}"
-        assert any("Se7en" in r["title"] or "se7en" in r["title"].lower() for r in results), \
+        assert len(results) > 0, f"Should find Se7en, got: {len(results)}"
+        assert any("Se7en" in r["title"] or "se7en" in r["title"].lower() for r in results), (
             f"Should find Se7en, got: {[r['title'] for r in results]}"
+        )
 
     def test_normalize_title_function(self):
         """Test normalize_title function directly."""
         # Test punctuation removal
-        assert normalize_title("WALL·E") == "walle", \
-            f"Should remove middle dot, got: {normalize_title('WALL·E')}"
-        assert normalize_title("Se7en") == "se7en", \
-            f"Should keep numbers, got: {normalize_title('Se7en')}"
-        assert normalize_title("Spider-Man: Homecoming") == "spiderman homecoming", \
+        assert normalize_title("WALL·E") == "walle", f"Should remove middle dot, got: {normalize_title('WALL·E')}"
+        assert normalize_title("Se7en") == "se7en", f"Should keep numbers, got: {normalize_title('Se7en')}"
+        assert normalize_title("Spider-Man: Homecoming") == "spiderman homecoming", (
             f"Should remove hyphens and colons, got: {normalize_title('Spider-Man: Homecoming')}"
+        )
 
         # Test casing
-        assert normalize_title("The Matrix") == "the matrix", \
-            f"Should lowercase, got: {normalize_title('The Matrix')}"
+        assert normalize_title("The Matrix") == "the matrix", f"Should lowercase, got: {normalize_title('The Matrix')}"
 
         # Test whitespace
-        assert normalize_title("  The   Matrix  ") == "the matrix", \
+        assert normalize_title("  The   Matrix  ") == "the matrix", (
             f"Should normalize whitespace, got: {normalize_title('  The   Matrix  ')}"
+        )
 
 
 class TestStageACandidateRetrieval:
@@ -269,16 +262,13 @@ class TestStageACandidateRetrieval:
         candidates = searcher._stage_a_candidate_retrieval(query, top_n=10)
 
         # Should have candidates
-        assert len(candidates) > 0, \
-            f"Stage A should produce candidates, got: {len(candidates)}"
+        assert len(candidates) > 0, f"Stage A should produce candidates, got: {len(candidates)}"
 
         # Top candidate should be exact match
         top_candidate = candidates[0]
         _row_idx, score, reason = top_candidate
-        assert score == 1.0, \
-            f"Exact match should have score 1.0, got: {score}"
-        assert reason == "exact_title", \
-            f"Exact match should have reason 'exact_title', got: {reason}"
+        assert score == 1.0, f"Exact match should have score 1.0, got: {score}"
+        assert reason == "exact_title", f"Exact match should have reason 'exact_title', got: {reason}"
 
     def test_stage_a_produces_candidates_substring_match(self, searcher, test_df):
         """Test that Stage A produces candidates for substring match."""
@@ -290,16 +280,13 @@ class TestStageACandidateRetrieval:
         candidates = searcher._stage_a_candidate_retrieval(query, top_n=10)
 
         # Should have candidates
-        assert len(candidates) > 0, \
-            f"Stage A should produce candidates for substring, got: {len(candidates)}"
+        assert len(candidates) > 0, f"Stage A should produce candidates for substring, got: {len(candidates)}"
 
         # Should find "The Matrix"
-        found_matrix = any(
-            test_df.iloc[row_idx]["Title"] == "The Matrix"
-            for row_idx, _, _ in candidates
-        )
-        assert found_matrix, \
+        found_matrix = any(test_df.iloc[row_idx]["Title"] == "The Matrix" for row_idx, _, _ in candidates)
+        assert found_matrix, (
             f"Should find 'The Matrix' in candidates, got: {[test_df.iloc[r[0]]['Title'] for r in candidates]}"
+        )
 
     def test_stage_a_limits_candidates(self, searcher, test_df):
         """Test that Stage A limits candidates to top_n."""
@@ -311,8 +298,7 @@ class TestStageACandidateRetrieval:
         candidates = searcher._stage_a_candidate_retrieval(query, top_n=5)
 
         # Should not exceed top_n
-        assert len(candidates) <= 5, \
-            f"Should limit to top_n=5, got: {len(candidates)}"
+        assert len(candidates) <= 5, f"Should limit to top_n=5, got: {len(candidates)}"
 
     def test_stage_a_token_overlap(self, searcher, test_df):
         """Test that Stage A uses token overlap matching."""
@@ -324,16 +310,13 @@ class TestStageACandidateRetrieval:
         candidates = searcher._stage_a_candidate_retrieval(query, top_n=10)
 
         # Should have candidates
-        assert len(candidates) > 0, \
-            f"Stage A should produce candidates via token overlap, got: {len(candidates)}"
+        assert len(candidates) > 0, f"Stage A should produce candidates via token overlap, got: {len(candidates)}"
 
         # Should find "The Dark Knight"
-        found_dark_knight = any(
-            test_df.iloc[row_idx]["Title"] == "The Dark Knight"
-            for row_idx, _, _ in candidates
-        )
-        assert found_dark_knight, \
+        found_dark_knight = any(test_df.iloc[row_idx]["Title"] == "The Dark Knight" for row_idx, _, _ in candidates)
+        assert found_dark_knight, (
             f"Should find 'The Dark Knight' via token overlap, got: {[test_df.iloc[r[0]]['Title'] for r in candidates]}"
+        )
 
 
 class TestStageBLimitedScoring:
@@ -370,12 +353,12 @@ class TestStageBLimitedScoring:
         _results, _ = searcher.search(query, max_results=5)
 
         # Should only call _calculate_correlation for Stage A candidates (limited to STAGE_A_CANDIDATE_LIMIT)
-        assert len(correlation_calls) <= STAGE_A_CANDIDATE_LIMIT, \
+        assert len(correlation_calls) <= STAGE_A_CANDIDATE_LIMIT, (
             f"Should only score top {STAGE_A_CANDIDATE_LIMIT} candidates, got: {len(correlation_calls)}"
+        )
 
         # Should have called it at least once
-        assert len(correlation_calls) > 0, \
-            "Should call _calculate_correlation at least once"
+        assert len(correlation_calls) > 0, "Should call _calculate_correlation at least once"
 
     def test_stage_b_limits_to_stage_a_candidates(self, searcher, test_df):
         """Test that Stage B is limited to Stage A candidate count."""
@@ -401,10 +384,12 @@ class TestStageBLimitedScoring:
         _results, _ = searcher.search(query, max_results=5)
 
         # Should not exceed Stage A candidate count
-        assert len(correlation_calls) <= len(stage_a_candidates), \
+        assert len(correlation_calls) <= len(stage_a_candidates), (
             f"Should not score more than Stage A candidates ({len(stage_a_candidates)}), got: {len(correlation_calls)}"
-        assert len(correlation_calls) <= STAGE_A_CANDIDATE_LIMIT, \
+        )
+        assert len(correlation_calls) <= STAGE_A_CANDIDATE_LIMIT, (
             f"Should not exceed STAGE_A_CANDIDATE_LIMIT ({STAGE_A_CANDIDATE_LIMIT}), got: {len(correlation_calls)}"
+        )
 
 
 class TestRowIndexingRegression:
@@ -445,10 +430,12 @@ class TestRowIndexingRegression:
             # Verify the row matches what we expect
             # For exact match, should be "Inglourious Basterds"
             if score == 1.0 and reason == "exact_title":
-                assert row_dict["Title"] == "Inglourious Basterds", \
+                assert row_dict["Title"] == "Inglourious Basterds", (
                     f"Row index {row_idx} should be 'Inglourious Basterds', got: {row_dict['Title']}"
-                assert row_dict["Director"] == "Quentin Tarantino", \
+                )
+                assert row_dict["Director"] == "Quentin Tarantino", (
                     f"Row index {row_idx} should have correct director, got: {row_dict['Director']}"
+                )
 
     def test_row_indexing_with_non_sequential_indices(self, searcher):
         """
@@ -463,7 +450,7 @@ class TestRowIndexingRegression:
             "Director": ["Director A", "Director B", "Director C"],
             "Genre": ["Action", "Drama", "Comedy"],
             "Star Cast": ["Actor A", "Actor B", "Actor C"],
-            "Rating": [8.0, 8.5, 9.0]
+            "Rating": [8.0, 8.5, 9.0],
         }
         df = pd.DataFrame(data, index=[10, 20, 30])  # Non-sequential indices
 
@@ -485,10 +472,10 @@ class TestRowIndexingRegression:
             row_dict = row.to_dict()
 
             # Verify we can access the row correctly
-            assert "Title" in row_dict, \
-                f"Row should have Title field, got: {list(row_dict.keys())}"
-            assert row_dict["Title"] in ["Movie A", "Movie B", "Movie C"], \
+            assert "Title" in row_dict, f"Row should have Title field, got: {list(row_dict.keys())}"
+            assert row_dict["Title"] in ["Movie A", "Movie B", "Movie C"], (
                 f"Row should be one of the test movies, got: {row_dict['Title']}"
+            )
 
     def test_row_indexing_in_search_method(self, searcher, test_df):
         """
@@ -508,10 +495,10 @@ class TestRowIndexingRegression:
 
         # Verify results have correct data
         top_result = results[0]
-        assert "The Matrix" in top_result["title"], \
-            f"Top result should be 'The Matrix', got: {top_result['title']}"
-        assert "1999" in top_result["content"] or "Year: 1999" in top_result["content"], \
+        assert "The Matrix" in top_result["title"], f"Top result should be 'The Matrix', got: {top_result['title']}"
+        assert "1999" in top_result["content"] or "Year: 1999" in top_result["content"], (
             f"Should contain year 1999, got: {top_result['content']}"
+        )
 
 
 class TestQueryUsesTitle:
@@ -538,8 +525,9 @@ class TestQueryUsesTitle:
 
         # Should find "Pulp Fiction"
         assert len(results) > 0, "Should return results"
-        assert any("Pulp Fiction" in r["title"] for r in results), \
+        assert any("Pulp Fiction" in r["title"] for r in results), (
             f"Should find 'Pulp Fiction', got: {[r['title'] for r in results]}"
+        )
 
     def test_title_index_built_correctly(self, searcher, test_df):
         """Test that title index is built from Title column."""
@@ -549,17 +537,14 @@ class TestQueryUsesTitle:
 
         # Check that index was built
         assert searcher._title_index_loaded, "Title index should be loaded"
-        assert len(searcher._normalized_title_index) > 0, \
+        assert len(searcher._normalized_title_index) > 0, (
             f"Should have normalized titles in index, got: {len(searcher._normalized_title_index)}"
-        assert len(searcher._token_index) > 0, \
-            f"Should have tokens in index, got: {len(searcher._token_index)}"
+        )
+        assert len(searcher._token_index) > 0, f"Should have tokens in index, got: {len(searcher._token_index)}"
 
         # Check that "Inglourious Basterds" is in index
         normalized = normalize_title("Inglourious Basterds")
         found_in_index = any(
-            normalized_title == normalized
-            for normalized_title in searcher._normalized_title_index.values()
+            normalized_title == normalized for normalized_title in searcher._normalized_title_index.values()
         )
-        assert found_in_index, \
-            "Should have 'Inglourious Basterds' in normalized index"
-
+        assert found_in_index, "Should have 'Inglourious Basterds' in normalized index"

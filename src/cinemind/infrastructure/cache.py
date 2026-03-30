@@ -3,6 +3,7 @@ Semantic cache for CineMind with two-tier caching and freshness gates.
 Tier 1: Exact cache (hash-based)
 Tier 2: Semantic cache (embedding-based with similarity threshold)
 """
+
 import contextlib
 import hashlib
 import json
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import numpy as np
+
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
@@ -28,7 +30,7 @@ TTL_BY_TYPE = {
     "info": {
         "old_films": 30 * 24,  # 30 days - historical info doesn't change
         "recent_films": 7 * 24,  # 7 days - recent films might have updates
-        "default": 7 * 24  # 7 days default
+        "default": 7 * 24,  # 7 days default
     },
     "recs": 14 * 24,  # 14 days - recommendations don't change much
     "comparison": 7 * 24,  # 7 days
@@ -43,6 +45,7 @@ SEMANTIC_SIMILARITY_THRESHOLD = 0.90
 @dataclass
 class CacheEntry:
     """Cache entry with all metadata."""
+
     prompt_original: str
     prompt_normalized: str
     prompt_hash: str
@@ -102,10 +105,10 @@ class PromptNormalizer:
         normalized = prompt.lower()
 
         # Step 2: Strip excessive punctuation but keep sentence structure
-        normalized = re.sub(r'[^\w\s\.\?]', ' ', normalized)
+        normalized = re.sub(r"[^\w\s\.\?]", " ", normalized)
 
         # Step 3: Normalize whitespace
-        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        normalized = re.sub(r"\s+", " ", normalized).strip()
 
         # Step 4: Map common variants
         for pattern, replacement in self.VARIANT_MAPPINGS.items():
@@ -124,15 +127,14 @@ class PromptNormalizer:
         Example: "The Matrix (1999)" -> "the matrix 1999"
         """
         # Extract (year) patterns and normalize
-        text = re.sub(r'\((\d{4})\)', r' \1', text)
+        text = re.sub(r"\((\d{4})\)", r" \1", text)
 
         # Remove common article variations
-        text = re.sub(r'\bthe\s+', '', text)
+        text = re.sub(r"\bthe\s+", "", text)
 
         return text
 
-    def compute_hash(self, normalized_prompt: str, classifier_type: str,
-                    tool_config_version: str) -> str:
+    def compute_hash(self, normalized_prompt: str, classifier_type: str, tool_config_version: str) -> str:
         """Compute hash for exact cache key (old format, for backwards compatibility)."""
         key_string = f"{normalized_prompt}|{classifier_type}|{tool_config_version}"
         return hashlib.sha256(key_string.encode()).hexdigest()
@@ -152,14 +154,19 @@ class PromptNormalizer:
         signature_json = json.dumps(intent_signature, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(signature_json.encode()).hexdigest()
 
-    def _build_intent_signature(self, request_plan=None, request_type: str | None = None,
-                                intent: str | None = None, entities_typed: dict | None = None,
-                                entities: list[str] | None = None,
-                                constraints: dict | None = None,
-                                need_freshness: bool = False,
-                                freshness_ttl_hours: float | None = None,
-                                tool_config_version: str | None = None,
-                                prompt_version: str | None = None) -> dict[str, Any]:
+    def _build_intent_signature(
+        self,
+        request_plan=None,
+        request_type: str | None = None,
+        intent: str | None = None,
+        entities_typed: dict | None = None,
+        entities: list[str] | None = None,
+        constraints: dict | None = None,
+        need_freshness: bool = False,
+        freshness_ttl_hours: float | None = None,
+        tool_config_version: str | None = None,
+        prompt_version: str | None = None,
+    ) -> dict[str, Any]:
         """
         Build deterministic intent signature for cache keying.
 
@@ -180,20 +187,20 @@ class PromptNormalizer:
         """
         # Extract from request_plan if provided
         if request_plan:
-            if hasattr(request_plan, 'to_dict'):
+            if hasattr(request_plan, "to_dict"):
                 plan_dict = request_plan.to_dict()
             elif isinstance(request_plan, dict):
                 plan_dict = request_plan
             else:
                 plan_dict = {}
 
-            request_type = plan_dict.get('request_type') or request_type
-            intent = plan_dict.get('intent') or intent
-            entities_typed = plan_dict.get('entities_typed') or entities_typed
-            entities = plan_dict.get('entities') or entities
-            need_freshness = plan_dict.get('need_freshness', need_freshness)
-            freshness_ttl_hours = plan_dict.get('freshness_ttl_hours') or freshness_ttl_hours
-            plan_dict.get('response_format')  # Use as proxy for constraints.format
+            request_type = plan_dict.get("request_type") or request_type
+            intent = plan_dict.get("intent") or intent
+            entities_typed = plan_dict.get("entities_typed") or entities_typed
+            entities = plan_dict.get("entities") or entities
+            need_freshness = plan_dict.get("need_freshness", need_freshness)
+            freshness_ttl_hours = plan_dict.get("freshness_ttl_hours") or freshness_ttl_hours
+            plan_dict.get("response_format")  # Use as proxy for constraints.format
 
         # Normalize entities_typed
         if entities_typed is None:
@@ -225,18 +232,18 @@ class PromptNormalizer:
             min_count = constraints.get("min_count")
         elif request_plan:
             # Use response_format from request_plan as proxy for format constraint
-            if hasattr(request_plan, 'to_dict'):
+            if hasattr(request_plan, "to_dict"):
                 plan_dict = request_plan.to_dict()
-                response_format_val = plan_dict.get('response_format')
+                response_format_val = plan_dict.get("response_format")
             elif isinstance(request_plan, dict):
-                response_format_val = request_plan.get('response_format')
+                response_format_val = request_plan.get("response_format")
             else:
                 response_format_val = None
 
             if response_format_val:
                 if isinstance(response_format_val, str):
                     format_constraint = response_format_val
-                elif hasattr(response_format_val, 'value'):
+                elif hasattr(response_format_val, "value"):
                     format_constraint = response_format_val.value
                 else:
                     format_constraint = str(response_format_val)
@@ -248,18 +255,11 @@ class PromptNormalizer:
         signature = {
             "request_type": request_type or "info",
             "intent": intent or "general_info",
-            "entities_typed": {
-                "movies": normalized_movies,
-                "people": normalized_people
-            },
-            "constraints": {
-                "order_by": order_by,
-                "format": format_constraint,
-                "min_count": min_count
-            },
+            "entities_typed": {"movies": normalized_movies, "people": normalized_people},
+            "constraints": {"order_by": order_by, "format": format_constraint, "min_count": min_count},
             "freshness_bucket": freshness_bucket,
             "tool_config_version": tool_config_version or "",
-            "prompt_version": prompt_version or ""
+            "prompt_version": prompt_version or "",
         }
 
         return signature
@@ -376,10 +376,10 @@ class SemanticCache:
             # Add structured_facts column if it doesn't exist (for existing databases)
             cursor.execute("PRAGMA table_info(cache_entries)")
             columns = [row[1] for row in cursor.fetchall()]
-            if 'structured_facts' not in columns:
+            if "structured_facts" not in columns:
                 with contextlib.suppress(sqlite3.OperationalError):
                     cursor.execute("ALTER TABLE cache_entries ADD COLUMN structured_facts TEXT")
-            if 'last_verified_at' not in columns:
+            if "last_verified_at" not in columns:
                 with contextlib.suppress(sqlite3.OperationalError):
                     cursor.execute("ALTER TABLE cache_entries ADD COLUMN last_verified_at TEXT")
 
@@ -406,7 +406,9 @@ class SemanticCache:
 
         base = get_llm_base_url()
         if not base:
-            logger.warning("CINEMIND_LLM_EMBEDDING_MODEL set but CINEMIND_LLM_BASE_URL missing; using fallback embedding")
+            logger.warning(
+                "CINEMIND_LLM_EMBEDDING_MODEL set but CINEMIND_LLM_BASE_URL missing; using fallback embedding"
+            )
             return self._fallback_embedding(text)
 
         try:
@@ -450,8 +452,9 @@ class SemanticCache:
         embedding = [float(hash_bytes[i % 16]) / 255.0 for i in range(128)]
         return embedding
 
-    def _compute_ttl(self, predicted_type: str, entities: list[str] | None = None,
-                     need_freshness: bool = False) -> timedelta:
+    def _compute_ttl(
+        self, predicted_type: str, entities: list[str] | None = None, need_freshness: bool = False
+    ) -> timedelta:
         """
         Compute TTL based on request type and context.
 
@@ -475,7 +478,7 @@ class SemanticCache:
             if entities:
                 # Simple heuristic: if entities contain years before 2000, use old_films TTL
                 text = " ".join(entities).lower()
-                if re.search(r'\b(19\d{2}|before 2000)\b', text):
+                if re.search(r"\b(19\d{2}|before 2000)\b", text):
                     base_ttl = base_ttl["old_films"]
                 else:
                     base_ttl = base_ttl["recent_films"]
@@ -511,13 +514,23 @@ class SemanticCache:
             logger.error(f"Error computing cosine similarity: {e}")
             return 0.0
 
-    def get(self, prompt: str, classifier_type: str, tool_config_version: str,
-           predicted_type: str, entities: list[str] | None = None,
-           need_freshness: bool = False, current_agent_version: str = "",
-           current_prompt_version: str = "", request_plan=None,
-           intent: str | None = None, entities_typed: dict | None = None,
-           constraints: dict | None = None, freshness_ttl_hours: float | None = None,
-           debug_cache_keys: bool = False) -> CacheEntry | None:
+    def get(
+        self,
+        prompt: str,
+        classifier_type: str,
+        tool_config_version: str,
+        predicted_type: str,
+        entities: list[str] | None = None,
+        need_freshness: bool = False,
+        current_agent_version: str = "",
+        current_prompt_version: str = "",
+        request_plan=None,
+        intent: str | None = None,
+        entities_typed: dict | None = None,
+        constraints: dict | None = None,
+        freshness_ttl_hours: float | None = None,
+        debug_cache_keys: bool = False,
+    ) -> CacheEntry | None:
         """
         Get cached response if available and fresh.
 
@@ -555,7 +568,7 @@ class SemanticCache:
             need_freshness=need_freshness,
             freshness_ttl_hours=freshness_ttl_hours,
             tool_config_version=tool_config_version,
-            prompt_version=current_prompt_version
+            prompt_version=current_prompt_version,
         )
 
         # Compute new-style hash (intent signature based)
@@ -580,7 +593,9 @@ class SemanticCache:
                 logger.debug("Cache hit on old key, will migrate to new key")
         if exact_match:
             # Check version compatibility
-            if not self._check_version_compatibility(exact_match, current_agent_version, current_prompt_version, tool_config_version):
+            if not self._check_version_compatibility(
+                exact_match, current_agent_version, current_prompt_version, tool_config_version
+            ):
                 logger.info("Cache entry version mismatch, invalidating")
                 return None
 
@@ -604,12 +619,12 @@ class SemanticCache:
                 return None
 
         # Tier 2: Semantic cache lookup
-        semantic_match = self._get_semantic_match(
-            normalized, predicted_type, need_freshness
-        )
+        semantic_match = self._get_semantic_match(normalized, predicted_type, need_freshness)
         if semantic_match:
             # Check version compatibility
-            if not self._check_version_compatibility(semantic_match, current_agent_version, current_prompt_version, tool_config_version):
+            if not self._check_version_compatibility(
+                semantic_match, current_agent_version, current_prompt_version, tool_config_version
+            ):
                 logger.info("Semantic cache entry version mismatch, invalidating")
                 return None
 
@@ -620,8 +635,9 @@ class SemanticCache:
         logger.debug("Cache miss")
         return None
 
-    def _check_version_compatibility(self, entry: CacheEntry, agent_version: str,
-                                     prompt_version: str, tool_config_version: str) -> bool:
+    def _check_version_compatibility(
+        self, entry: CacheEntry, agent_version: str, prompt_version: str, tool_config_version: str
+    ) -> bool:
         """
         Check if cache entry is compatible with current versions.
 
@@ -633,7 +649,9 @@ class SemanticCache:
             return False
         if entry.prompt_version and prompt_version and entry.prompt_version != prompt_version:
             return False
-        return not (entry.tool_config_version and tool_config_version and entry.tool_config_version != tool_config_version)
+        return not (
+            entry.tool_config_version and tool_config_version and entry.tool_config_version != tool_config_version
+        )
 
     def should_use_cache_entry(self, cache_entry: CacheEntry, request_plan) -> tuple[bool, str]:
         """
@@ -655,7 +673,7 @@ class SemanticCache:
             cache_entry,
             request_plan.get("agent_version", ""),
             request_plan.get("prompt_version", ""),
-            request_plan.get("tool_config_version", "")
+            request_plan.get("tool_config_version", ""),
         ):
             return (False, "version_mismatch")
 
@@ -673,8 +691,10 @@ class SemanticCache:
             # Check if cached sources have Tier C
             sources = cache_entry.sources or []
             has_tier_c = any(
-                s.get("tier") == "C" or "quora" in s.get("url", "").lower() or
-                "facebook" in s.get("url", "").lower() or "reddit" in s.get("url", "").lower()
+                s.get("tier") == "C"
+                or "quora" in s.get("url", "").lower()
+                or "facebook" in s.get("url", "").lower()
+                or "reddit" in s.get("url", "").lower()
                 for s in sources
             )
 
@@ -700,8 +720,9 @@ class SemanticCache:
         if request_plan.get("require_tier_a", False):
             sources = cache_entry.sources or []
             has_tier_a = any(
-                s.get("tier") == "A" or "imdb.com" in s.get("url", "").lower() or
-                "wikipedia.org" in s.get("url", "").lower()
+                s.get("tier") == "A"
+                or "imdb.com" in s.get("url", "").lower()
+                or "wikipedia.org" in s.get("url", "").lower()
                 for s in sources
             )
             if not has_tier_a:
@@ -710,8 +731,9 @@ class SemanticCache:
         # All checks passed - cache entry is safe to use
         return (True, "cache_valid")
 
-    def should_call_llm_on_cache_hit(self, cache_entry: CacheEntry,
-                                       request_plan, similarity_score: float = 1.0) -> tuple[bool, str]:
+    def should_call_llm_on_cache_hit(
+        self, cache_entry: CacheEntry, request_plan, similarity_score: float = 1.0
+    ) -> tuple[bool, str]:
         """
         Decision tree: Should we call the LLM even on a cache hit?
         Uses RequestPlan for decision making.
@@ -766,7 +788,7 @@ class SemanticCache:
     def _get_cache_age_hours(self, entry: CacheEntry) -> float:
         """Get cache entry age in hours."""
         try:
-            created = datetime.fromisoformat(entry.created_at.replace('Z', '+00:00'))
+            created = datetime.fromisoformat(entry.created_at.replace("Z", "+00:00"))
             now = datetime.utcnow()
             delta = now - created
             return delta.total_seconds() / 3600.0
@@ -796,36 +818,66 @@ class SemanticCache:
             # Delete old entry
             cursor.execute("DELETE FROM cache_entries WHERE prompt_hash = %s", (old_hash,))
             # Insert with new hash
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
                     predicted_type, entities, response_text, sources, structured_facts,
                     created_at, expires_at, agent_version, prompt_version,
                     tool_config_version, cost_metrics, last_verified_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                new_hash, entry.prompt_original, entry.prompt_normalized, embedding_json,
-                entry.predicted_type, entities_json, entry.response_text, sources_json, structured_facts_json,
-                entry.created_at, entry.expires_at, entry.agent_version, entry.prompt_version,
-                entry.tool_config_version, cost_metrics_json, entry.last_verified_at
-            ))
+            """,
+                (
+                    new_hash,
+                    entry.prompt_original,
+                    entry.prompt_normalized,
+                    embedding_json,
+                    entry.predicted_type,
+                    entities_json,
+                    entry.response_text,
+                    sources_json,
+                    structured_facts_json,
+                    entry.created_at,
+                    entry.expires_at,
+                    entry.agent_version,
+                    entry.prompt_version,
+                    entry.tool_config_version,
+                    cost_metrics_json,
+                    entry.last_verified_at,
+                ),
+            )
         else:
             # Delete old entry
             cursor.execute("DELETE FROM cache_entries WHERE prompt_hash = ?", (old_hash,))
             # Insert with new hash
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
                     predicted_type, entities, response_text, sources, structured_facts,
                     created_at, expires_at, agent_version, prompt_version,
                     tool_config_version, cost_metrics, last_verified_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                new_hash, entry.prompt_original, entry.prompt_normalized, embedding_json,
-                entry.predicted_type, entities_json, entry.response_text, sources_json, structured_facts_json,
-                entry.created_at, entry.expires_at, entry.agent_version, entry.prompt_version,
-                entry.tool_config_version, cost_metrics_json, entry.last_verified_at
-            ))
+            """,
+                (
+                    new_hash,
+                    entry.prompt_original,
+                    entry.prompt_normalized,
+                    embedding_json,
+                    entry.predicted_type,
+                    entities_json,
+                    entry.response_text,
+                    sources_json,
+                    structured_facts_json,
+                    entry.created_at,
+                    entry.expires_at,
+                    entry.agent_version,
+                    entry.prompt_version,
+                    entry.tool_config_version,
+                    cost_metrics_json,
+                    entry.last_verified_at,
+                ),
+            )
 
         self.db.conn.commit()
         logger.debug(f"Migrated cache entry from old key {old_hash[:8]}... to new key {new_hash[:8]}...")
@@ -835,23 +887,18 @@ class SemanticCache:
         cursor = self.db.conn.cursor()
 
         if self.db.use_postgres:
-            cursor.execute(
-                "SELECT * FROM cache_entries WHERE prompt_hash = %s",
-                (prompt_hash,)
-            )
+            cursor.execute("SELECT * FROM cache_entries WHERE prompt_hash = %s", (prompt_hash,))
         else:
-            cursor.execute(
-                "SELECT * FROM cache_entries WHERE prompt_hash = ?",
-                (prompt_hash,)
-            )
+            cursor.execute("SELECT * FROM cache_entries WHERE prompt_hash = ?", (prompt_hash,))
 
         row = cursor.fetchone()
         if row:
             return self._row_to_cache_entry(row, cursor)
         return None
 
-    def _get_semantic_match(self, normalized_prompt: str, predicted_type: str,
-                           need_freshness: bool) -> CacheEntry | None:
+    def _get_semantic_match(
+        self, normalized_prompt: str, predicted_type: str, need_freshness: bool
+    ) -> CacheEntry | None:
         """Get semantic cache match by embedding similarity."""
         # Compute embedding for query
         query_embedding = self.embedding_provider(normalized_prompt)
@@ -861,17 +908,23 @@ class SemanticCache:
         now = datetime.utcnow().isoformat()
 
         if self.db.use_postgres:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM cache_entries
                 WHERE predicted_type = %s
                 AND expires_at > %s
-            """, (predicted_type, now))
+            """,
+                (predicted_type, now),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM cache_entries
                 WHERE predicted_type = ?
                 AND expires_at > ?
-            """, (predicted_type, now))
+            """,
+                (predicted_type, now),
+            )
 
         rows = cursor.fetchall()
 
@@ -901,17 +954,23 @@ class SemanticCache:
             return False
 
         try:
-            expires = datetime.fromisoformat(entry.expires_at.replace('Z', '+00:00'))
+            expires = datetime.fromisoformat(entry.expires_at.replace("Z", "+00:00"))
             now = datetime.utcnow()
             return expires > now
         except Exception as e:
             logger.error(f"Error checking freshness: {e}")
             return False
 
-    def _extract_structured_facts(self, response_text: str, predicted_type: str,
-                                 entities: list[str], sources: list[dict],
-                                 need_freshness: bool = False, freshness_reason: str | None = None,
-                                 freshness_ttl_hours: float | None = None) -> dict:
+    def _extract_structured_facts(
+        self,
+        response_text: str,
+        predicted_type: str,
+        entities: list[str],
+        sources: list[dict],
+        need_freshness: bool = False,
+        freshness_reason: str | None = None,
+        freshness_ttl_hours: float | None = None,
+    ) -> dict:
         """
         Extract structured facts from response for safe regeneration.
 
@@ -949,7 +1008,7 @@ class SemanticCache:
                 facts["status"] = "released"
             elif "coming" in response_text.lower() or "premiere" in response_text.lower():
                 facts["status"] = "upcoming"
-            year_match = re.search(r'\b(19\d{2}|20\d{2})\b', response_text)
+            year_match = re.search(r"\b(19\d{2}|20\d{2})\b", response_text)
             if year_match:
                 facts["release_year"] = int(year_match.group(1))
 
@@ -979,13 +1038,28 @@ class SemanticCache:
 
         return facts
 
-    def put(self, prompt: str, response_text: str, sources: list[dict],
-           predicted_type: str, entities: list[str], need_freshness: bool,
-           classifier_type: str, tool_config_version: str, agent_version: str,
-           prompt_version: str, cost_metrics: dict | None = None, structured_facts: dict | None = None,
-           freshness_reason: str | None = None, freshness_ttl_hours: float | None = None,
-           request_plan=None, intent: str | None = None, entities_typed: dict | None = None,
-           constraints: dict | None = None, debug_cache_keys: bool = False):
+    def put(
+        self,
+        prompt: str,
+        response_text: str,
+        sources: list[dict],
+        predicted_type: str,
+        entities: list[str],
+        need_freshness: bool,
+        classifier_type: str,
+        tool_config_version: str,
+        agent_version: str,
+        prompt_version: str,
+        cost_metrics: dict | None = None,
+        structured_facts: dict | None = None,
+        freshness_reason: str | None = None,
+        freshness_ttl_hours: float | None = None,
+        request_plan=None,
+        intent: str | None = None,
+        entities_typed: dict | None = None,
+        constraints: dict | None = None,
+        debug_cache_keys: bool = False,
+    ):
         """
         Store entry in cache with structured facts.
 
@@ -1024,7 +1098,7 @@ class SemanticCache:
             need_freshness=need_freshness,
             freshness_ttl_hours=freshness_ttl_hours,
             tool_config_version=tool_config_version,
-            prompt_version=prompt_version
+            prompt_version=prompt_version,
         )
 
         # Use intent signature hash as the cache key
@@ -1040,10 +1114,13 @@ class SemanticCache:
         # Extract structured facts if not provided
         if structured_facts is None:
             structured_facts = self._extract_structured_facts(
-                response_text, predicted_type, entities, sources,
+                response_text,
+                predicted_type,
+                entities,
+                sources,
                 need_freshness=need_freshness,
                 freshness_reason=freshness_reason,
-                freshness_ttl_hours=freshness_ttl_hours
+                freshness_ttl_hours=freshness_ttl_hours,
             )
         else:
             # Ensure freshness metadata is in structured_facts
@@ -1069,7 +1146,8 @@ class SemanticCache:
         cost_metrics_json = json.dumps(cost_metrics or {})
 
         if self.db.use_postgres:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
                     predicted_type, entities, response_text, sources, structured_facts,
@@ -1083,73 +1161,117 @@ class SemanticCache:
                     expires_at = EXCLUDED.expires_at,
                     cost_metrics = EXCLUDED.cost_metrics,
                     last_verified_at = EXCLUDED.last_verified_at
-            """, (
-                prompt_hash, prompt, normalized, embedding_json,
-                predicted_type, entities_json, response_text, sources_json, structured_facts_json,
-                created_at, expires_at, agent_version, prompt_version,
-                tool_config_version, cost_metrics_json, last_verified_at
-            ))
+            """,
+                (
+                    prompt_hash,
+                    prompt,
+                    normalized,
+                    embedding_json,
+                    predicted_type,
+                    entities_json,
+                    response_text,
+                    sources_json,
+                    structured_facts_json,
+                    created_at,
+                    expires_at,
+                    agent_version,
+                    prompt_version,
+                    tool_config_version,
+                    cost_metrics_json,
+                    last_verified_at,
+                ),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO cache_entries (
                     prompt_hash, prompt_original, prompt_normalized, prompt_embedding,
                     predicted_type, entities, response_text, sources, structured_facts,
                     created_at, expires_at, agent_version, prompt_version,
                     tool_config_version, cost_metrics, last_verified_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                prompt_hash, prompt, normalized, embedding_json,
-                predicted_type, entities_json, response_text, sources_json, structured_facts_json,
-                created_at, expires_at, agent_version, prompt_version,
-                tool_config_version, cost_metrics_json, last_verified_at
-            ))
+            """,
+                (
+                    prompt_hash,
+                    prompt,
+                    normalized,
+                    embedding_json,
+                    predicted_type,
+                    entities_json,
+                    response_text,
+                    sources_json,
+                    structured_facts_json,
+                    created_at,
+                    expires_at,
+                    agent_version,
+                    prompt_version,
+                    tool_config_version,
+                    cost_metrics_json,
+                    last_verified_at,
+                ),
+            )
 
         self.db.conn.commit()
         logger.info(f"Cached entry with hash: {prompt_hash[:8]}... (expires: {expires_at})")
 
     def _row_to_cache_entry(self, row, cursor) -> CacheEntry:
         """Convert database row to CacheEntry."""
-        row_dict = dict(row) if self.db.use_postgres else dict(zip([col[0] for col in cursor.description], row, strict=False))
+        row_dict = (
+            dict(row) if self.db.use_postgres else dict(zip([col[0] for col in cursor.description], row, strict=False))
+        )
 
         # Parse JSON fields
         embedding = None
-        if row_dict.get('prompt_embedding'):
-            embedding = json.loads(row_dict['prompt_embedding']) if isinstance(row_dict['prompt_embedding'], str) else row_dict['prompt_embedding']
+        if row_dict.get("prompt_embedding"):
+            embedding = (
+                json.loads(row_dict["prompt_embedding"])
+                if isinstance(row_dict["prompt_embedding"], str)
+                else row_dict["prompt_embedding"]
+            )
 
         entities = []
-        if row_dict.get('entities'):
-            entities = json.loads(row_dict['entities']) if isinstance(row_dict['entities'], str) else row_dict['entities']
+        if row_dict.get("entities"):
+            entities = (
+                json.loads(row_dict["entities"]) if isinstance(row_dict["entities"], str) else row_dict["entities"]
+            )
 
         sources = []
-        if row_dict.get('sources'):
-            sources = json.loads(row_dict['sources']) if isinstance(row_dict['sources'], str) else row_dict['sources']
+        if row_dict.get("sources"):
+            sources = json.loads(row_dict["sources"]) if isinstance(row_dict["sources"], str) else row_dict["sources"]
 
         structured_facts = {}
-        if row_dict.get('structured_facts'):
-            structured_facts = json.loads(row_dict['structured_facts']) if isinstance(row_dict['structured_facts'], str) else row_dict['structured_facts']
+        if row_dict.get("structured_facts"):
+            structured_facts = (
+                json.loads(row_dict["structured_facts"])
+                if isinstance(row_dict["structured_facts"], str)
+                else row_dict["structured_facts"]
+            )
 
         cost_metrics = {}
-        if row_dict.get('cost_metrics'):
-            cost_metrics = json.loads(row_dict['cost_metrics']) if isinstance(row_dict['cost_metrics'], str) else row_dict['cost_metrics']
+        if row_dict.get("cost_metrics"):
+            cost_metrics = (
+                json.loads(row_dict["cost_metrics"])
+                if isinstance(row_dict["cost_metrics"], str)
+                else row_dict["cost_metrics"]
+            )
 
         return CacheEntry(
-            prompt_original=row_dict.get('prompt_original', ''),
-            prompt_normalized=row_dict.get('prompt_normalized', ''),
-            prompt_hash=row_dict.get('prompt_hash', ''),
+            prompt_original=row_dict.get("prompt_original", ""),
+            prompt_normalized=row_dict.get("prompt_normalized", ""),
+            prompt_hash=row_dict.get("prompt_hash", ""),
             prompt_embedding=embedding,
-            predicted_type=row_dict.get('predicted_type', 'info'),
+            predicted_type=row_dict.get("predicted_type", "info"),
             entities=entities,
-            response_text=row_dict.get('response_text', ''),
+            response_text=row_dict.get("response_text", ""),
             sources=sources,
             structured_facts=structured_facts,
-            created_at=row_dict.get('created_at', ''),
-            expires_at=row_dict.get('expires_at', ''),
-            agent_version=row_dict.get('agent_version', ''),
-            prompt_version=row_dict.get('prompt_version', ''),
-            tool_config_version=row_dict.get('tool_config_version', ''),
+            created_at=row_dict.get("created_at", ""),
+            expires_at=row_dict.get("expires_at", ""),
+            agent_version=row_dict.get("agent_version", ""),
+            prompt_version=row_dict.get("prompt_version", ""),
+            tool_config_version=row_dict.get("tool_config_version", ""),
             cost_metrics=cost_metrics,
-            cache_tier=row_dict.get('cache_tier', ''),
-            similarity_score=row_dict.get('similarity_score', 0.0),
-            last_verified_at=row_dict.get('last_verified_at')
+            cache_tier=row_dict.get("cache_tier", ""),
+            similarity_score=row_dict.get("similarity_score", 0.0),
+            last_verified_at=row_dict.get("last_verified_at"),
         )
-

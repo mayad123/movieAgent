@@ -1,4 +1,5 @@
 """API request/response Pydantic models (contract with clients)."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -8,9 +9,13 @@ class MovieQuery(BaseModel):
     query: str = Field(..., description="Movie-related question or search query")
     use_live_data: bool = Field(True, description="Whether to perform real-time searches")
     stream: bool = Field(False, description="Whether to stream the response")
-    request_type: str | None = Field(None, description="Request type tag (info/recs/comparison/spoiler/release-date/fact-check)")
+    request_type: str | None = Field(
+        None, description="Request type tag (info/recs/comparison/spoiler/release-date/fact-check)"
+    )
     outcome: str | None = Field(None, description="Outcome tag (success/unclear/hallucination/user-corrected)")
-    requested_agent_mode: str | None = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT (backend may override)")
+    requested_agent_mode: str | None = Field(
+        None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT (backend may override)"
+    )
 
 
 class MovieResponse(BaseModel):
@@ -49,6 +54,7 @@ class HealthResponse(BaseModel):
 
 class DiagnosticResponse(BaseModel):
     """Backend config and TMDB diagnostic; no secrets."""
+
     status: str
     config_loaded: bool
     tmdb_enabled: bool
@@ -65,9 +71,12 @@ class HubHistoryMessage(BaseModel):
 
 class QueryRequest(BaseModel):
     """Request body for /query (UI contract: same as playground server)."""
+
     user_query: str = Field(..., description="User message")
     request_type: str | None = Field(None, description="Optional request type")
-    requested_agent_mode: str | None = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT")
+    requested_agent_mode: str | None = Field(
+        None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT"
+    )
     hub_conversation_history: list[HubHistoryMessage] | None = Field(
         None,
         alias="hubConversationHistory",

@@ -2,7 +2,6 @@
 System prompt versioning for A/B testing and iterative improvement.
 """
 
-
 PROMPT_VERSIONS = {
     "v1": """You are CineMind, an expert movie analysis and discovery agent.
 
@@ -32,7 +31,6 @@ When providing information:
 3. Distinguish facts from rumors
 4. Provide comprehensive but organized responses
 5. Offer additional context when relevant""",
-
     "v2_optimized": """You are CineMind, a movie analysis agent. Domain: films, directors, actors, genres, box office, awards, trivia, comparisons, recommendations. Film-only unless directly relevant.
 
 DATA: Use real-time searches (Wikipedia, IMDb, RT, Variety/Deadline, YouTube). Prefer recent updates. Label: CONFIRMED/RUMOR/SPECULATION. Prioritize external sources over internal knowledge conflicts.
@@ -46,7 +44,6 @@ STYLE: Informative, engaging, clear structure, cite sources naturally, enthusias
 ERRORS: State unclear/conflicting info explicitly. Distinguish "don't know" vs "not available". Offer to search further.
 
 RESPONSES: Current data first → cite sources → distinguish facts/rumors → organized → add context.""",
-
     "v4": """You are CineMind, a movie analysis agent. Domain: films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations. Stay film-focused only.
 
 DATA: Prioritize real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label info as CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.
@@ -60,7 +57,6 @@ STYLE: Enthusiastic but professional. Clear structure. Cite sources naturally. A
 UNCERTAINTY: Distinguish "not available" vs "don't know", "sources conflict" vs "unsure". Offer to search further.
 
 RESPONSES: Lead with current info → cite throughout → distinguish facts/rumors/speculation → organize clearly → add context → offer follow-up.""",
-
     "v5": """CineMind: Movie analysis agent. Film domain only (films, filmmakers, actors, genres, box office, awards, trivia, comparisons, recommendations).
 
 Data: Real-time searches (IMDb, RT, Wikipedia, Variety/Deadline, YouTube). Label: CONFIRMED/RUMOR/SPECULATION. State confidence for upcoming releases/casting/box office.
@@ -85,7 +81,8 @@ def get_prompt_version(version: str = "v1") -> str:
 def list_versions() -> dict[str, dict]:
     """List all available prompt versions with metadata."""
     import tiktoken
-    enc = tiktoken.encoding_for_model('gpt-4')
+
+    enc = tiktoken.encoding_for_model("gpt-4")
 
     versions = {}
     for version, prompt in PROMPT_VERSIONS.items():
@@ -94,7 +91,7 @@ def list_versions() -> dict[str, dict]:
             "created": "2024-12-07",
             "length": len(prompt),
             "tokens": len(enc.encode(prompt)),
-            "words": len(prompt.split())
+            "words": len(prompt.split()),
         }
     return versions
 
@@ -105,7 +102,7 @@ def _get_version_description(version: str) -> str:
         "v1": "Initial version - basic structure",
         "v2_optimized": "Optimized version - concise while maintaining precision",
         "v4": "Highly optimized - condensed format, maximum efficiency",
-        "v5": "Ultra-concise - minimal format, maximum efficiency"
+        "v5": "Ultra-concise - minimal format, maximum efficiency",
     }
     return descriptions.get(version, "Unknown version")
 
@@ -119,4 +116,3 @@ def compare_versions(v1: str, v2: str) -> dict:
         "v1_words": len(PROMPT_VERSIONS.get(v1, "").split()),
         "v2_words": len(PROMPT_VERSIONS.get(v2, "").split()),
     }
-

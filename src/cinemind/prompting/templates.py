@@ -2,12 +2,14 @@
 Response contract templates for CineMind.
 Defines deterministic verbosity, structure, and style per request_type/intent.
 """
+
 from dataclasses import dataclass, field
 
 
 @dataclass
 class ResponseTemplate:
     """Template defining response contract for a request type/intent."""
+
     # Identifier
     template_id: str
 
@@ -53,7 +55,9 @@ class ResponseTemplate:
                 if element == "answer_first":
                     elements_text.append("Provide the direct answer immediately (first sentence)")
                 elif element == "include_as_of_date":
-                    elements_text.append("Include current date/time context (e.g., 'as of [date]', 'currently', 'as of today')")
+                    elements_text.append(
+                        "Include current date/time context (e.g., 'as of [date]', 'currently', 'as of today')"
+                    )
                 elif element == "include_year":
                     elements_text.append("Include release year when mentioning movies")
                 elif element == "numbered_list":
@@ -82,7 +86,9 @@ class ResponseTemplate:
 
         # Citation style
         if self.citation_style == "natural":
-            instructions.append("Citation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names.")
+            instructions.append(
+                "Citation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names."
+            )
         elif self.citation_style == "minimal":
             instructions.append("Citation style: Minimal citations, only when necessary for credibility.")
         elif self.citation_style == "none":
@@ -109,12 +115,21 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         max_sentences=2,
         max_words=50,
         required_elements=["answer_first"],
-        forbidden_terms=["Tier", "Tier A", "Tier B", "Tier C", "dataset", "Kaggle", "Tavily", "confidence framework", "source tier"],
+        forbidden_terms=[
+            "Tier",
+            "Tier A",
+            "Tier B",
+            "Tier C",
+            "dataset",
+            "Kaggle",
+            "Tavily",
+            "confidence framework",
+            "source tier",
+        ],
         citation_style="natural",
         citation_examples=["according to IMDb", "per Wikipedia"],
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     "cast_info": ResponseTemplate(
         template_id="cast_info",
         max_sentences=3,
@@ -122,9 +137,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first", "numbered_list"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["list_format"]
+        structure_hints=["list_format"],
     ),
-
     "release_date": ResponseTemplate(
         template_id="release_date",
         max_sentences=2,
@@ -132,9 +146,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first", "include_year"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily"],
         citation_style="natural",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     "release_year": ResponseTemplate(
         template_id="release_year",
         max_sentences=2,
@@ -142,9 +155,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first", "include_year"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily"],
         citation_style="natural",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     "runtime": ResponseTemplate(
         template_id="runtime",
         max_sentences=2,
@@ -152,9 +164,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily"],
         citation_style="minimal",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     # Freshness-sensitive queries
     "where_to_watch": ResponseTemplate(
         template_id="where_to_watch",
@@ -163,9 +174,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first", "include_as_of_date"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["list_format"]
+        structure_hints=["list_format"],
     ),
-
     "availability": ResponseTemplate(
         template_id="availability",
         max_sentences=3,
@@ -173,9 +183,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first", "include_as_of_date"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily"],
         citation_style="natural",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     # Recommendations
     "recommendation": ResponseTemplate(
         template_id="recommendation",
@@ -185,9 +194,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["numbered_list", "include_year"],
         forbidden_terms=["Tier", "Tier A", "Tier B", "Tier C", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["list_format"]
+        structure_hints=["list_format"],
     ),
-
     "similar_movies": ResponseTemplate(
         template_id="similar_movies",
         max_sentences=12,
@@ -195,9 +203,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["numbered_list", "include_year"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily"],
         citation_style="minimal",
-        structure_hints=["list_format"]
+        structure_hints=["list_format"],
     ),
-
     # Comparison/analysis
     "comparison": ResponseTemplate(
         template_id="comparison",
@@ -207,9 +214,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["include_year"],
         forbidden_terms=["Tier", "Tier A", "Tier B", "Tier C", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["comparison_table"]
+        structure_hints=["comparison_table"],
     ),
-
     "filmography_overlap": ResponseTemplate(
         template_id="filmography_overlap",
         max_sentences=15,
@@ -217,9 +223,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["numbered_list", "include_year"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["list_format"]
+        structure_hints=["list_format"],
     ),
-
     # General info - more flexible
     "general_info": ResponseTemplate(
         template_id="general_info",
@@ -228,9 +233,8 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first"],
         forbidden_terms=["Tier", "Tier A", "Tier B", "Tier C", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
-
     "fact_check": ResponseTemplate(
         template_id="fact_check",
         max_sentences=3,
@@ -238,7 +242,7 @@ RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
         required_elements=["answer_first"],
         forbidden_terms=["Tier", "dataset", "Kaggle", "Tavily", "confidence framework"],
         citation_style="natural",
-        structure_hints=["direct_answer"]
+        structure_hints=["direct_answer"],
     ),
 }
 
@@ -284,4 +288,3 @@ def get_template(request_type: str, intent: str) -> ResponseTemplate:
 def list_all_templates() -> dict[str, ResponseTemplate]:
     """List all available templates."""
     return RESPONSE_TEMPLATES.copy()
-

@@ -22,6 +22,7 @@ Examples:
          -H "Content-Type: application/json" \
          -d '{"user_query": "Who directed The Matrix?", "request_type": "info"}'
 """
+
 import sys
 from pathlib import Path
 from typing import Any
@@ -64,7 +65,7 @@ from tests.playground.runner import run_playground
 app = FastAPI(
     title="CineMind Offline Playground Server",
     description="Offline HTTP server for CineMind agent playground (no external API calls)",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Enable CORS for local UI development (file:// has origin "null")
@@ -87,6 +88,7 @@ web_dir = project_root / "web"
 
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
+
     user_query: str
     request_type: str | None = None  # Optional: if not provided, auto-inferred using rules-based router
     requestedAgentMode: str | None = None  # UI hint; playground always runs PLAYGROUND, returns agent_mode
@@ -94,12 +96,14 @@ class QueryRequest(BaseModel):
 
 class ProjectCreate(BaseModel):
     """Request body for creating a project."""
+
     name: str
     description: str | None = ""
 
 
 class AssetIn(BaseModel):
     """One asset to capture (poster image, title, page, conversation)."""
+
     posterImageUrl: str | None = None
     title: str
     pageUrl: str | None = None
@@ -109,11 +113,13 @@ class AssetIn(BaseModel):
 
 class ProjectAssetsBody(BaseModel):
     """Request body for appending assets to a project."""
+
     assets: list
 
 
 class HealthResponse(BaseModel):
     """Response model for health endpoint."""
+
     status: str
     service: str
 
@@ -126,10 +132,7 @@ async def health_check():
     Returns:
         JSON with status and service name
     """
-    return HealthResponse(
-        status="ok",
-        service="cinemind-offline-playground"
-    )
+    return HealthResponse(status="ok", service="cinemind-offline-playground")
 
 
 @app.post("/query")
@@ -151,10 +154,7 @@ async def execute_query(request: QueryRequest) -> dict[str, Any]:
         # Execute query through playground runner (offline, FakeLLM)
         # Media enrichment (media_strip) is attached by the agent via shared media_enrichment module
         # requestedAgentMode is ignored; backend is authority. Always return explicit mode metadata.
-        result = await run_playground(
-            user_query=request.user_query,
-            request_type=request.request_type
-        )
+        result = await run_playground(user_query=request.user_query, request_type=request.request_type)
         result["agent_mode"] = "PLAYGROUND"
         result["actualAgentMode"] = "PLAYGROUND"
         result["requestedAgentMode"] = getattr(request, "requestedAgentMode", None) or "PLAYGROUND"
@@ -167,18 +167,15 @@ async def execute_query(request: QueryRequest) -> dict[str, Any]:
         return result
     except Exception as e:
         # Return error details for debugging
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": str(e),
-                "error_type": type(e).__name__
-            }
-        )
+        raise HTTPException(status_code=500, detail={"error": str(e), "error_type": type(e).__name__})
 
 
 # --- Where to Watch (same contract as main API; requires WATCHMODE_API_KEY in .env) ---
 def _playground_watchmode_500():
-    return JSONResponse(status_code=500, content={"error": "missing_key", "message": "Where to Watch requires WATCHMODE_API_KEY in .env."})
+    return JSONResponse(
+        status_code=500,
+        content={"error": "missing_key", "message": "Where to Watch requires WATCHMODE_API_KEY in .env."},
+    )
 
 
 @app.get("/api/watch/where-to-watch")
@@ -191,6 +188,7 @@ async def where_to_watch(
 ):
     """Where to Watch: by tmdbId or by title. Same contract as main API; uses Watchmode."""
     from config import is_watchmode_configured
+
     if not is_watchmode_configured():
         return _playground_watchmode_500()
     from integrations.watchmode import get_watchmode_client
@@ -201,7 +199,9 @@ async def where_to_watch(
         return _playground_watchmode_500()
     mt = (mediaType or "movie").strip().lower()
     if mt not in ("movie", "tv"):
-        return JSONResponse(status_code=400, content={"error": "invalid_media_type", "message": "mediaType must be movie or tv"})
+        return JSONResponse(
+            status_code=400, content={"error": "invalid_media_type", "message": "mediaType must be movie or tv"}
+        )
     title_name = (title or "").strip() or None
     year_val = None
     if year and str(year).strip().isdigit():
@@ -316,10 +316,9 @@ def main():
         "tests.playground_server:app",
         host="0.0.0.0",
         port=port,
-        reload=False  # Disable reload for stability
+        reload=False,  # Disable reload for stability
     )
 
 
 if __name__ == "__main__":
     main()
-

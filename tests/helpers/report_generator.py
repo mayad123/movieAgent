@@ -3,6 +3,7 @@ Test report generator for scenario matrix tests.
 
 Collects statistics during test runs and generates a JSON report.
 """
+
 import json
 import time
 from collections import defaultdict
@@ -14,6 +15,7 @@ from typing import Any
 @dataclass
 class ScenarioResult:
     """Result for a single scenario test."""
+
     scenario_name: str
     template_id: str | None
     passed: bool
@@ -57,7 +59,7 @@ class ScenarioReportCollector:
         scenario_set: str | None = None,
         passed_clean: bool = True,
         has_violations: bool = False,
-        kaggle_outcome: dict[str, Any] | None = None
+        kaggle_outcome: dict[str, Any] | None = None,
     ):
         """
         Record the result of a single scenario test.
@@ -87,7 +89,7 @@ class ScenarioReportCollector:
             scenario_set=scenario_set,
             passed_clean=passed_clean,
             has_violations=has_violations,
-            kaggle_outcome=kaggle_outcome
+            kaggle_outcome=kaggle_outcome,
         )
         self.results.append(result)
 
@@ -107,16 +109,12 @@ class ScenarioReportCollector:
                     "pass_rate": 0.0,
                     "passed_clean": 0,
                     "passed_with_violations": 0,
-                    "avg_time_ms": 0.0
+                    "avg_time_ms": 0.0,
                 },
                 "by_template_id": {},
                 "by_scenario_set": {},
                 "top_violations": [],
-                "evidence_stats": {
-                    "avg_evidence_items": 0.0,
-                    "avg_dedupe_reduction": 0.0,
-                    "max_snippet_length": 0
-                }
+                "evidence_stats": {"avg_evidence_items": 0.0, "avg_dedupe_reduction": 0.0, "max_snippet_length": 0},
             }
 
         # Calculate summary statistics
@@ -139,13 +137,9 @@ class ScenarioReportCollector:
                 by_template[template_key]["failed"] += 1
 
         # Group by scenario_set
-        by_scenario_set: dict[str, dict[str, int]] = defaultdict(lambda: {
-            "passed": 0,
-            "failed": 0,
-            "total": 0,
-            "passed_clean": 0,
-            "passed_with_violations": 0
-        })
+        by_scenario_set: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"passed": 0, "failed": 0, "total": 0, "passed_clean": 0, "passed_with_violations": 0}
+        )
         for result in self.results:
             set_key = result.scenario_set or "unknown"
             by_scenario_set[set_key]["total"] += 1
@@ -178,7 +172,7 @@ class ScenarioReportCollector:
         dedupe_reductions = []
         for result in self.results:
             if result.evidence_items > 0 and result.evidence_deduped_count >= 0:
-                reduction = ((result.evidence_items - result.evidence_deduped_count) / result.evidence_items * 100)
+                reduction = (result.evidence_items - result.evidence_deduped_count) / result.evidence_items * 100
                 dedupe_reductions.append(reduction)
         avg_dedupe_reduction = sum(dedupe_reductions) / len(dedupe_reductions) if dedupe_reductions else 0.0
 
@@ -193,7 +187,7 @@ class ScenarioReportCollector:
                 "pass_rate": round(pass_rate, 2),
                 "passed_clean": passed_clean,
                 "passed_with_violations": passed_with_violations,
-                "avg_time_ms": round(avg_time_ms, 2)
+                "avg_time_ms": round(avg_time_ms, 2),
             },
             "by_template_id": dict(by_template),
             "by_scenario_set": dict(by_scenario_set),
@@ -201,8 +195,8 @@ class ScenarioReportCollector:
             "evidence_stats": {
                 "avg_evidence_items": round(avg_evidence_items, 2),
                 "avg_dedupe_reduction": round(avg_dedupe_reduction, 2),
-                "max_snippet_length": max_snippet_length
-            }
+                "max_snippet_length": max_snippet_length,
+            },
         }
 
         return report
@@ -228,6 +222,7 @@ class ScenarioReportCollector:
             # Generate violations index after writing report
             try:
                 from tests.helpers.violation_artifact_writer import generate_violations_index
+
                 violations_dir = report_dir / "violations"
                 index_path = generate_violations_index(violations_dir)
                 if index_path:
@@ -249,4 +244,3 @@ _collector = ScenarioReportCollector()
 def get_collector() -> ScenarioReportCollector:
     """Get the global scenario report collector."""
     return _collector
-

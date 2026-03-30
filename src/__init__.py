@@ -1,2 +1,1 @@
 """CineMind source package."""
-

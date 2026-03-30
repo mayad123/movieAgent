@@ -15,6 +15,7 @@ Usage:
     python -m tests.playground_runner "Who directed The Matrix?" --request-type info
     python -m tests.playground_runner  # Interactive mode
 """
+
 import asyncio
 import sys
 from pathlib import Path
@@ -33,10 +34,7 @@ from cinemind.media.playground_attachments import apply_playground_attachment_be
 from cinemind.planning.request_type_router import get_request_type_router
 
 
-async def run_playground(
-    user_query: str,
-    request_type: str | None = None
-) -> dict[str, Any]:
+async def run_playground(user_query: str, request_type: str | None = None) -> dict[str, Any]:
     """
     Execute a user query through CineMind using FakeLLM (offline).
 
@@ -60,11 +58,7 @@ async def run_playground(
 
     # Create CineMind agent with FakeLLM (same setup as offline e2e tests)
     # Disable observability to avoid DB dependencies
-    agent = CineMind(
-        openai_api_key="fake-key",
-        enable_observability=False,
-        llm_client=fake_llm_client
-    )
+    agent = CineMind(openai_api_key="fake-key", enable_observability=False, llm_client=fake_llm_client)
 
     try:
         # Execute query through agent (same path as offline e2e tests)
@@ -100,18 +94,14 @@ Examples:
   %(prog)s "Recommend movies like The Matrix" --request-type recs
   %(prog)s "Compare The Matrix and Inception" --request-type comparison
   %(prog)s "When was Dune released?" --request-type release-date
-        """
+        """,
     )
 
-    parser.add_argument(
-        "query",
-        nargs="*",
-        help="User query string"
-    )
+    parser.add_argument("query", nargs="*", help="User query string")
     parser.add_argument(
         "--request-type",
         choices=["info", "recs", "comparison", "release-date"],
-        help="Request type to use (info, recs, comparison, release-date). Auto-detected if not provided."
+        help="Request type to use (info, recs, comparison, release-date). Auto-detected if not provided.",
     )
 
     args = parser.parse_args()
@@ -135,7 +125,7 @@ Examples:
             try:
                 query = input("[Query]: ").strip()
 
-                if query.lower() in ['exit', 'quit', 'q']:
+                if query.lower() in ["exit", "quit", "q"]:
                     break
 
                 if not query:
@@ -154,7 +144,9 @@ Examples:
                     router = get_request_type_router()
                     router_result = router.route(query)
                     request_type = router_result.request_type
-                    print(f"\n[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]")
+                    print(
+                        f"\n[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]"
+                    )
 
                 print("\n[Executing through CineMind (offline, FakeLLM, no API calls)...]")
                 result = await run_playground(query, request_type=request_type)
@@ -190,6 +182,7 @@ Examples:
                 error_msg = str(e)
                 print(f"\n[Error]: {error_msg}\n")
                 import traceback
+
                 traceback.print_exc()
 
         print("\n[Goodbye!]")
@@ -241,10 +234,10 @@ Examples:
     except Exception as e:
         print(f"\n[Error]: {e!s}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

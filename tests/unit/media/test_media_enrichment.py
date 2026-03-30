@@ -1,4 +1,5 @@
 """Unit tests for media_enrichment (TMDB-only enrichment)."""
+
 import sys
 from pathlib import Path
 
@@ -74,7 +75,12 @@ def test_build_attachments_from_media_movie_list():
     result = {
         "media_strip": {"movie_title": "Dune", "page_url": "https://www.themoviedb.org/movie/438631"},
         "media_candidates": [
-            {"movie_title": "Inception", "year": 2010, "page_url": "https://www.themoviedb.org/movie/27205", "primary_image_url": "https://ex.inception.jpg"},
+            {
+                "movie_title": "Inception",
+                "year": 2010,
+                "page_url": "https://www.themoviedb.org/movie/27205",
+                "primary_image_url": "https://ex.inception.jpg",
+            },
         ],
         "media_gallery_label": "Similar movies",
     }
@@ -247,10 +253,7 @@ def test_attach_media_response_extraction_not_garbage():
 
 def test_attach_media_prefers_recommended_movies_over_response():
     """Explicit recommended_movies takes priority over response parsing."""
-    response = (
-        "- Inception (2010) - A mind-bending thriller\n"
-        "- The Matrix (1999) - A classic sci-fi film"
-    )
+    response = "- Inception (2010) - A mind-bending thriller\n- The Matrix (1999) - A classic sci-fi film"
     result = {"response": response, "recommended_movies": ["Dune"]}
     attach_media_to_result("movie recs", result)
     assert result["media_strip"].get("movie_title")

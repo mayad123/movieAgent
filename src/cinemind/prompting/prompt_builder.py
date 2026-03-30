@@ -2,6 +2,7 @@
 Prompt building pipeline for CineMind.
 Consumes RequestPlan and EvidenceBundle to produce structured chat messages.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PromptArtifacts:
     """Metadata about the prompt that was built."""
+
     prompt_version: str
     instruction_template_id: str  # Based on request_type/intent
     verbosity_budget: dict[str, Any] | None = None  # Sentences/words used
@@ -31,6 +33,7 @@ class PromptArtifacts:
 @dataclass
 class EvidenceBundle:
     """Bundle of evidence from search results."""
+
     search_results: list[dict]
     verified_facts: list | None = None
 
@@ -66,7 +69,7 @@ class EvidenceBundle:
 
         # Add verified facts if available
         if self.verified_facts:
-            verified_items = [f.value for f in self.verified_facts if hasattr(f, 'verified') and f.verified]
+            verified_items = [f.value for f in self.verified_facts if hasattr(f, "verified") and f.verified]
             if verified_items:
                 evidence_text += "\nVERIFIED INFORMATION:\n"
                 for item in verified_items[:5]:  # Limit to top 5
@@ -109,11 +112,7 @@ HARD RULES:
         self.evidence_formatter = EvidenceFormatter(max_snippet_length=400, max_items=10)
 
     def build_messages(
-        self,
-        request_plan: RequestPlan,
-        evidence: EvidenceBundle,
-        user_query: str,
-        structured_intent = None
+        self, request_plan: RequestPlan, evidence: EvidenceBundle, user_query: str, structured_intent=None
     ) -> tuple[list[dict[str, str]], PromptArtifacts]:
         """
         Build structured chat messages from RequestPlan and evidence.
@@ -141,10 +140,7 @@ HARD RULES:
         # system prompt + developer instructions into system message
         combined_system = f"{self.SYSTEM_PROMPT}\n\n{developer_message}"
 
-        messages = [
-            {"role": "system", "content": combined_system},
-            {"role": "user", "content": user_message}
-        ]
+        messages = [{"role": "system", "content": combined_system}, {"role": "user", "content": user_message}]
 
         # Build instruction template ID
         instruction_template_id = self._build_template_id(request_plan)
@@ -154,7 +150,7 @@ HARD RULES:
             prompt_version=self.prompt_version,
             instruction_template_id=instruction_template_id,
             verbosity_budget=self._estimate_verbosity_budget(request_plan),
-            messages_count=len(messages)
+            messages_count=len(messages),
         )
 
         logger.debug(f"Built prompt with template_id={instruction_template_id}, version={self.prompt_version}")
@@ -164,7 +160,7 @@ HARD RULES:
     def _build_response_instructions(
         self,
         request_plan: RequestPlan,
-        structured_intent = None,
+        structured_intent=None,
         *,
         user_query: str | None = None,
     ) -> str:
@@ -265,7 +261,7 @@ HARD RULES:
             "comparison": "Provide a side-by-side comparison format, clearly distinguishing between items.",
             "detailed": "Provide a comprehensive, detailed response with context and examples.",
             "verified_list": "Provide a list with verification/sources clearly indicated for each item.",
-            "spoiler_warning": "Include a prominent spoiler warning before revealing plot details."
+            "spoiler_warning": "Include a prominent spoiler warning before revealing plot details.",
         }
         return format_map.get(format_value, "")
 
@@ -298,21 +294,23 @@ HARD RULES:
         instructions = [
             f"User requires current/up-to-date information ({freshness_reason}).",
             "Emphasize recent information and use timestamp language when relevant.",
-            "Example: 'As of [current year]', 'Recently', 'Latest updates indicate'"
+            "Example: 'As of [current year]', 'Recently', 'Latest updates indicate'",
         ]
 
         # For very short TTL (e.g., < 12 hours), emphasize recency more
         if ttl_hours < 12:
-            instructions.append("Critical: This query requires very recent information. Highlight any time-sensitive details.")
+            instructions.append(
+                "Critical: This query requires very recent information. Highlight any time-sensitive details."
+            )
 
         return "\n".join(instructions)
 
-    def _get_constraints_instructions(self, request_plan: RequestPlan, structured_intent = None) -> str:
+    def _get_constraints_instructions(self, request_plan: RequestPlan, structured_intent=None) -> str:
         """Get constraints instructions (order_by, min_count, etc.)."""
         constraints_list = []
 
         # Extract constraints from structured_intent if available
-        if structured_intent and hasattr(structured_intent, 'constraints'):
+        if structured_intent and hasattr(structured_intent, "constraints"):
             constraints_dict = structured_intent.constraints
             if isinstance(constraints_dict, dict):
                 # order_by constraint
@@ -350,8 +348,7 @@ HARD RULES:
         # reject_tier_c -> avoid low-trust sources
         if request_plan.reject_tier_c:
             instructions.append(
-                "Avoid relying on low-trust sources for factual claims. "
-                "Use them only for context or speculation."
+                "Avoid relying on low-trust sources for factual claims. Use them only for context or speculation."
             )
 
         # allowed_source_tiers -> guide source selection (without mentioning tiers)
@@ -390,9 +387,7 @@ HARD RULES:
         """Estimate verbosity budget (sentences/words) based on template."""
         response_template = get_template(request_plan.request_type, request_plan.intent)
 
-        budget = {
-            "template_id": response_template.template_id
-        }
+        budget = {"template_id": response_template.template_id}
 
         if response_template.max_sentences:
             budget["max_sentences"] = response_template.max_sentences
@@ -402,4 +397,3 @@ HARD RULES:
             budget["max_words"] = response_template.max_words
 
         return budget
-

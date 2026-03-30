@@ -8,6 +8,7 @@ Performance optimizations:
 Note: Kaggle dataset search is handled by KaggleRetrievalAdapter (called separately by the agent).
 This class only handles Tavily API and web search fallback.
 """
+
 import logging
 import os
 import re
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class TavilyOverrideReason(Enum):
     """Valid reasons for overriding skip_tavily flag."""
+
     DISAMBIGUATION_NEEDED = "disambiguation_needed"
     STRUCTURED_LOOKUP_EMPTY = "structured_lookup_empty"
     TIER_A_MISSING = "tier_a_missing"
@@ -31,6 +33,7 @@ class TavilyOverrideReason(Enum):
 @dataclass
 class SearchDecision:
     """Structured metadata about search decisions."""
+
     tavily_used: bool = False
     fallback_used: bool = False
     fallback_provider: str | None = None
@@ -45,7 +48,7 @@ class SearchDecision:
             "fallback_used": self.fallback_used,
             "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
-            "override_reason": self.override_reason
+            "override_reason": self.override_reason,
         }
 
 
@@ -68,8 +71,7 @@ class SearchEngine:
         if enable_kaggle is not None:
             logger.warning("enable_kaggle parameter is deprecated - Kaggle is now handled by KaggleRetrievalAdapter")
 
-    def build_intent_queries(self, intent: str, entities: list[str],
-                           request_type: str = "info") -> list[str]:
+    def build_intent_queries(self, intent: str, entities: list[str], request_type: str = "info") -> list[str]:
         """
         Build intent-specific search queries that bias toward Tier A sources.
 
@@ -89,35 +91,35 @@ class SearchEngine:
 
             # IMDb-specific queries
             queries.append(f'site:imdb.com "{person1}" "{person2}" film')
-            queries.append(f'site:imdb.com {person1} {person2} movies together')
+            queries.append(f"site:imdb.com {person1} {person2} movies together")
 
             # Wikipedia-specific queries
-            queries.append(f'site:wikipedia.org {person1} {person2} film')
+            queries.append(f"site:wikipedia.org {person1} {person2} film")
             queries.append(f'site:wikipedia.org "{person1}" "{person2}" collaboration')
 
             # General query (fallback)
-            queries.append(f'{person1} {person2} movies together')
+            queries.append(f"{person1} {person2} movies together")
 
         elif intent == "director_info" and entities:
             # Director info: IMDb and Wikipedia
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" director')
             queries.append(f'site:wikipedia.org "{movie}" film director')
-            queries.append(f'who directed {movie}')
+            queries.append(f"who directed {movie}")
 
         elif intent == "release_date" and entities:
             # Release date: IMDb and Wikipedia
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" release date')
             queries.append(f'site:wikipedia.org "{movie}" film {movie} release')
-            queries.append(f'{movie} release date')
+            queries.append(f"{movie} release date")
 
         elif intent == "cast_info" and entities:
             # Cast info: IMDb
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" cast')
             queries.append(f'site:imdb.com/title "{movie}" full cast')
-            queries.append(f'{movie} cast actors')
+            queries.append(f"{movie} cast actors")
 
         else:
             # Generic query
@@ -129,9 +131,16 @@ class SearchEngine:
     # Note: _derive_kaggle_query_string removed - Kaggle query derivation is now handled
     # by KaggleRetrievalAdapter internally. This method is no longer needed.
 
-    async def search(self, query: str, max_results: int = 5, skip_tavily: bool = False,
-                    override_reason: str | None = None, kaggle_query_string: str | None = None,
-                    entities_typed: dict[str, list[str]] | None = None, intent: str | None = None) -> tuple[list[dict], SearchDecision]:
+    async def search(
+        self,
+        query: str,
+        max_results: int = 5,
+        skip_tavily: bool = False,
+        override_reason: str | None = None,
+        kaggle_query_string: str | None = None,
+        entities_typed: dict[str, list[str]] | None = None,
+        intent: str | None = None,
+    ) -> tuple[list[dict], SearchDecision]:
         """
         Perform real-time search for movie information.
 
@@ -215,7 +224,9 @@ class SearchEngine:
                 logger.warning(f"Web search fallback failed: {e}")
         elif not results and not should_use_tavily:
             # Browsing is not allowed - do NOT use fallback
-            logger.info(f"Fallback search skipped (browsing not allowed: skip_tavily=True, override_reason={override_reason})")
+            logger.info(
+                f"Fallback search skipped (browsing not allowed: skip_tavily=True, override_reason={override_reason})"
+            )
 
         return (results[:max_results], decision)
 
@@ -230,29 +241,34 @@ class SearchEngine:
                 search_depth="advanced",
                 max_results=max_results,
                 include_answer=True,
-                include_raw_content=False
+                include_raw_content=False,
             )
 
             results = []
             for result in response.get("results", []):
-                results.append({
-                    "title": result.get("title", ""),
-                    "url": result.get("url", ""),
-                    "content": result.get("content", ""),
-                    "score": result.get("score", 0.0),
-                    "published_date": result.get("published_date"),
-                    "source": "tavily"
-                })
+                results.append(
+                    {
+                        "title": result.get("title", ""),
+                        "url": result.get("url", ""),
+                        "content": result.get("content", ""),
+                        "score": result.get("score", 0.0),
+                        "published_date": result.get("published_date"),
+                        "source": "tavily",
+                    }
+                )
 
             # Include answer if available
             if response.get("answer"):
-                results.insert(0, {
-                    "title": "Tavily Answer",
-                    "url": "",
-                    "content": response["answer"],
-                    "score": 1.0,
-                    "source": "tavily_answer"
-                })
+                results.insert(
+                    0,
+                    {
+                        "title": "Tavily Answer",
+                        "url": "",
+                        "content": response["answer"],
+                        "score": 1.0,
+                        "source": "tavily_answer",
+                    },
+                )
 
             return results
         except ImportError:
@@ -271,13 +287,7 @@ class SearchEngine:
         try:
             # DuckDuckGo Instant Answer API
             url = "https://api.duckduckgo.com"
-            params = {
-                "q": query,
-                "format": "json",
-                "no_redirect": "1",
-                "no_html": "1",
-                "skip_disambig": "1"
-            }
+            params = {"q": query, "format": "json", "no_redirect": "1", "no_html": "1", "skip_disambig": "1"}
 
             async with self.session.get(url, params=params) as response:
                 if response.status_code == 200:
@@ -286,22 +296,28 @@ class SearchEngine:
 
                     # Extract abstract/answer
                     if data.get("AbstractText"):
-                        results.append({
-                            "title": data.get("Heading", query),
-                            "url": data.get("AbstractURL", ""),
-                            "content": data.get("AbstractText", ""),
-                            "source": "duckduckgo"
-                        })
+                        results.append(
+                            {
+                                "title": data.get("Heading", query),
+                                "url": data.get("AbstractURL", ""),
+                                "content": data.get("AbstractText", ""),
+                                "source": "duckduckgo",
+                            }
+                        )
 
                     # Extract related topics
-                    for topic in data.get("RelatedTopics", [])[:max_results-1]:
+                    for topic in data.get("RelatedTopics", [])[: max_results - 1]:
                         if isinstance(topic, dict) and "Text" in topic:
-                            results.append({
-                                "title": topic.get("Text", "").split(" - ")[0] if " - " in topic.get("Text", "") else query,
-                                "url": topic.get("FirstURL", ""),
-                                "content": topic.get("Text", ""),
-                                "source": "duckduckgo"
-                            })
+                            results.append(
+                                {
+                                    "title": topic.get("Text", "").split(" - ")[0]
+                                    if " - " in topic.get("Text", "")
+                                    else query,
+                                    "url": topic.get("FirstURL", ""),
+                                    "content": topic.get("Text", ""),
+                                    "source": "duckduckgo",
+                                }
+                            )
 
                     return results[:max_results]
         except Exception as e:
@@ -344,13 +360,13 @@ class SearchEngine:
                     try:
                         if isinstance(published_date, str):
                             # Try to parse date string (handle various formats)
-                            date_str = published_date.replace('Z', '+00:00')
+                            date_str = published_date.replace("Z", "+00:00")
                             try:
                                 date_obj = datetime.fromisoformat(date_str)
                                 year = str(date_obj.year)
                             except (ValueError, AttributeError):
                                 # Try extracting year from string (e.g., "2024-01-01" -> "2024")
-                                year_match = re.search(r'\b(19|20)\d{2}\b', date_str)
+                                year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
                                 if year_match:
                                     year = year_match.group(0)
                         elif isinstance(published_date, (int, float)):
@@ -377,6 +393,7 @@ class SearchEngine:
         Returns:
             Sorted list of results (highest score first)
         """
+
         # Sort by score (descending), then by title for stable ordering
         def sort_key(result: dict) -> tuple[float, str]:
             score = float(result.get("score", 0.0) or 0.0)
@@ -401,11 +418,12 @@ class SearchEngine:
             f"{movie_title} {year if year else ''} IMDb",
             f"{movie_title} {year if year else ''} Rotten Tomatoes",
             f"{movie_title} {year if year else ''} review",
-            f"{movie_title} {year if year else ''} cast crew"
+            f"{movie_title} {year if year else ''} cast crew",
         ]
 
         # Run all searches in parallel
         import asyncio
+
         search_tasks = [self.search(q, max_results=2, skip_tavily=False) for q in queries]
         all_results_tuples = await asyncio.gather(*search_tasks, return_exceptions=True)
 
@@ -449,11 +467,18 @@ class MovieDataAggregator:
         self.search_engine = search_engine
         self.source_policy = source_policy
 
-    async def get_movie_info(self, query: str, include_recent_news: bool = True,
-                           intent: str | None = None, entities: list[str] | None = None,
-                           request_type: str = "info", skip_tavily: bool = False,
-                           override_reason: str | None = None,
-                           request_plan = None, entities_typed: dict[str, list[str]] | None = None) -> dict:
+    async def get_movie_info(
+        self,
+        query: str,
+        include_recent_news: bool = True,
+        intent: str | None = None,
+        entities: list[str] | None = None,
+        request_type: str = "info",
+        skip_tavily: bool = False,
+        override_reason: str | None = None,
+        request_plan=None,
+        entities_typed: dict[str, list[str]] | None = None,
+    ) -> dict:
         """
         Get comprehensive movie information from multiple sources with source policy.
 
@@ -481,13 +506,17 @@ class MovieDataAggregator:
         # Run searches in parallel
         tasks = []
         for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
-            tasks.append(self.search_engine.search(
-                q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason
-            ))
+            tasks.append(
+                self.search_engine.search(q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason)
+            )
 
         if include_recent_news and not skip_tavily:
             news_query = f"{query} movie news 2024 2025"
-            tasks.append(self.search_engine.search(news_query, max_results=3, skip_tavily=skip_tavily, override_reason=override_reason))
+            tasks.append(
+                self.search_engine.search(
+                    news_query, max_results=3, skip_tavily=skip_tavily, override_reason=override_reason
+                )
+            )
 
         results_tuples = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -556,16 +585,18 @@ class MovieDataAggregator:
             source_summary.update(filter_metadata)
 
             for source in ranked_sources:
-                results.append({
-                    "title": source.title,
-                    "url": source.url,
-                    "content": source.content,
-                    "score": source.score,
-                    "published_date": source.published_date,
-                    "source": source.source_name,  # Preserve original source (kaggle_imdb, tavily, etc.)
-                    "tier": source.tier.value,
-                    "domain": source.domain
-                })
+                results.append(
+                    {
+                        "title": source.title,
+                        "url": source.url,
+                        "content": source.content,
+                        "score": source.score,
+                        "published_date": source.published_date,
+                        "source": source.source_name,  # Preserve original source (kaggle_imdb, tavily, etc.)
+                        "tier": source.tier.value,
+                        "domain": source.domain,
+                    }
+                )
         else:
             results = raw_results
             source_summary = {}
@@ -585,7 +616,6 @@ class MovieDataAggregator:
             "fallback_used": fallback_used_any,
             "fallback_provider": fallback_provider_final,
             "override_used": override_used_any,
-            "override_reason": override_reason_final
+            "override_reason": override_reason_final,
             # Note: Kaggle-specific fields removed - Kaggle handled by KaggleRetrievalAdapter
         }
-

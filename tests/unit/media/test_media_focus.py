@@ -1,4 +1,5 @@
 """Unit tests for intent-based media focus (single_movie vs multi_movie)."""
+
 from __future__ import annotations
 
 import sys

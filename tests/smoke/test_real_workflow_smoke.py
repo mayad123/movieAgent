@@ -9,6 +9,7 @@ Optional: CINEMIND_LLM_API_KEY
     pytest tests/smoke/test_real_workflow_smoke.py -v
 From repo root with PYTHONPATH=src.
 """
+
 import asyncio
 import sys
 from pathlib import Path

@@ -4,6 +4,7 @@ Playground workflow: deterministic pipeline with TMDB media.
 Thin orchestration layer; implementation lives in cinemind.playground.
 Callers (API, tests) use this entry point so wiring stays thin.
 """
+
 from typing import Any
 
 # Implementation remains in cinemind; workflow layer delegates

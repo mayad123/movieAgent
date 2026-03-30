@@ -1,4 +1,5 @@
 """Comparison query test cases."""
+
 from .base import TestCase, contains_all_substrings, min_length
 
 COMPARISON_TESTS = [
@@ -9,8 +10,8 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("pixar", "ghibli", "cgi", "hand-drawn", "miyazaki", "story"),
-            min_length(200)
-        ]
+            min_length(200),
+        ],
     ),
     TestCase(
         name="comparison_horror_directors",
@@ -18,8 +19,8 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("hitchcock", "shyamalan", "suspense", "twist", "master", "cinematography"),
-            min_length(150)
-        ]
+            min_length(150),
+        ],
     ),
     TestCase(
         name="comparison_superhero_universes",
@@ -27,8 +28,8 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("marvel", "mcu", "dc", "dceu", "tone", "color", "cinematic"),
-            min_length(150)
-        ]
+            min_length(150),
+        ],
     ),
     TestCase(
         name="comparison_crime_auteurs",
@@ -36,8 +37,8 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("scorsese", "tarantino", "dialogue", "violence", "stylized", "realistic"),
-            min_length(200)
-        ]
+            min_length(200),
+        ],
     ),
     TestCase(
         name="comparison_female_auteurs",
@@ -45,8 +46,8 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("gerwig", "coppola", "femininity", "isolation", "aesthetic", "perspective"),
-            min_length(150)
-        ]
+            min_length(150),
+        ],
     ),
     TestCase(
         name="comparison_sci_fi_eras",
@@ -54,7 +55,7 @@ COMPARISON_TESTS = [
         expected_type="comparison",
         acceptance_criteria=[
             contains_all_substrings("70s", "2010s", "practical effects", "cgi", "themes", "blockbuster"),
-            min_length(150)
-        ]
-    )
+            min_length(150),
+        ],
+    ),
 ]

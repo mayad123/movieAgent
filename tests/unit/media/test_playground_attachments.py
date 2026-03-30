@@ -1,4 +1,5 @@
 """Unit tests for playground-only attachment behavior (single → poster+scenes, multi → posters only)."""
+
 from __future__ import annotations
 
 import sys
@@ -50,8 +51,18 @@ def test_avatar_and_inception_two_movies():
     result = {"query": "Avatar and Inception", "response": "Inception information is available."}
     with patch("cinemind.media.playground_attachments.enrich_batch") as mock_batch:
         mock_batch.return_value = [
-            {"movie_title": "Avatar (2009 film)", "year": 2009, "page_url": "#", "primary_image_url": "https://example.com/avatar.jpg"},
-            {"movie_title": "Inception (2010 film)", "year": 2010, "page_url": "#", "primary_image_url": "https://example.com/inception.jpg"},
+            {
+                "movie_title": "Avatar (2009 film)",
+                "year": 2009,
+                "page_url": "#",
+                "primary_image_url": "https://example.com/avatar.jpg",
+            },
+            {
+                "movie_title": "Inception (2010 film)",
+                "year": 2010,
+                "page_url": "#",
+                "primary_image_url": "https://example.com/inception.jpg",
+            },
         ]
         apply_playground_attachment_behavior("Avatar and Inception", result)
     assert result[ATTACHMENT_DEBUG_KEY]["detected_movie_count"] == 2
@@ -69,8 +80,14 @@ def test_single_movie_sections_primary_and_scenes_slot():
     """Playground: user query as response → single-movie text yields primary_movie (+ scenes if any)."""
     result = {}
     with patch("cinemind.media.playground_attachments.enrich") as mock_enrich:
-        mock_enrich.return_value = type("R", (), {"media_strip": {"movie_title": "Inception", "year": 2010, "page_url": "#"}, "media_candidates": []})()
-        apply_playground_attachment_behavior("Inception (2010) is a sci-fi film. Key moments include the dream layers.", result)
+        mock_enrich.return_value = type(
+            "R",
+            (),
+            {"media_strip": {"movie_title": "Inception", "year": 2010, "page_url": "#"}, "media_candidates": []},
+        )()
+        apply_playground_attachment_behavior(
+            "Inception (2010) is a sci-fi film. Key moments include the dream layers.", result
+        )
     sections = result["attachments"]["sections"]
     assert len(sections) >= 1
     assert sections[0]["type"] == SECTION_PRIMARY_MOVIE
@@ -83,7 +100,9 @@ def test_user_query_title_only_fallback():
     """When user only typed a title (e.g. 'Avatar'), query fallback drives single-movie path."""
     result = {"response": "Avatar is a 2009 film."}
     with patch("cinemind.media.playground_attachments.enrich") as mock_enrich:
-        mock_enrich.return_value = type("R", (), {"media_strip": {"movie_title": "Avatar", "year": 2009, "page_url": "#"}, "media_candidates": []})()
+        mock_enrich.return_value = type(
+            "R", (), {"media_strip": {"movie_title": "Avatar", "year": 2009, "page_url": "#"}, "media_candidates": []}
+        )()
         apply_playground_attachment_behavior("Avatar", result)
     assert result["attachments"]["sections"]
     assert result[ATTACHMENT_DEBUG_KEY]["detected_movie_count"] == 1
@@ -93,7 +112,11 @@ def test_single_title_multi_movie_intent_no_scenes():
     """Intent-based: 'movies similar to Inception' → 1 title but multi_movie focus → poster only, no scenes section."""
     result = {}
     with patch("cinemind.media.playground_attachments.enrich") as mock_enrich:
-        mock_enrich.return_value = type("R", (), {"media_strip": {"movie_title": "Inception", "year": 2010, "page_url": "#"}, "media_candidates": []})()
+        mock_enrich.return_value = type(
+            "R",
+            (),
+            {"media_strip": {"movie_title": "Inception", "year": 2010, "page_url": "#"}, "media_candidates": []},
+        )()
         apply_playground_attachment_behavior("movies similar to Inception", result)
     sections = result["attachments"]["sections"]
     assert result[ATTACHMENT_DEBUG_KEY]["detected_movie_count"] == 1

@@ -26,11 +26,7 @@ def test_fixtures_available(minimal_request_plan, minimal_evidence_bundle):
 
 def test_request_plan_factory(request_plan_factory):
     """Test RequestPlan factory fixture."""
-    plan = request_plan_factory(
-        intent="director_info",
-        request_type="info",
-        entities=["Christopher Nolan"]
-    )
+    plan = request_plan_factory(intent="director_info", request_type="info", entities=["Christopher Nolan"])
     assert plan.intent == "director_info"
     assert plan.request_type == "info"
     assert "Christopher Nolan" in plan.entities
@@ -46,6 +42,7 @@ def test_evidence_bundle_factory(evidence_bundle_factory, sample_search_result):
 def test_frozen_time(frozen_time):
     """Test that time fixture works."""
     from datetime import datetime
+
     # The frozen_time fixture automatically enters the context
     now = datetime.now()
     assert now.year == 2024, f"Expected year 2024, got {now.year}"
@@ -64,4 +61,3 @@ def test_fixture_loader():
 def test_pytest_runs():
     """Simple test to verify pytest is working."""
     assert True
-

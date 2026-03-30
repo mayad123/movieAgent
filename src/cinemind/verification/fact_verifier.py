@@ -3,6 +3,7 @@ Verification module for CineMind.
 Verifies extracted facts against Tier A sources (IMDb, Wikipedia, Wikidata).
 Implements "candidate → verify → answer" pattern for fact/list questions.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VerifiedFact:
     """A verified fact with source attribution."""
+
     fact_type: str  # "cast", "director", "release_year", "collaboration"
     value: str  # The fact value
     verified: bool
@@ -41,9 +43,9 @@ class FactVerifier:
         """
         self.source_policy = source_policy
 
-    def verify_movie_credit(self, movie_title: str, person_name: str,
-                           year: int | None = None,
-                           sources: list | None = None) -> tuple[bool, str, float]:
+    def verify_movie_credit(
+        self, movie_title: str, person_name: str, year: int | None = None, sources: list | None = None
+    ) -> tuple[bool, str, float]:
         """
         Verify if a person has a credit (cast/director) in a movie.
         Reusable verification component.
@@ -61,7 +63,7 @@ class FactVerifier:
             return (False, "", 0.0)
 
         # Filter to Tier A sources only
-        tier_a_sources = [s for s in sources if hasattr(s, 'tier') and s.tier.value == "A"]
+        tier_a_sources = [s for s in sources if hasattr(s, "tier") and s.tier.value == "A"]
 
         if not tier_a_sources:
             logger.warning(f"No Tier A sources for verification of {person_name} in {movie_title}")
@@ -81,8 +83,7 @@ class FactVerifier:
 
         return (False, "", 0.0)
 
-    def verify_release_year(self, movie_title: str,
-                           sources: list | None = None) -> tuple[int | None, str, float]:
+    def verify_release_year(self, movie_title: str, sources: list | None = None) -> tuple[int | None, str, float]:
         """
         Verify release year for a movie.
         Reusable verification component.
@@ -98,13 +99,13 @@ class FactVerifier:
             return (None, "", 0.0)
 
         # Filter to Tier A sources only
-        tier_a_sources = [s for s in sources if hasattr(s, 'tier') and s.tier.value == "A"]
+        tier_a_sources = [s for s in sources if hasattr(s, "tier") and s.tier.value == "A"]
 
         if not tier_a_sources:
             return (None, "", 0.0)
 
         # Extract years from Tier A sources
-        year_pattern = r'\b(19\d{2}|20\d{2})\b'
+        year_pattern = r"\b(19\d{2}|20\d{2})\b"
         years_found = {}  # year -> [source_urls]
 
         for source in tier_a_sources:
@@ -112,7 +113,9 @@ class FactVerifier:
             title_lower = movie_title.lower()
 
             # Only consider sources that mention the movie title
-            if title_lower in content_lower or any(word in content_lower for word in title_lower.split() if len(word) > 3):
+            if title_lower in content_lower or any(
+                word in content_lower for word in title_lower.split() if len(word) > 3
+            ):
                 years = re.findall(year_pattern, source.content)
                 for year_str in years:
                     year = int(year_str)
@@ -138,8 +141,9 @@ class FactVerifier:
 
         return (most_common_year, source_url, confidence)
 
-    def _check_credit_in_content(self, content: str, movie_title: str,
-                                person_name: str, year: int | None = None) -> bool:
+    def _check_credit_in_content(
+        self, content: str, movie_title: str, person_name: str, year: int | None = None
+    ) -> bool:
         """Check if person has credit in movie based on content."""
         content_lower = content.lower()
         title_lower = movie_title.lower()
@@ -147,9 +151,8 @@ class FactVerifier:
 
         # Check if movie title is mentioned
         title_words = title_lower.split()
-        title_mentioned = (
-            title_lower in content_lower or
-            any(word in content_lower for word in title_words if len(word) > 3)
+        title_mentioned = title_lower in content_lower or any(
+            word in content_lower for word in title_words if len(word) > 3
         )
 
         if not title_mentioned:
@@ -157,7 +160,7 @@ class FactVerifier:
 
         # Check if year matches (if provided)
         if year:
-            year_pattern = rf'\b{year}\b'
+            year_pattern = rf"\b{year}\b"
             if not re.search(year_pattern, content):
                 return False
 
@@ -170,17 +173,13 @@ class FactVerifier:
             " ".join(person_words[-2:]) if len(person_words) > 2 else person_lower,  # Last two words
         ]
 
-        person_found = any(
-            var in content_lower
-            for var in person_variations
-            if len(var) > 3
-        )
+        person_found = any(var in content_lower for var in person_variations if len(var) > 3)
 
         return person_found
 
-    def verify_filmography_overlap(self, person1: str, person2: str,
-                                  candidate_titles: list[str],
-                                  sources: list) -> list[VerifiedFact]:
+    def verify_filmography_overlap(
+        self, person1: str, person2: str, candidate_titles: list[str], sources: list
+    ) -> list[VerifiedFact]:
         """
         Verify filmography overlap between two people.
 
@@ -230,24 +229,28 @@ class FactVerifier:
                         break
 
             if verified:
-                verified_facts.append(VerifiedFact(
-                    fact_type="collaboration",
-                    value=title,
-                    verified=True,
-                    source_url=source_url,
-                    source_tier="A",
-                    confidence=confidence
-                ))
+                verified_facts.append(
+                    VerifiedFact(
+                        fact_type="collaboration",
+                        value=title,
+                        verified=True,
+                        source_url=source_url,
+                        source_tier="A",
+                        confidence=confidence,
+                    )
+                )
             else:
                 # Mark as unverified
-                verified_facts.append(VerifiedFact(
-                    fact_type="collaboration",
-                    value=title,
-                    verified=False,
-                    source_url="",
-                    source_tier="",
-                    confidence=0.0
-                ))
+                verified_facts.append(
+                    VerifiedFact(
+                        fact_type="collaboration",
+                        value=title,
+                        verified=False,
+                        source_url="",
+                        source_tier="",
+                        confidence=0.0,
+                    )
+                )
 
         return verified_facts
 
@@ -294,7 +297,7 @@ class FactVerifier:
         tier_a_sources = [s for s in sources if s.tier.value == "A"]
 
         # Look for year patterns in Tier A sources
-        year_pattern = r'\b(19\d{2}|20\d{2})\b'
+        year_pattern = r"\b(19\d{2}|20\d{2})\b"
 
         years_found = {}
 
@@ -325,7 +328,7 @@ class FactVerifier:
             source_url=years_found[most_common_year][0],
             source_tier="A",
             confidence=0.9 if not conflicts else 0.7,
-            conflicts=conflicts
+            conflicts=conflicts,
         )
 
     def resolve_conflicts(self, facts: list[VerifiedFact]) -> list[VerifiedFact]:
@@ -373,4 +376,3 @@ class FactVerifier:
                     resolved.append(best)
 
         return resolved
-

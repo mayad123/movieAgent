@@ -6,6 +6,7 @@ Asset registry: original external URL (posterImageUrl, pageUrl); optional stored
 future cached/local hosting; title, pageId, conversationId, capturedAt.
 Storage: single JSON file. Replace this backend with a real DB/auth later.
 """
+
 from __future__ import annotations
 
 import json
@@ -174,12 +175,14 @@ def remove_asset(project_id: str, asset_index: int) -> bool:
 def create(name: str, description: str = "") -> dict:
     """Create a project; return the created project."""
     projects = _read_raw()
-    project = _normalize({
-        "id": str(uuid.uuid4()),
-        "name": name,
-        "createdAt": datetime.now(UTC).isoformat(),
-        "description": description,
-    })
+    project = _normalize(
+        {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "createdAt": datetime.now(UTC).isoformat(),
+            "description": description,
+        }
+    )
     projects.append(project)
     _write_raw(projects)
     return project
@@ -189,7 +192,9 @@ def seed_if_needed() -> None:
     """If the store is empty, seed with default projects."""
     if _read_raw():
         return
-    _write_raw([
-        _normalize({"name": "Project 1", "description": "Default project"}),
-        _normalize({"name": "Project 2", "description": "Default project"}),
-    ])
+    _write_raw(
+        [
+            _normalize({"name": "Project 1", "description": "Default project"}),
+            _normalize({"name": "Project 2", "description": "Default project"}),
+        ]
+    )

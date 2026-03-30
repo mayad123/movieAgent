@@ -1,2 +1,1 @@
 """CineMind API package."""
-

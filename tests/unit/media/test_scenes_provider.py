@@ -1,4 +1,5 @@
 """Unit tests for pluggable scenes provider (TMDB + empty fallback)."""
+
 from __future__ import annotations
 
 import sys
@@ -28,7 +29,9 @@ def _clear_tmdb_resolve_cache():
 
 class TestSceneItem:
     def test_to_attachment_item(self):
-        item = SceneItem(image_url="https://img.example/a.jpg", caption="Backdrop", source_url="https://tmdb.org/movie/1")
+        item = SceneItem(
+            image_url="https://img.example/a.jpg", caption="Backdrop", source_url="https://tmdb.org/movie/1"
+        )
         out = item.to_attachment_item()
         assert out["imageUrl"] == "https://img.example/a.jpg"
         assert out["caption"] == "Backdrop"
@@ -59,9 +62,14 @@ class TestScenesProviderTMDB:
 
     def test_returns_normalized_items_on_mock_response(self):
         from integrations.tmdb.image_config import TMDBImageConfig, clear_config_cache
+
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=2)
-        search_payload = {"results": [{"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}]}
+        search_payload = {
+            "results": [
+                {"id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 50, "vote_count": 10000}
+            ]
+        }
         images_response = b'{"backdrops":[{"file_path":"/abc.jpg","vote_average":7.5,"vote_count":10},{"file_path":"/def.jpg","vote_average":6,"vote_count":2}]}'
         fixed_config = TMDBImageConfig(
             secure_base_url="https://image.tmdb.org/t/p/",
@@ -74,7 +82,11 @@ class TestScenesProviderTMDB:
                 return search_payload
             return None
 
-        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http), patch("integrations.tmdb.image_config.get_config", return_value=fixed_config), patch("urllib.request.urlopen") as m:
+        with (
+            patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http),
+            patch("integrations.tmdb.image_config.get_config", return_value=fixed_config),
+            patch("urllib.request.urlopen") as m,
+        ):
             m.return_value.__enter__.return_value.read.return_value = images_response
             items = p.fetch_scenes("Inception")
         assert len(items) == 2
@@ -90,15 +102,20 @@ class TestScenesProviderTMDB:
     def test_low_resolution_backdrops_filtered_out(self):
         """Backdrops below MIN_BACKDROP_WIDTH/MIN_BACKDROP_HEIGHT are excluded."""
         from integrations.tmdb.image_config import TMDBImageConfig, clear_config_cache
+
         clear_config_cache()
         p = ScenesProviderTMDB(access_token="token", max_backdrops=5)
-        search_payload = {"results": [{"id": 1, "title": "X", "release_date": "2020-01-01", "popularity": 10, "vote_count": 100}]}
+        search_payload = {
+            "results": [{"id": 1, "title": "X", "release_date": "2020-01-01", "popularity": 10, "vote_count": 100}]
+        }
         # One valid (w780), one too narrow (width 200), one too short (height 100)
-        images_response = b'{"backdrops":[' \
-            b'{"file_path":"/good.jpg","vote_average":8,"vote_count":100,"width":780,"height":439},' \
-            b'{"file_path":"/narrow.jpg","vote_average":7,"vote_count":50,"width":200,"height":112},' \
-            b'{"file_path":"/short.jpg","vote_average":6,"vote_count":25,"width":400,"height":100}' \
-            b']}'
+        images_response = (
+            b'{"backdrops":['
+            b'{"file_path":"/good.jpg","vote_average":8,"vote_count":100,"width":780,"height":439},'
+            b'{"file_path":"/narrow.jpg","vote_average":7,"vote_count":50,"width":200,"height":112},'
+            b'{"file_path":"/short.jpg","vote_average":6,"vote_count":25,"width":400,"height":100}'
+            b"]}"
+        )
         fixed_config = TMDBImageConfig(
             secure_base_url="https://image.tmdb.org/t/p/",
             backdrop_sizes=["w780"],
@@ -110,7 +127,11 @@ class TestScenesProviderTMDB:
                 return search_payload
             return None
 
-        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http), patch("integrations.tmdb.image_config.get_config", return_value=fixed_config), patch("urllib.request.urlopen") as m:
+        with (
+            patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http),
+            patch("integrations.tmdb.image_config.get_config", return_value=fixed_config),
+            patch("urllib.request.urlopen") as m,
+        ):
             m.return_value.__enter__.return_value.read.return_value = images_response
             items = p.fetch_scenes("X")
         # Only the first (good) backdrop passes the filter
@@ -120,6 +141,7 @@ class TestScenesProviderTMDB:
     def test_uses_bearer_header_not_api_key_in_url(self):
         """TMDB requests use Authorization: Bearer and no token in query string."""
         from integrations.tmdb.scenes import _bearer_headers
+
         h = _bearer_headers("secret-token")
         assert h["Authorization"] == "Bearer secret-token"
         assert "Accept" in h

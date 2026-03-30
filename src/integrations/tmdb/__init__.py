@@ -1,4 +1,5 @@
 """TMDB integration: image config, title resolver, scenes/backdrops."""
+
 from .image_config import (
     SIZE_BACKDROP_GALLERY,
     SIZE_POSTER_GALLERY,

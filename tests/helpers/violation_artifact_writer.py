@@ -4,6 +4,7 @@ Violation artifact writer for scenario test violations.
 Writes detailed JSON artifacts when scenarios produce validator violations,
 even if the test passes. This allows tracking violations separately from test failures.
 """
+
 import json
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ def write_violation_artifact(
     fixed_text: str | None = None,
     repair_instruction: str | None = None,
     artifacts_dir: Path | None = None,
-    kaggle_outcome: dict[str, Any] | None = None  # Kaggle behavior outcome
+    kaggle_outcome: dict[str, Any] | None = None,  # Kaggle behavior outcome
 ) -> Path | None:
     """
     Write a violation artifact JSON file for a scenario with validator violations.
@@ -66,17 +67,24 @@ def write_violation_artifact(
 
         if "forbidden" in violation_lower or "term" in violation_lower:
             violation_type = "forbidden_terms"
-        elif "sentence" in violation_lower or "word" in violation_lower or "length" in violation_lower or "verbosity" in violation_lower:
+        elif (
+            "sentence" in violation_lower
+            or "word" in violation_lower
+            or "length" in violation_lower
+            or "verbosity" in violation_lower
+        ):
             violation_type = "verbosity"
-        elif "freshness" in violation_lower or "timestamp" in violation_lower or "date" in violation_lower or "as of" in violation_lower:
+        elif (
+            "freshness" in violation_lower
+            or "timestamp" in violation_lower
+            or "date" in violation_lower
+            or "as of" in violation_lower
+        ):
             violation_type = "freshness"
         elif "section" in violation_lower or "required" in violation_lower:
             violation_type = "missing_required_section"
 
-        structured_violations.append({
-            "type": violation_type,
-            "message": violation
-        })
+        structured_violations.append({"type": violation_type, "message": violation})
 
     # Extract unique violation types for summary
     violation_types = list(set(v["type"] for v in structured_violations))
@@ -105,7 +113,7 @@ def write_violation_artifact(
             "used": kaggle_outcome.get("evidence_used", False),
             "item_count": kaggle_outcome.get("evidence_count", 0),
             "fallback_reason": fallback_reason,
-            "warnings": kaggle_outcome.get("warnings", [])
+            "warnings": kaggle_outcome.get("warnings", []),
         }
 
     # Build artifact JSON
@@ -120,7 +128,7 @@ def write_violation_artifact(
         "fixed_text": fixed_text,
         "repair_instruction": repair_instruction,
         "kaggle": kaggle_metadata,  # Kaggle provenance and adapter decision metadata
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
 
     # Write JSON file
@@ -154,7 +162,7 @@ def generate_violations_index(artifacts_dir: Path | None = None) -> Path | None:
         index_data = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "total_scenarios_with_violations": 0,
-            "scenarios": []
+            "scenarios": [],
         }
         try:
             with open(index_file, "w", encoding="utf-8") as f:
@@ -172,14 +180,16 @@ def generate_violations_index(artifacts_dir: Path | None = None) -> Path | None:
                 with open(artifact_file, encoding="utf-8") as f:
                     artifact = json.load(f)
 
-                    scenarios.append({
-                        "scenario_name": artifact.get("scenario_name", artifact_file.stem),
-                        "template_id": artifact.get("template_id"),
-                        "user_query": artifact.get("user_query", ""),
-                        "violation_types": artifact.get("violation_types", []),
-                        "violation_count": artifact.get("violation_count", len(artifact.get("violations", []))),
-                        "artifact_path": str(artifact_file.relative_to(artifacts_dir.parent))
-                    })
+                    scenarios.append(
+                        {
+                            "scenario_name": artifact.get("scenario_name", artifact_file.stem),
+                            "template_id": artifact.get("template_id"),
+                            "user_query": artifact.get("user_query", ""),
+                            "violation_types": artifact.get("violation_types", []),
+                            "violation_count": artifact.get("violation_count", len(artifact.get("violations", []))),
+                            "artifact_path": str(artifact_file.relative_to(artifacts_dir.parent)),
+                        }
+                    )
             except Exception as e:
                 print(f"Warning: Failed to load violation artifact {artifact_file}: {e}")
                 continue
@@ -191,7 +201,7 @@ def generate_violations_index(artifacts_dir: Path | None = None) -> Path | None:
         index_data = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "total_scenarios_with_violations": len(scenarios),
-            "scenarios": scenarios
+            "scenarios": scenarios,
         }
 
         # Write index file
@@ -201,4 +211,3 @@ def generate_violations_index(artifacts_dir: Path | None = None) -> Path | None:
     except Exception as e:
         print(f"Warning: Failed to generate violations index: {e}")
         return None
-

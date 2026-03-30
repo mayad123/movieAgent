@@ -2,6 +2,7 @@
 Request tagging and classification for CineMind.
 Hybrid three-layer classification system: Rules → LLM → Guardrails
 """
+
 import json
 import logging
 import re
@@ -16,7 +17,7 @@ REQUEST_TYPES = {
     "comparison": "Comparison between movies/directors/etc",
     "spoiler": "Request with spoilers",
     "release-date": "Release date inquiry",
-    "fact-check": "Fact verification request"
+    "fact-check": "Fact verification request",
 }
 
 # Valid outcomes
@@ -24,19 +25,22 @@ OUTCOMES = {
     "success": "Request was successfully answered",
     "unclear": "Response was unclear or ambiguous",
     "hallucination": "Response contained hallucinations or incorrect information",
-    "user-corrected": "User provided corrections to the response"
+    "user-corrected": "User provided corrections to the response",
 }
 
 
 @dataclass
 class ClassificationResult:
     """Result of classification with metadata."""
+
     predicted_type: str
     rule_hit: str | None = None  # Which rule matched, or None if LLM was used
     llm_used: bool = False
     confidence: float = 1.0
     entities: list[str] = None  # Extracted entities (titles, persons)
-    freshness_signal: bool = False  # Weak signal: whether query might need fresh data (final decision made by ToolPlanner)
+    freshness_signal: bool = (
+        False  # Weak signal: whether query might need fresh data (final decision made by ToolPlanner)
+    )
     original_llm_type: str | None = None  # LLM prediction before guardrails
 
     def __post_init__(self):
@@ -99,27 +103,37 @@ class HybridClassifier:
                 r"\b(did.*really|does.*really|was.*really)\b",
                 r"\b(verify|confirm|fact check|fact-check)\b",
                 r"\b(accurate|correct|true|false)\b",
-            ]
+            ],
         }
 
         # Layer C: Guardrail patterns (override rules)
         self.guardrails = [
             # Override: If contains "similar" + "recommend" → recs (even if LLM says info)
-            (lambda q: bool(re.search(r"\b(similar|like)\b", q.lower()) and
-                           re.search(r"\b(recommend|suggest)\b", q.lower())),
-             "recs", "guardrail: similar+recommend"),
-
+            (
+                lambda q: bool(
+                    re.search(r"\b(similar|like)\b", q.lower()) and re.search(r"\b(recommend|suggest)\b", q.lower())
+                ),
+                "recs",
+                "guardrail: similar+recommend",
+            ),
             # Override: If "is it out yet" or "out yet" → release-date (even if LLM says info)
-            (lambda q: bool(re.search(r"\b(is it out yet|out yet|is.*out yet)\b", q.lower())),
-             "release-date", "guardrail: out yet"),
-
+            (
+                lambda q: bool(re.search(r"\b(is it out yet|out yet|is.*out yet)\b", q.lower())),
+                "release-date",
+                "guardrail: out yet",
+            ),
             # Override: If "explain the ending" → spoiler (even if LLM says info)
-            (lambda q: bool(re.search(r"\b(explain the ending|explain ending|ending of)\b", q.lower())),
-             "spoiler", "guardrail: explain ending"),
-
+            (
+                lambda q: bool(re.search(r"\b(explain the ending|explain ending|ending of)\b", q.lower())),
+                "spoiler",
+                "guardrail: explain ending",
+            ),
             # Override: If "movies in order" → info (even if LLM says recs)
-            (lambda q: bool(re.search(r"\b(movies in order|order of|chronological order)\b", q.lower())),
-             "info", "guardrail: movies in order"),
+            (
+                lambda q: bool(re.search(r"\b(movies in order|order of|chronological order)\b", q.lower())),
+                "info",
+                "guardrail: movies in order",
+            ),
         ]
 
     def classify_with_rules(self, query: str) -> tuple[str, str] | None:
@@ -175,7 +189,10 @@ Respond with ONLY the JSON, nothing else."""
                 llm_resp = await client.chat_completions_create(
                     LLM_MODEL,
                     [
-                        {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                        {
+                            "role": "system",
+                            "content": "You are a query classifier. Respond with ONLY valid JSON, no other text.",
+                        },
                         {"role": "user", "content": classification_prompt},
                     ],
                     temperature=0.1,
@@ -188,7 +205,10 @@ Respond with ONLY the JSON, nothing else."""
                     llm_resp = await client.chat_completions_create(
                         LLM_MODEL,
                         [
-                            {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                            {
+                                "role": "system",
+                                "content": "You are a query classifier. Respond with ONLY valid JSON, no other text.",
+                            },
                             {"role": "user", "content": classification_prompt},
                         ],
                         temperature=0.1,
@@ -210,7 +230,7 @@ Respond with ONLY the JSON, nothing else."""
                 result_json = json.loads(result_text)
             except json.JSONDecodeError:
                 # Fallback: try to extract JSON object
-                json_match = re.search(r'\{[^}]+\}', result_text)
+                json_match = re.search(r"\{[^}]+\}", result_text)
                 if json_match:
                     result_json = json.loads(json_match.group())
                 else:
@@ -232,7 +252,7 @@ Respond with ONLY the JSON, nothing else."""
                 confidence=confidence,
                 entities=entities if isinstance(entities, list) else [],
                 freshness_signal=bool(freshness_signal),
-                original_llm_type=predicted_type
+                original_llm_type=predicted_type,
             )
 
         except Exception as e:
@@ -245,14 +265,14 @@ Respond with ONLY the JSON, nothing else."""
                     rule_hit=rule_result[1],
                     llm_used=False,
                     confidence=0.6,  # Lower confidence for fallback
-                    freshness_signal=False
+                    freshness_signal=False,
                 )
             return ClassificationResult(
                 predicted_type="info",
                 rule_hit="fallback:default",
                 llm_used=False,
                 confidence=0.3,
-                freshness_signal=False
+                freshness_signal=False,
             )
 
     def apply_guardrails(self, query: str, classification: ClassificationResult) -> ClassificationResult:
@@ -264,7 +284,9 @@ Respond with ONLY the JSON, nothing else."""
 
         for guardrail_func, override_type, reason in self.guardrails:
             if guardrail_func(query) and classification.predicted_type != override_type:
-                logger.info(f"Guardrail applied: {reason} - overriding {classification.predicted_type} → {override_type}")
+                logger.info(
+                    f"Guardrail applied: {reason} - overriding {classification.predicted_type} → {override_type}"
+                )
                 classification.predicted_type = override_type
                 classification.rule_hit = reason
                 classification.confidence = min(classification.confidence + 0.2, 1.0)  # Boost confidence
@@ -292,7 +314,7 @@ Respond with ONLY the JSON, nothing else."""
                     rule_hit=rule_result[1],
                     llm_used=False,
                     confidence=0.85,  # High confidence for clear rule matches
-                    freshness_signal=False  # Rules don't set freshness signal
+                    freshness_signal=False,  # Rules don't set freshness signal
                 )
                 # Apply guardrails even for rule-based results
                 classification = self.apply_guardrails(query, classification)
@@ -310,7 +332,7 @@ Respond with ONLY the JSON, nothing else."""
                     rule_hit=rule_result[1],
                     llm_used=False,
                     confidence=0.7,
-                    freshness_signal=False
+                    freshness_signal=False,
                 )
             else:
                 classification = ClassificationResult(
@@ -318,7 +340,7 @@ Respond with ONLY the JSON, nothing else."""
                     rule_hit="fallback:no_client",
                     llm_used=False,
                     confidence=0.5,
-                    freshness_signal=False
+                    freshness_signal=False,
                 )
 
         # Layer C: Apply guardrails

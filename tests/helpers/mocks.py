@@ -1,6 +1,7 @@
 """
 Mock implementations of OpenAI and Tavily APIs for testing without making real API calls.
 """
+
 from unittest.mock import MagicMock
 
 
@@ -20,11 +21,13 @@ class MockOpenAIResponse:
             self.usage.completion_tokens = 50
             self.usage.total_tokens = 150
         # Make usage attributes accessible
-        self.usage.__dict__.update({
-            "prompt_tokens": self.usage.prompt_tokens,
-            "completion_tokens": self.usage.completion_tokens,
-            "total_tokens": self.usage.total_tokens
-        })
+        self.usage.__dict__.update(
+            {
+                "prompt_tokens": self.usage.prompt_tokens,
+                "completion_tokens": self.usage.completion_tokens,
+                "total_tokens": self.usage.total_tokens,
+            }
+        )
 
 
 class MockOpenAIClient:
@@ -61,7 +64,7 @@ class MockOpenAIClient:
         usage = {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens
+            "total_tokens": prompt_tokens + completion_tokens,
         }
 
         self._call_count += 1
@@ -116,10 +119,7 @@ class MockTavilyClient:
         # Find matching results
         results = self._find_results(query)
 
-        return {
-            "results": results,
-            "answer": f"Mock answer for: {query}" if not results else None
-        }
+        return {"results": results, "answer": f"Mock answer for: {query}" if not results else None}
 
     def _find_results(self, query: str) -> list[dict]:
         """Find matching search results."""
@@ -137,7 +137,7 @@ class MockTavilyClient:
                 "url": "https://example.com/mock",
                 "content": f"This is mock search content for: {query}",
                 "score": 0.9,
-                "source": "mock"
+                "source": "mock",
             }
         ]
 
@@ -159,7 +159,7 @@ class MockSearchEngine:
                 "title": f"Mock: {query}",
                 "url": "https://example.com",
                 "content": f"Mock content for {query}",
-                "source": "mock"
+                "source": "mock",
             }
         ]
 
@@ -175,4 +175,3 @@ class MockSearchEngine:
     async def async_close(self):
         """Mock close method."""
         pass
-

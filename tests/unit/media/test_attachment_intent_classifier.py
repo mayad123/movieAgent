@@ -1,4 +1,5 @@
 """Unit tests for attachment_intent_classifier (deterministic precedence rules)."""
+
 from __future__ import annotations
 
 import sys
@@ -97,7 +98,13 @@ class TestPrecedenceMovieList:
         # Guardrail: 2+ distinct movies → always movie_list (even without list-like structure).
         parsed = ResponseParseResult(
             movies=[ExtractedMovie(title="Inception", year=2010), ExtractedMovie(title="Dune", year=2021)],
-            structure=ParseStructure(has_bullets=False, has_numbered_list=False, has_bold_titles=False, has_title_year_pattern=False, has_dash_blurb_pattern=False),
+            structure=ParseStructure(
+                has_bullets=False,
+                has_numbered_list=False,
+                has_bold_titles=False,
+                has_title_year_pattern=False,
+                has_dash_blurb_pattern=False,
+            ),
             signals=ParseSignals(deep_dive_indicators=[], scene_indicators=[]),
         )
         r = classify_attachment_intent(parsed)

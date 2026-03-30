@@ -1,6 +1,7 @@
 """
 Enhanced scenario loader for constructing RequestPlan and EvidenceBundle from fixtures.
 """
+
 import json
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,7 @@ def load_all_scenarios(scenario_set_filter: str | None = None) -> list[dict[str,
                 except Exception as e:
                     print(f"Warning: Failed to load scenario {path}: {e}")
                     import traceback
+
                     traceback.print_exc()
                     continue
 
@@ -170,10 +172,7 @@ def build_evidence_bundle(scenario: dict[str, Any]) -> EvidenceBundle:
             result["release_year"] = item["year"]
         search_results.append(result)
 
-    return EvidenceBundle(
-        search_results=search_results,
-        verified_facts=None
-    )
+    return EvidenceBundle(search_results=search_results, verified_facts=None)
 
 
 def get_expected_checks(scenario: dict[str, Any]) -> dict[str, Any]:
@@ -187,4 +186,3 @@ def get_expected_checks(scenario: dict[str, Any]) -> dict[str, Any]:
         Dictionary with expected checks
     """
     return scenario.get("expected", {})
-

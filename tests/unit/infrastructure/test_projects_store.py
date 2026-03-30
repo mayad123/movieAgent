@@ -1,4 +1,5 @@
 """Tests for cinemind.infrastructure.projects_store."""
+
 from __future__ import annotations
 
 from cinemind.infrastructure.projects_store import ProjectsStore

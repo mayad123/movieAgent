@@ -1,4 +1,5 @@
 """Unit tests for TMDB image configuration and URL building."""
+
 from __future__ import annotations
 
 import sys
@@ -75,7 +76,13 @@ class TestFetchConfig:
         assert config.backdrop_sizes
 
     def test_parses_valid_response(self):
-        payload_dict = {"images": {"secure_base_url": "https://cdn.tmdb.org/t/p/", "backdrop_sizes": ["w300", "w780"], "poster_sizes": ["w92", "w185"]}}
+        payload_dict = {
+            "images": {
+                "secure_base_url": "https://cdn.tmdb.org/t/p/",
+                "backdrop_sizes": ["w300", "w780"],
+                "poster_sizes": ["w92", "w185"],
+            }
+        }
         with patch("integrations.tmdb.image_config.tmdb_request_json") as m:
             m.return_value = payload_dict
             config = fetch_config("token")

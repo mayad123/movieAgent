@@ -2,6 +2,7 @@
 Output validator for CineMind responses.
 Checks generated responses against response contract templates.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ValidationResult:
     """Result of response validation."""
+
     is_valid: bool
     violations: list[str]  # List of violation descriptions
     corrected_text: str | None = None  # Lightly corrected text (if auto-fix applied)
@@ -40,10 +42,7 @@ class OutputValidator:
         self.enable_auto_fix = enable_auto_fix
 
     def validate(
-        self,
-        response_text: str,
-        template: ResponseTemplate,
-        need_freshness: bool = False
+        self, response_text: str, template: ResponseTemplate, need_freshness: bool = False
     ) -> ValidationResult:
         """
         Validate response against template contract.
@@ -88,9 +87,9 @@ class OutputValidator:
         # Determine if re-prompt is needed
         # Re-prompt if: verbosity violations OR (forbidden terms without auto-fix) OR freshness violations
         requires_reprompt = (
-            bool(verbosity_violations) or
-            (bool(forbidden_violations) and not self.enable_auto_fix) or
-            bool(freshness_violations)
+            bool(verbosity_violations)
+            or (bool(forbidden_violations) and not self.enable_auto_fix)
+            or bool(freshness_violations)
         )
 
         # Ship post-processed text whenever it differs (markdown/boilerplate/forbidden fix)
@@ -100,7 +99,7 @@ class OutputValidator:
             is_valid=len(violations) == 0,
             violations=violations,
             corrected_text=corrected_text if text_changed else None,
-            requires_reprompt=requires_reprompt
+            requires_reprompt=requires_reprompt,
         )
 
     def _check_forbidden_terms(self, text: str, forbidden_terms: list[str]) -> list[str]:
@@ -110,7 +109,7 @@ class OutputValidator:
 
         for term in forbidden_terms:
             # Case-insensitive search (with word boundaries to avoid false positives)
-            pattern = r'\b' + re.escape(term.lower()) + r'\b'
+            pattern = r"\b" + re.escape(term.lower()) + r"\b"
             if re.search(pattern, text_lower):
                 violations.append(f"Forbidden term detected: '{term}'")
 
@@ -145,10 +144,10 @@ class OutputValidator:
             else:
                 # Remove the term and clean up surrounding whitespace
                 corrected = pattern.sub("", corrected)
-                corrected = re.sub(r'\s+', ' ', corrected)  # Clean up multiple spaces
+                corrected = re.sub(r"\s+", " ", corrected)  # Clean up multiple spaces
 
         # Clean up any awkward phrasing
-        corrected = re.sub(r'\s+', ' ', corrected)  # Multiple spaces
+        corrected = re.sub(r"\s+", " ", corrected)  # Multiple spaces
         corrected = corrected.strip()
 
         return corrected
@@ -166,22 +165,17 @@ class OutputValidator:
         # Check max sentences
         if template.max_sentences and sentences > template.max_sentences:
             violations.append(
-                f"Exceeds max sentences: {sentences} > {template.max_sentences} "
-                f"(template: {template.template_id})"
+                f"Exceeds max sentences: {sentences} > {template.max_sentences} (template: {template.template_id})"
             )
 
         # Check max words
         if template.max_words and words > template.max_words:
-            violations.append(
-                f"Exceeds max words: {words} > {template.max_words} "
-                f"(template: {template.template_id})"
-            )
+            violations.append(f"Exceeds max words: {words} > {template.max_words} (template: {template.template_id})")
 
         # Check min sentences
         if template.min_sentences and sentences < template.min_sentences:
             violations.append(
-                f"Below min sentences: {sentences} < {template.min_sentences} "
-                f"(template: {template.template_id})"
+                f"Below min sentences: {sentences} < {template.min_sentences} (template: {template.template_id})"
             )
 
         return violations
@@ -189,10 +183,10 @@ class OutputValidator:
     def _count_sentences(self, text: str) -> int:
         """Count sentences in text (simple heuristic)."""
         # Remove common abbreviations that end with periods
-        text = re.sub(r'\b(Mr|Mrs|Ms|Dr|Prof|Jr|Sr|Inc|Ltd|etc|vs|e\.g|i\.e)\.', r'\1', text)
+        text = re.sub(r"\b(Mr|Mrs|Ms|Dr|Prof|Jr|Sr|Inc|Ltd|etc|vs|e\.g|i\.e)\.", r"\1", text)
 
         # Count sentence-ending punctuation
-        sentences = len(re.findall(r'[.!?]+', text))
+        sentences = len(re.findall(r"[.!?]+", text))
 
         # If no punctuation found, treat as one sentence if non-empty
         if sentences == 0 and text.strip():
@@ -206,23 +200,21 @@ class OutputValidator:
 
         # Check for freshness indicators
         freshness_patterns = [
-            r'as of',
-            r'as of \d{4}',  # "as of 2024"
-            r'currently',
-            r'as of today',
-            r'latest',
-            r'recent',
-            r'\d{4}-\d{2}-\d{2}',  # ISO date
-            r'(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}',  # "January 1, 2024"
+            r"as of",
+            r"as of \d{4}",  # "as of 2024"
+            r"currently",
+            r"as of today",
+            r"latest",
+            r"recent",
+            r"\d{4}-\d{2}-\d{2}",  # ISO date
+            r"(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}",  # "January 1, 2024"
         ]
 
         text_lower = text.lower()
         has_freshness = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in freshness_patterns)
 
         if not has_freshness:
-            violations.append(
-                "Missing freshness/timestamp language (required: 'as of [date]', 'currently', etc.)"
-            )
+            violations.append("Missing freshness/timestamp language (required: 'as of [date]', 'currently', etc.)")
 
         return violations
 
@@ -306,7 +298,7 @@ class OutputValidator:
         instruction_parts = [
             "CORRECTION REQUIRED: The previous response violated the response contract.",
             "",
-            "VIOLATIONS:"
+            "VIOLATIONS:",
         ]
 
         for i, violation in enumerate(violations, 1):
@@ -323,4 +315,3 @@ class OutputValidator:
         )
 
         return "\n".join(instruction_parts)
-

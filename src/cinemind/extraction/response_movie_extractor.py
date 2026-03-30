@@ -14,6 +14,7 @@ List patterns: bullet lines (-, *, •, -), numbered (1. 2. or 1) 2)), Markdown
 bold (**Title**), and "Title (Year) - blurb" or "Title (Year):" or standalone
 "Title (Year)".
 """
+
 from __future__ import annotations
 
 import re
@@ -32,6 +33,7 @@ __all__ = [
 
 
 # --- Title normalization (deterministic) ---
+
 
 def normalize_title(s: str) -> str:
     """
@@ -110,19 +112,53 @@ _TITLE_YEAR_ONLY = re.compile(
 # Single vocabulary list for maintainability (no AI; deterministic).
 
 _DEEP_DIVE_PHRASES = (
-    "overview", "summary", "in depth", "deep dive", "below we", "details below",
-    "breakdown", "in detail", "in summary", "to summarize", "key points",
-    "the following", "as follows", "see below", "more below", "full analysis",
+    "overview",
+    "summary",
+    "in depth",
+    "deep dive",
+    "below we",
+    "details below",
+    "breakdown",
+    "in detail",
+    "in summary",
+    "to summarize",
+    "key points",
+    "the following",
+    "as follows",
+    "see below",
+    "more below",
+    "full analysis",
 )
 
 # Scene-like phrases: trigger scenes intent even when user didn't ask for "scenes".
 # Ordered so longer phrases are checked first if we ever do substring precedence.
 _SCENE_PHRASES = (
-    "key moments", "memorable sequences", "opening scene", "climax", "final scene",
-    "key scene", "set pieces", "montage", "standout moments", "best moments",
-    "notable scenes", "iconic scene", "iconic moments", "scene", "scenes",
-    "shot", "shots", "sequence", "clip", "moment in the film", "in the film",
-    "on screen", "visual", "cinematography", "director shot", "filmed",
+    "key moments",
+    "memorable sequences",
+    "opening scene",
+    "climax",
+    "final scene",
+    "key scene",
+    "set pieces",
+    "montage",
+    "standout moments",
+    "best moments",
+    "notable scenes",
+    "iconic scene",
+    "iconic moments",
+    "scene",
+    "scenes",
+    "shot",
+    "shots",
+    "sequence",
+    "clip",
+    "moment in the film",
+    "in the film",
+    "on screen",
+    "visual",
+    "cinematography",
+    "director shot",
+    "filmed",
 )
 
 # Structural heuristics: minimum bullet/numbered lines that look like scene descriptions (not titles).
@@ -136,6 +172,7 @@ _THE_FILM_MOVIE_MIN_REFERENCES = 2
 @dataclass
 class ExtractedMovie:
     """Single movie extracted from response: title, optional year, optional confidence (0-1)."""
+
     title: str
     year: int | None = None
     confidence: float = 1.0
@@ -144,6 +181,7 @@ class ExtractedMovie:
 @dataclass
 class ParseStructure:
     """Structure indicators: list-like vs paragraph-like."""
+
     has_bullets: bool = False
     has_numbered_list: bool = False
     has_bold_titles: bool = False
@@ -154,6 +192,7 @@ class ParseStructure:
 @dataclass
 class ParseSignals:
     """Signals derived from response content for intent/classifier."""
+
     deep_dive_indicators: list[str] = field(default_factory=list)
     scene_indicators: list[str] = field(default_factory=list)
     # Structural: multiple bullet/numbered items that look like scene descriptions (not Title (Year)).
@@ -170,6 +209,7 @@ class ResponseParseResult:
     - structure: list/paragraph flags
     - signals: deepDiveIndicators, sceneIndicators
     """
+
     movies: list[ExtractedMovie] = field(default_factory=list)
     structure: ParseStructure = field(default_factory=ParseStructure)
     signals: ParseSignals = field(default_factory=ParseSignals)
@@ -177,10 +217,7 @@ class ResponseParseResult:
     def to_dict(self) -> dict[str, Any]:
         """Serialize for logging or API."""
         return {
-            "movies": [
-                {"title": m.title, "year": m.year, "confidence": m.confidence}
-                for m in self.movies
-            ],
+            "movies": [{"title": m.title, "year": m.year, "confidence": m.confidence} for m in self.movies],
             "structure": {
                 "hasBullets": self.structure.has_bullets,
                 "hasNumberedList": self.structure.has_numbered_list,
@@ -269,7 +306,7 @@ def _compute_signals(text: str) -> ParseSignals:
 
 
 _QUOTED_TITLE_START = re.compile(r'^["\u201c]([^"\u201d]+)["\u201d]')
-_DESC_SEPARATOR = re.compile(r'\s+[-\u2013\u2014]\s+')
+_DESC_SEPARATOR = re.compile(r"\s+[-\u2013\u2014]\s+")
 
 
 def _year_from_text(text: str) -> int | None:
@@ -332,7 +369,7 @@ def _extract_from_bullets_and_numbered(text: str) -> list[tuple[str, int | None,
         qm = _QUOTED_TITLE_START.match(line)
         if qm:
             title_text = normalize_title(qm.group(1))
-            rest = line[qm.end():]
+            rest = line[qm.end() :]
             year = _year_from_text(rest)
             if title_text and len(title_text) >= 2:
                 out.append((title_text, year, 0.9 if year else 0.85))
@@ -352,11 +389,11 @@ def _extract_from_bullets_and_numbered(text: str) -> list[tuple[str, int | None,
         # 4. Separator-based: "Title - Description" or "Title: Description"
         sep_m = _DESC_SEPARATOR.search(line)
         if sep_m:
-            candidate = normalize_title(line[:sep_m.start()])
+            candidate = normalize_title(line[: sep_m.start()])
             if 2 <= len(candidate) <= 80:
                 out.append((candidate, None, 0.75))
                 continue
-        colon_m = re.match(r'^([^:\n]{2,80}):\s+\S', line)
+        colon_m = re.match(r"^([^:\n]{2,80}):\s+\S", line)
         if colon_m:
             candidate = normalize_title(colon_m.group(1))
             if 2 <= len(candidate) <= 80:
@@ -383,7 +420,7 @@ def _extract_from_bold(text: str) -> list[tuple[str, int | None, float]]:
         title_part, year = _extract_year_from_tail(t)
         if not year:
             # Year might be right after the closing bold markers: **Title** (2010)
-            after_bold = text[m.end():m.end() + 20]
+            after_bold = text[m.end() : m.end() + 20]
             year = _year_from_text(after_bold)
         if title_part:
             title_part = normalize_title(title_part)

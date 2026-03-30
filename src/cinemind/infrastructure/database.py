@@ -2,6 +2,7 @@
 Database models and operations for CineMind observability.
 Supports SQLite (local) and PostgreSQL (production).
 """
+
 import json
 import logging
 import os
@@ -29,6 +30,7 @@ class Database:
             try:
                 import psycopg2
                 from psycopg2.extras import RealDictCursor
+
                 self.conn = psycopg2.connect(self.db_path)
                 self.conn.autocommit = True
                 self.cursor_type = RealDictCursor
@@ -80,7 +82,7 @@ class Database:
         # Add prompt column if it doesn't exist (for existing databases)
         cursor.execute("PRAGMA table_info(requests)")
         columns = [row[1] for row in cursor.fetchall()]
-        if 'prompt' not in columns:
+        if "prompt" not in columns:
             try:
                 cursor.execute("ALTER TABLE requests ADD COLUMN prompt TEXT")
             except sqlite3.OperationalError:
@@ -209,17 +211,25 @@ class Database:
         self.conn.commit()
         logger.info("PostgreSQL tables created successfully")
 
-    def save_request(self, request_id: str, user_query: str, use_live_data: bool = True,
-                    model: str | None = None, status: str = "pending",
-                    request_type: str | None = None, outcome: str | None = None,
-                    prompt: str | None = None) -> bool:
+    def save_request(
+        self,
+        request_id: str,
+        user_query: str,
+        use_live_data: bool = True,
+        model: str | None = None,
+        status: str = "pending",
+        request_type: str | None = None,
+        outcome: str | None = None,
+        prompt: str | None = None,
+    ) -> bool:
         """Save a request record."""
         try:
             cursor = self.conn.cursor()
             timestamp = datetime.utcnow().isoformat()
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO requests (request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (request_id) DO UPDATE SET
@@ -227,13 +237,29 @@ class Database:
                         request_type = EXCLUDED.request_type,
                         outcome = EXCLUDED.outcome,
                         prompt = EXCLUDED.prompt
-                """, (request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome))
+                """,
+                    (request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT OR REPLACE INTO requests
                     (id, request_id, user_query, prompt, timestamp, use_live_data, model, status, request_type, outcome)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (request_id, request_id, user_query, prompt, timestamp, int(use_live_data), model, status, request_type, outcome))
+                """,
+                    (
+                        request_id,
+                        request_id,
+                        user_query,
+                        prompt,
+                        timestamp,
+                        int(use_live_data),
+                        model,
+                        status,
+                        request_type,
+                        outcome,
+                    ),
+                )
 
             self.conn.commit()
             return True
@@ -242,9 +268,16 @@ class Database:
             self.conn.rollback()
             return False
 
-    def update_request(self, request_id: str, status: str | None = None,
-                      response_time_ms: float | None = None, error_message: str | None = None,
-                      request_type: str | None = None, outcome: str | None = None, prompt: str | None = None):
+    def update_request(
+        self,
+        request_id: str,
+        status: str | None = None,
+        response_time_ms: float | None = None,
+        error_message: str | None = None,
+        request_type: str | None = None,
+        outcome: str | None = None,
+        prompt: str | None = None,
+    ):
         """Update request record with completion data."""
         try:
             cursor = self.conn.cursor()
@@ -272,15 +305,25 @@ class Database:
 
             if updates:
                 params.append(request_id)
-                query = f"UPDATE requests SET {', '.join(updates)} WHERE request_id = ?" if not self.use_postgres else f"UPDATE requests SET {', '.join(updates)} WHERE request_id = %s"
+                query = (
+                    f"UPDATE requests SET {', '.join(updates)} WHERE request_id = ?"
+                    if not self.use_postgres
+                    else f"UPDATE requests SET {', '.join(updates)} WHERE request_id = %s"
+                )
                 cursor.execute(query, params)
                 self.conn.commit()
         except Exception as e:
             logger.error(f"Error updating request: {e}")
             self.conn.rollback()
 
-    def save_response(self, request_id: str, response_text: str, sources: list[dict] | None = None,
-                     token_usage: dict | None = None, cost_usd: float | None = None):
+    def save_response(
+        self,
+        request_id: str,
+        response_text: str,
+        sources: list[dict] | None = None,
+        token_usage: dict | None = None,
+        cost_usd: float | None = None,
+    ):
         """Save response data."""
         try:
             cursor = self.conn.cursor()
@@ -288,60 +331,85 @@ class Database:
             token_usage_json = json.dumps(token_usage) if token_usage else None
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO responses (request_id, response_text, sources, token_usage, cost_usd)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (request_id, response_text, sources_json, token_usage_json, cost_usd))
+                """,
+                    (request_id, response_text, sources_json, token_usage_json, cost_usd),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO responses (request_id, response_text, sources, token_usage, cost_usd)
                     VALUES (?, ?, ?, ?, ?)
-                """, (request_id, response_text, sources_json, token_usage_json, cost_usd))
+                """,
+                    (request_id, response_text, sources_json, token_usage_json, cost_usd),
+                )
 
             self.conn.commit()
         except Exception as e:
             logger.error(f"Error saving response: {e}")
             self.conn.rollback()
 
-    def save_metric(self, request_id: str, metric_type: str, metric_name: str,
-                   metric_value: float | None = None, metric_data: dict | None = None):
+    def save_metric(
+        self,
+        request_id: str,
+        metric_type: str,
+        metric_name: str,
+        metric_value: float | None = None,
+        metric_data: dict | None = None,
+    ):
         """Save a metric."""
         try:
             cursor = self.conn.cursor()
             metric_data_json = json.dumps(metric_data) if metric_data else None
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO metrics (request_id, metric_type, metric_name, metric_value, metric_data)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (request_id, metric_type, metric_name, metric_value, metric_data_json))
+                """,
+                    (request_id, metric_type, metric_name, metric_value, metric_data_json),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO metrics (request_id, metric_type, metric_name, metric_value, metric_data)
                     VALUES (?, ?, ?, ?, ?)
-                """, (request_id, metric_type, metric_name, metric_value, metric_data_json))
+                """,
+                    (request_id, metric_type, metric_name, metric_value, metric_data_json),
+                )
 
             self.conn.commit()
         except Exception as e:
             logger.error(f"Error saving metric: {e}")
             self.conn.rollback()
 
-    def save_search_operation(self, request_id: str, search_query: str, search_provider: str,
-                             results_count: int, search_time_ms: float):
+    def save_search_operation(
+        self, request_id: str, search_query: str, search_provider: str, results_count: int, search_time_ms: float
+    ):
         """Save search operation data."""
         try:
             cursor = self.conn.cursor()
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO search_operations (request_id, search_query, search_provider, results_count, search_time_ms)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (request_id, search_query, search_provider, results_count, search_time_ms))
+                """,
+                    (request_id, search_query, search_provider, results_count, search_time_ms),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO search_operations (request_id, search_query, search_provider, results_count, search_time_ms)
                     VALUES (?, ?, ?, ?, ?)
-                """, (request_id, search_query, search_provider, results_count, search_time_ms))
+                """,
+                    (request_id, search_query, search_provider, results_count, search_time_ms),
+                )
 
             self.conn.commit()
         except Exception as e:
@@ -352,7 +420,12 @@ class Database:
         """Get a request by ID."""
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT * FROM requests WHERE request_id = ?" if not self.use_postgres else "SELECT * FROM requests WHERE request_id = %s", (request_id,))
+            cursor.execute(
+                "SELECT * FROM requests WHERE request_id = ?"
+                if not self.use_postgres
+                else "SELECT * FROM requests WHERE request_id = %s",
+                (request_id,),
+            )
             row = cursor.fetchone()
 
             if row:
@@ -369,15 +442,20 @@ class Database:
         """Get recent requests."""
         try:
             cursor = self.conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM requests
                 ORDER BY created_at DESC
                 LIMIT ?
-            """ if not self.use_postgres else """
+            """
+                if not self.use_postgres
+                else """
                 SELECT * FROM requests
                 ORDER BY created_at DESC
                 LIMIT %s
-            """, (limit,))
+            """,
+                (limit,),
+            )
 
             rows = cursor.fetchall()
             if self.use_postgres:
@@ -413,7 +491,8 @@ class Database:
             where_sql = " AND ".join(where_clauses)
 
             if self.use_postgres:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT
                         COUNT(*) as total_requests,
                         COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
@@ -425,9 +504,12 @@ class Database:
                     FROM requests r
                     LEFT JOIN responses res ON r.request_id = res.request_id
                     WHERE {where_sql}
-                """, tuple(params))
+                """,
+                    tuple(params),
+                )
             else:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT
                         COUNT(*) as total_requests,
                         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_requests,
@@ -439,7 +521,9 @@ class Database:
                     FROM requests r
                     LEFT JOIN responses res ON r.request_id = res.request_id
                     WHERE {where_sql}
-                """, tuple(params))
+                """,
+                    tuple(params),
+                )
 
             row = cursor.fetchone()
             if row:
@@ -458,7 +542,8 @@ class Database:
             cursor = self.conn.cursor()
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT
                         request_type,
                         COUNT(*) as count
@@ -467,7 +552,9 @@ class Database:
                     AND request_type IS NOT NULL
                     GROUP BY request_type
                     ORDER BY count DESC
-                """, (days,))
+                """,
+                    (days,),
+                )
             else:
                 cursor.execute(f"""
                     SELECT
@@ -484,12 +571,13 @@ class Database:
             request_types = {}
             if type_rows:
                 if self.use_postgres:
-                    request_types = {row['request_type']: row['count'] for row in type_rows}
+                    request_types = {row["request_type"]: row["count"] for row in type_rows}
                 else:
                     request_types = {row[0]: row[1] for row in type_rows}
 
             if self.use_postgres:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT
                         outcome,
                         COUNT(*) as count
@@ -498,7 +586,9 @@ class Database:
                     AND outcome IS NOT NULL
                     GROUP BY outcome
                     ORDER BY count DESC
-                """, (days,))
+                """,
+                    (days,),
+                )
             else:
                 cursor.execute(f"""
                     SELECT
@@ -515,14 +605,11 @@ class Database:
             outcomes = {}
             if outcome_rows:
                 if self.use_postgres:
-                    outcomes = {row['outcome']: row['count'] for row in outcome_rows}
+                    outcomes = {row["outcome"]: row["count"] for row in outcome_rows}
                 else:
                     outcomes = {row[0]: row[1] for row in outcome_rows}
 
-            return {
-                "request_types": request_types,
-                "outcomes": outcomes
-            }
+            return {"request_types": request_types, "outcomes": outcomes}
         except Exception as e:
             logger.error(f"Error getting tag distribution: {e}")
             return {"request_types": {}, "outcomes": {}}
@@ -531,4 +618,3 @@ class Database:
         """Close database connection."""
         if self.conn:
             self.conn.close()
-

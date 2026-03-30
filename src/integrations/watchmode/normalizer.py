@@ -13,6 +13,7 @@ Rules:
 - Prefer deeplink when present; keep web fallback (webUrl for web, iosUrl/androidUrl from deeplink when available).
 - lastUpdated: ISO timestamp for caching transparency.
 """
+
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,7 +44,8 @@ def normalize_where_to_watch_response(
     region = (data.get("region") or "").strip() or "US"
     title = {
         "id": (title_id or data.get("movie", {}).get("id") or "").strip() or None,
-        "name": (title_name or data.get("movie", {}).get("title") or data.get("movie", {}).get("name") or "").strip() or "Unknown",
+        "name": (title_name or data.get("movie", {}).get("title") or data.get("movie", {}).get("name") or "").strip()
+        or "Unknown",
         "year": year if year is not None else data.get("movie", {}).get("year"),
         "mediaType": (media_type or "movie").strip().lower() or "movie",
     }
@@ -68,17 +70,19 @@ def normalize_where_to_watch_response(
                 p_id = o.get("providerId")
                 if p_id is None and isinstance(o.get("provider"), dict):
                     p_id = (o.get("provider") or {}).get("id")
-                flat.append({
-                    "_accessType": at,
-                    "providerName": p_name,
-                    "providerId": p_id,
-                    "price": o.get("price"),
-                    "webUrl": o.get("webUrl") or o.get("web_url"),
-                    "deeplink": o.get("deeplink") or o.get("iosUrl") or o.get("androidUrl"),
-                    "iosUrl": o.get("iosUrl"),
-                    "androidUrl": o.get("androidUrl"),
-                    "quality": o.get("quality"),
-                })
+                flat.append(
+                    {
+                        "_accessType": at,
+                        "providerName": p_name,
+                        "providerId": p_id,
+                        "price": o.get("price"),
+                        "webUrl": o.get("webUrl") or o.get("web_url"),
+                        "deeplink": o.get("deeplink") or o.get("iosUrl") or o.get("androidUrl"),
+                        "iosUrl": o.get("iosUrl"),
+                        "androidUrl": o.get("androidUrl"),
+                        "quality": o.get("quality"),
+                    }
+                )
     else:
         return {"title": title, "region": region, "offers": [], "lastUpdated": now_iso}
 
@@ -112,16 +116,18 @@ def normalize_where_to_watch_response(
         elif price is not None and not isinstance(price, dict):
             price = None
         quality = (o.get("quality") or "").strip() or None
-        normalized.append({
-            "provider": {"id": pid, "name": pname},
-            "accessType": at,
-            "price": price,
-            "webUrl": web_url,
-            "iosUrl": ios_url,
-            "androidUrl": android_url,
-            "quality": quality,
-            "lastUpdated": now_iso,
-        })
+        normalized.append(
+            {
+                "provider": {"id": pid, "name": pname},
+                "accessType": at,
+                "price": price,
+                "webUrl": web_url,
+                "iosUrl": ios_url,
+                "androidUrl": android_url,
+                "quality": quality,
+                "lastUpdated": now_iso,
+            }
+        )
 
     # Sort: by accessType order then provider name
     def sort_key(item: dict[str, Any]) -> tuple:

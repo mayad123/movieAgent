@@ -106,7 +106,9 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
                 titles = list(query_extraction.titles)
                 intent = INTENT_MOVIE_LIST
                 detected_movie_count = len(titles)
-                intent_result = type("_Intent", (), {"rationale": "user query has 2+ titles (e.g. X and Y) → movie_list"})()
+                intent_result = type(
+                    "_Intent", (), {"rationale": "user query has 2+ titles (e.g. X and Y) → movie_list"}
+                )()
                 # Skip response parsing; go straight to multi/single branch below.
             else:
                 # Playground: treat user query as the "response" so the user can mimic the agent response when testing.
@@ -160,11 +162,17 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
                 result["media_strip"] = cards[0]
                 result["media_candidates"] = cards[1:]
                 result["media_gallery_label"] = "Similar movies"
-                sections = [{
-                    "type": SECTION_MOVIE_LIST,
-                    "title": result.get("media_gallery_label") or "Similar movies",
-                    "items": [_movie_card_item(c) for c in cards if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
-                }]
+                sections = [
+                    {
+                        "type": SECTION_MOVIE_LIST,
+                        "title": result.get("media_gallery_label") or "Similar movies",
+                        "items": [
+                            _movie_card_item(c)
+                            for c in cards
+                            if (c.get("movie_title") or c.get("displayTitle") or "").strip()
+                        ],
+                    }
+                ]
                 result["attachments"] = {"sections": sections}
             debug = {
                 "detected_movie_count": detected_movie_count,
@@ -197,7 +205,11 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
             fallback_from_result=result,
         )
         sections: list[dict[str, Any]] = []
-        strip = enrichment.media_strip if enrichment.media_strip.get("movie_title") else {"movie_title": single_title, "page_url": "#"}
+        strip = (
+            enrichment.media_strip
+            if enrichment.media_strip.get("movie_title")
+            else {"movie_title": single_title, "page_url": "#"}
+        )
         result["media_strip"] = strip
         result["media_candidates"] = list(enrichment.media_candidates) if enrichment.media_candidates else []
         if result["media_candidates"]:
@@ -207,6 +219,7 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
         if not request_type:
             try:
                 from ..planning.request_type_router import get_request_type_router
+
                 request_type = get_request_type_router().route(user_query_stripped).request_type
             except Exception:
                 request_type = None
@@ -226,23 +239,32 @@ def apply_playground_attachment_behavior(user_query: str, result: dict[str, Any]
                 scene_item = dict(s)
                 scene_item["kind"] = "scene"
                 primary_items.append(scene_item)
-        sections.append({
-            "type": SECTION_PRIMARY_MOVIE,
-            "title": "This movie",
-            "items": primary_items,
-        })
+        sections.append(
+            {
+                "type": SECTION_PRIMARY_MOVIE,
+                "title": "This movie",
+                "items": primary_items,
+            }
+        )
         if result["media_candidates"]:
             # Invariant: hero must not appear in did_you_mean.
             candidates_no_hero = [c for c in result["media_candidates"] if not _same_movie_as_strip(c, strip)]
-            sections.append({
-                "type": SECTION_DID_YOU_MEAN,
-                "title": result.get("media_gallery_label") or "Did you mean?",
-                "items": [_movie_card_item(c) for c in candidates_no_hero if (c.get("movie_title") or c.get("displayTitle") or "").strip()],
-            })
+            sections.append(
+                {
+                    "type": SECTION_DID_YOU_MEAN,
+                    "title": result.get("media_gallery_label") or "Did you mean?",
+                    "items": [
+                        _movie_card_item(c)
+                        for c in candidates_no_hero
+                        if (c.get("movie_title") or c.get("displayTitle") or "").strip()
+                    ],
+                }
+            )
 
         result["attachments"] = {"sections": sections}
         result.setdefault("meta", {})["media_focus"] = media_focus
         from config import ENABLE_TMDB_SCENES
+
         debug = {
             "detected_movie_count": 1,
             "attachment_intent": intent,

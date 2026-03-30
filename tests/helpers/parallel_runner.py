@@ -2,6 +2,7 @@
 Parallel test execution for faster test runs.
 Runs multiple tests concurrently while respecting API rate limits.
 """
+
 import asyncio
 import sys
 import time
@@ -16,10 +17,7 @@ from test_cases import TestCase
 
 
 async def run_tests_parallel(
-    test_cases: list[TestCase],
-    max_concurrent: int = 3,
-    evaluator: TestEvaluator | None = None,
-    verbose: bool = False
+    test_cases: list[TestCase], max_concurrent: int = 3, evaluator: TestEvaluator | None = None, verbose: bool = False
 ) -> list[TestResult]:
     """
     Run tests in parallel batches.
@@ -52,7 +50,11 @@ async def run_tests_parallel(
                 if verbose:
                     print(f"Running: {test_case.name}...")
                 else:
-                    print(f"[{test_cases.index(test_case) + 1}/{len(test_cases)}] {test_case.name}...", end=" ", flush=True)
+                    print(
+                        f"[{test_cases.index(test_case) + 1}/{len(test_cases)}] {test_case.name}...",
+                        end=" ",
+                        flush=True,
+                    )
 
                 result = await evaluator.run_test(test_case, agent=agent)
 
@@ -84,10 +86,7 @@ async def run_tests_parallel(
 
 
 async def run_test_suite_parallel(
-    test_cases: list[TestCase],
-    evaluator: TestEvaluator | None = None,
-    max_concurrent: int = 3,
-    verbose: bool = False
+    test_cases: list[TestCase], evaluator: TestEvaluator | None = None, max_concurrent: int = 3, verbose: bool = False
 ) -> dict:
     """
     Run test suite in parallel and generate report.
@@ -105,11 +104,7 @@ async def run_test_suite_parallel(
         evaluator = TestEvaluator(enable_observability=False)
 
     results = await run_tests_parallel(
-        test_cases=test_cases,
-        max_concurrent=max_concurrent,
-        evaluator=evaluator,
-        verbose=verbose
+        test_cases=test_cases, max_concurrent=max_concurrent, evaluator=evaluator, verbose=verbose
     )
 
     return evaluator.generate_report(results)
-

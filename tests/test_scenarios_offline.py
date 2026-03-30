@@ -4,6 +4,7 @@ Offline scenario matrix test harness for CineMind.
 Tests routing, prompt construction, evidence formatting, and validator behavior
 using YAML/JSON fixtures without calling external APIs.
 """
+
 import os
 import sys
 import time
@@ -75,11 +76,7 @@ class ScenarioTester:
         self.output_validator = OutputValidator(enable_auto_fix=True)
 
     def test_prompt_construction(
-        self,
-        request_plan: RequestPlan,
-        evidence_bundle: EvidenceBundle,
-        user_query: str,
-        expected: dict[str, Any]
+        self, request_plan: RequestPlan, evidence_bundle: EvidenceBundle, user_query: str, expected: dict[str, Any]
     ) -> list[str]:
         """Test prompt construction and return list of failures."""
         failures = []
@@ -87,9 +84,7 @@ class ScenarioTester:
 
         # Build messages (returns tuple: (messages, artifacts))
         messages, _artifacts = self.prompt_builder.build_messages(
-            request_plan=request_plan,
-            evidence=evidence_bundle,
-            user_query=user_query
+            request_plan=request_plan, evidence=evidence_bundle, user_query=user_query
         )
 
         # Check required sections
@@ -112,10 +107,13 @@ class ScenarioTester:
 
         # For must_not_contain, check only user message content (where evidence is included)
         # This avoids false positives from system/developer prompts that mention these terms in rules
-        user_message_content = "\n".join([
-            msg.get("content", "") for msg in messages
-            if msg.get("role") == "user"  # user message contains query + evidence
-        ])
+        user_message_content = "\n".join(
+            [
+                msg.get("content", "")
+                for msg in messages
+                if msg.get("role") == "user"  # user message contains query + evidence
+            ]
+        )
 
         # Check must_contain (checks entire prompt)
         must_contain = prompt_checks.get("must_contain", [])
@@ -137,11 +135,7 @@ class ScenarioTester:
 
         return failures
 
-    def test_template_selection(
-        self,
-        request_plan: RequestPlan,
-        expected: dict[str, Any]
-    ) -> list[str]:
+    def test_template_selection(self, request_plan: RequestPlan, expected: dict[str, Any]) -> list[str]:
         """Test that correct template is selected."""
         failures = []
         expected_template_id = expected.get("template_id")
@@ -149,18 +143,11 @@ class ScenarioTester:
         if expected_template_id:
             template = get_template(request_plan.request_type, request_plan.intent)
             if template.template_id != expected_template_id:
-                failures.append(
-                    f"Expected template_id '{expected_template_id}', "
-                    f"got '{template.template_id}'"
-                )
+                failures.append(f"Expected template_id '{expected_template_id}', got '{template.template_id}'")
 
         return failures
 
-    def test_evidence_formatting(
-        self,
-        evidence_bundle: EvidenceBundle,
-        expected: dict[str, Any]
-    ) -> list[str]:
+    def test_evidence_formatting(self, evidence_bundle: EvidenceBundle, expected: dict[str, Any]) -> list[str]:
         """Test evidence formatting and return list of failures."""
         failures = []
         evidence_checks = expected.get("evidence_checks", {})
@@ -174,32 +161,23 @@ class ScenarioTester:
         if expected_count is not None:
             actual_count = format_result.counts["after"]
             if actual_count != expected_count:
-                failures.append(
-                    f"Expected {expected_count} deduplicated items, got {actual_count}"
-                )
+                failures.append(f"Expected {expected_count} deduplicated items, got {actual_count}")
 
         # Check max snippet length using structured metadata
         max_snippet_len = evidence_checks.get("max_snippet_len")
         if max_snippet_len and format_result.max_snippet_len > max_snippet_len:
-            failures.append(
-                f"Max snippet length {format_result.max_snippet_len} exceeds limit {max_snippet_len}"
-            )
+            failures.append(f"Max snippet length {format_result.max_snippet_len} exceeds limit {max_snippet_len}")
 
         # Check must_not_contain_terms
         must_not_contain = evidence_checks.get("must_not_contain_terms", [])
         for term in must_not_contain:
             if term.lower() in formatted_evidence.lower():
-                failures.append(
-                    f"Formatted evidence must NOT contain '{term}' but does"
-                )
+                failures.append(f"Formatted evidence must NOT contain '{term}' but does")
 
         return failures
 
     def test_output_validation(
-        self,
-        request_plan: RequestPlan,
-        sample_output: str,
-        expected: dict[str, Any]
+        self, request_plan: RequestPlan, sample_output: str, expected: dict[str, Any]
     ) -> list[str]:
         """Test output validation and return list of failures."""
         failures = []
@@ -210,17 +188,14 @@ class ScenarioTester:
 
         # Validate
         result = self.output_validator.validate(
-            response_text=sample_output,
-            template=template,
-            need_freshness=request_plan.need_freshness
+            response_text=sample_output, template=template, need_freshness=request_plan.need_freshness
         )
 
         # Check expected_valid
         expected_valid = validator_checks.get("expected_valid", True)
         if result.is_valid != expected_valid:
             failures.append(
-                f"Expected valid={expected_valid}, got valid={result.is_valid}. "
-                f"Violations: {result.violations}"
+                f"Expected valid={expected_valid}, got valid={result.is_valid}. Violations: {result.violations}"
             )
 
         # Check expected violation types
@@ -242,16 +217,13 @@ class ScenarioTester:
             for expected_type in expected_violation_types:
                 if expected_type not in violation_types_found:
                     failures.append(
-                        f"Expected violation type '{expected_type}' not found. "
-                        f"Found: {violation_types_found}"
+                        f"Expected violation type '{expected_type}' not found. Found: {violation_types_found}"
                     )
 
         return failures
 
     def test_kaggle_behavior(
-        self,
-        evidence_bundle: EvidenceBundle,
-        expected: dict[str, Any]
+        self, evidence_bundle: EvidenceBundle, expected: dict[str, Any]
     ) -> tuple[list[str], dict[str, Any]]:
         """
         Test Kaggle behavior and return (failures, kaggle_outcome).
@@ -272,10 +244,7 @@ class ScenarioTester:
         kaggle_checks = expected.get("kaggle_checks", {})
 
         # Count Kaggle evidence items
-        kaggle_evidence_items = [
-            r for r in evidence_bundle.search_results
-            if r.get("source") == "kaggle_imdb"
-        ]
+        kaggle_evidence_items = [r for r in evidence_bundle.search_results if r.get("source") == "kaggle_imdb"]
         kaggle_evidence_count = len(kaggle_evidence_items)
         kaggle_evidence_used = kaggle_evidence_count > 0
 
@@ -289,7 +258,7 @@ class ScenarioTester:
             "attempted": kaggle_attempted,
             "evidence_used": kaggle_evidence_used,
             "evidence_count": kaggle_evidence_count,
-            "warnings": []
+            "warnings": [],
         }
 
         # Check expectations if kaggle_checks are specified
@@ -298,33 +267,24 @@ class ScenarioTester:
             expected_attempted = kaggle_checks.get("expected_attempted")
             if expected_attempted is not None:
                 if expected_attempted and not kaggle_attempted:
-                    failures.append(
-                        "Kaggle was expected to be attempted but no Kaggle evidence found"
-                    )
+                    failures.append("Kaggle was expected to be attempted but no Kaggle evidence found")
                 elif not expected_attempted and kaggle_attempted:
-                    failures.append(
-                        "Kaggle was not expected to be attempted but Kaggle evidence found"
-                    )
+                    failures.append("Kaggle was not expected to be attempted but Kaggle evidence found")
 
             # Check if Kaggle evidence was expected
             expected_evidence_used = kaggle_checks.get("expected_evidence_used")
             if expected_evidence_used is not None:
                 if expected_evidence_used and not kaggle_evidence_used:
-                    failures.append(
-                        "Kaggle evidence was expected but not found in evidence bundle"
-                    )
+                    failures.append("Kaggle evidence was expected but not found in evidence bundle")
                 elif not expected_evidence_used and kaggle_evidence_used:
                     # This is a warning, not a failure (unless explicitly required)
-                    kaggle_outcome["warnings"].append(
-                        "Kaggle evidence was not expected but found in evidence bundle"
-                    )
+                    kaggle_outcome["warnings"].append("Kaggle evidence was not expected but found in evidence bundle")
 
             # Check minimum evidence count
             min_evidence_count = kaggle_checks.get("min_evidence_count")
             if min_evidence_count is not None and kaggle_evidence_count < min_evidence_count:
                 failures.append(
-                    f"Expected at least {min_evidence_count} Kaggle evidence items, "
-                    f"got {kaggle_evidence_count}"
+                    f"Expected at least {min_evidence_count} Kaggle evidence items, got {kaggle_evidence_count}"
                 )
 
         return failures, kaggle_outcome
@@ -333,6 +293,7 @@ class ScenarioTester:
 # Load all scenarios once at module import time
 _all_scenarios = None
 _scenario_set_filter = None
+
 
 def get_all_scenarios():
     """Lazy load all scenarios with optional filtering by scenario_set."""
@@ -377,7 +338,10 @@ def pytest_generate_tests(metafunc):
         duplicate_names = [name for name in set(scenario_names) if scenario_names.count(name) > 1]
         if duplicate_names:
             import warnings
-            warnings.warn(f"Duplicate scenario names found: {duplicate_names}. Pytest will deduplicate these!", stacklevel=2)
+
+            warnings.warn(
+                f"Duplicate scenario names found: {duplicate_names}. Pytest will deduplicate these!", stacklevel=2
+            )
 
         # Debug: print scenario count and names
         if env_filter:
@@ -387,7 +351,9 @@ def pytest_generate_tests(metafunc):
         else:
             gold_count = sum(1 for s in scenarios if s.get("scenario_set") == "gold")
             explore_count = sum(1 for s in scenarios if s.get("scenario_set") == "explore")
-            print(f"\n[DEBUG] Collected {len(scenarios)} total scenarios (gold: {gold_count}, explore: {explore_count})")
+            print(
+                f"\n[DEBUG] Collected {len(scenarios)} total scenarios (gold: {gold_count}, explore: {explore_count})"
+            )
 
         # Generate parametrize with unique IDs
         def scenario_id(scenario):
@@ -397,14 +363,11 @@ def pytest_generate_tests(metafunc):
             if (not name or name == "unknown") and file_path:
                 # Extract filename as fallback
                 import os
+
                 name = os.path.splitext(os.path.basename(file_path))[0]
             return f"{name}"
 
-        metafunc.parametrize(
-            "scenario",
-            scenarios,
-            ids=scenario_id
-        )
+        metafunc.parametrize("scenario", scenarios, ids=scenario_id)
 
 
 def pytest_collection_modifyitems(config, items):
@@ -463,9 +426,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
     messages = []
     try:
         messages, _ = scenario_tester.prompt_builder.build_messages(
-            request_plan=request_plan,
-            evidence=evidence_bundle,
-            user_query=user_query
+            request_plan=request_plan, evidence=evidence_bundle, user_query=user_query
         )
     except Exception:
         # If message building fails, we'll still write the artifact with empty messages
@@ -476,21 +437,15 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
     all_failures.extend(template_failures)
 
     # Test prompt construction
-    prompt_failures = scenario_tester.test_prompt_construction(
-        request_plan, evidence_bundle, user_query, expected
-    )
+    prompt_failures = scenario_tester.test_prompt_construction(request_plan, evidence_bundle, user_query, expected)
     all_failures.extend(prompt_failures)
 
     # Test evidence formatting
-    evidence_failures = scenario_tester.test_evidence_formatting(
-        evidence_bundle, expected
-    )
+    evidence_failures = scenario_tester.test_evidence_formatting(evidence_bundle, expected)
     all_failures.extend(evidence_failures)
 
     # Test Kaggle behavior
-    kaggle_failures, kaggle_outcome = scenario_tester.test_kaggle_behavior(
-        evidence_bundle, expected
-    )
+    kaggle_failures, kaggle_outcome = scenario_tester.test_kaggle_behavior(evidence_bundle, expected)
     all_failures.extend(kaggle_failures)
 
     # Collect evidence statistics using structured metadata
@@ -503,17 +458,13 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
     validation_result = None
     sample_output = expected.get("sample_model_output")
     if sample_output:
-        validation_failures = scenario_tester.test_output_validation(
-            request_plan, sample_output, expected
-        )
+        validation_failures = scenario_tester.test_output_validation(request_plan, sample_output, expected)
         all_failures.extend(validation_failures)
 
         # Extract violation types from validation result
         template = get_template(request_plan.request_type, request_plan.intent)
         validation_result = scenario_tester.output_validator.validate(
-            response_text=sample_output,
-            template=template,
-            need_freshness=request_plan.need_freshness
+            response_text=sample_output, template=template, need_freshness=request_plan.need_freshness
         )
 
         # Extract violation types from violation messages
@@ -521,9 +472,19 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
             violation_lower = violation.lower()
             if "forbidden" in violation_lower or "term" in violation_lower:
                 violation_types.append("forbidden_terms")
-            elif "sentence" in violation_lower or "word" in violation_lower or "length" in violation_lower or "verbosity" in violation_lower:
+            elif (
+                "sentence" in violation_lower
+                or "word" in violation_lower
+                or "length" in violation_lower
+                or "verbosity" in violation_lower
+            ):
                 violation_types.append("verbosity")
-            elif "freshness" in violation_lower or "timestamp" in violation_lower or "date" in violation_lower or "as of" in violation_lower:
+            elif (
+                "freshness" in violation_lower
+                or "timestamp" in violation_lower
+                or "date" in violation_lower
+                or "as of" in violation_lower
+            ):
                 violation_types.append("freshness")
             elif "section" in violation_lower or "required" in violation_lower:
                 violation_types.append("missing_required_section")
@@ -536,8 +497,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
                 if validation_result.requires_reprompt and template:
                     try:
                         repair_instruction = scenario_tester.output_validator.build_correction_instruction(
-                            validation_result.violations,
-                            template
+                            validation_result.violations, template
                         )
                     except Exception:
                         # If we can't build repair instruction, just leave it out
@@ -551,7 +511,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
                     offending_text=sample_output,
                     fixed_text=validation_result.corrected_text,
                     repair_instruction=repair_instruction,
-                    kaggle_outcome=kaggle_outcome
+                    kaggle_outcome=kaggle_outcome,
                 )
             except Exception as e:
                 # Don't fail the test because violation artifact writing failed
@@ -571,7 +531,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
                 offending_text="",  # No offending text for Kaggle warnings
                 fixed_text="",
                 repair_instruction=None,
-                kaggle_outcome=kaggle_outcome
+                kaggle_outcome=kaggle_outcome,
             )
         except Exception as e:
             # Don't fail the test because Kaggle artifact writing failed
@@ -611,7 +571,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
         evidence_max_snippet_len=evidence_max_snippet_len,
         scenario_set=scenario_set,
         passed_clean=passed_clean,
-        has_violations=has_violations
+        has_violations=has_violations,
     )
 
     # If test passed, remove any old failure artifacts
@@ -626,7 +586,9 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
     if all_failures:
         try:
             # Get template for repair instruction building
-            template_for_artifact = get_template(request_plan.request_type, request_plan.intent) if request_plan else None
+            template_for_artifact = (
+                get_template(request_plan.request_type, request_plan.intent) if request_plan else None
+            )
 
             artifact_path = write_failure_artifact(
                 scenario_name=scenario_name,
@@ -639,7 +601,7 @@ def test_scenario(scenario: dict[str, Any], scenario_tester: ScenarioTester):
                 failures=all_failures,
                 timing_ms=duration_ms,
                 template=template_for_artifact,
-                kaggle_outcome=kaggle_outcome
+                kaggle_outcome=kaggle_outcome,
             )
             if artifact_path:
                 # Add artifact path to failure message for easy access
@@ -684,4 +646,3 @@ if __name__ == "__main__":
     print(f"Loaded {len(scenarios)} scenarios")
     for scenario in scenarios[:5]:
         print(f"  - {scenario.get('name', 'unknown')}")
-

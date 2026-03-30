@@ -1,4 +1,5 @@
 """Tests for /api/projects endpoints."""
+
 from __future__ import annotations
 
 import sys

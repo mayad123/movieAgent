@@ -267,4 +267,3 @@ def parse_movie_hub_genre_buckets(
     except Exception:
         # Never raise — safe empty so hub rendering can degrade gracefully.
         return []
-

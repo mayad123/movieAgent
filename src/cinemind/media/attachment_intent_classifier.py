@@ -22,6 +22,7 @@ Guardrail (multi-movie):
 List-like: has_bullets | has_numbered_list | has_bold_titles | has_title_year_pattern.
 Deep-dive signals: presence of deep_dive_indicators or scene_indicators in parsed response.
 """
+
 from __future__ import annotations
 
 import logging
@@ -73,12 +74,7 @@ class AttachmentIntentResult:
 def _is_list_like(parsed: ResponseParseResult) -> bool:
     """True if response structure suggests a list (bullets, numbered, bold, title-year)."""
     s = parsed.structure
-    return bool(
-        s.has_bullets
-        or s.has_numbered_list
-        or s.has_bold_titles
-        or s.has_title_year_pattern
-    )
+    return bool(s.has_bullets or s.has_numbered_list or s.has_bold_titles or s.has_title_year_pattern)
 
 
 # Threshold for "the film" / "the movie" references to trigger scenes (single-movie deep-dive).

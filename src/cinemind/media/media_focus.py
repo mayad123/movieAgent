@@ -10,6 +10,7 @@ Single-movie intent: summary, explain ending, key scenes, analysis, single-movie
 Multi-movie intent: comparisons, similar movies, recommendations, rankings, lists
   → Display only poster images; do not render scene carousels.
 """
+
 from __future__ import annotations
 
 import re
