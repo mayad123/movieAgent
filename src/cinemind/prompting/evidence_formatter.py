@@ -40,6 +40,40 @@ class EvidenceFormatResult:
         """Return length of formatted text."""
         return len(self.text)
 
+    def __contains__(self, item: str) -> bool:
+        """Behave like a string for legacy callers/tests."""
+        return item in self.text
+
+    def __iter__(self):
+        """Allow iteration like a string."""
+        return iter(self.text)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare to either raw strings or other result objects."""
+        if isinstance(other, str):
+            return self.text == other
+        if isinstance(other, EvidenceFormatResult):
+            return (
+                self.text == other.text
+                and self.items == other.items
+                and self.counts == other.counts
+                and self.max_snippet_len == other.max_snippet_len
+                and self.dedupe_removed == other.dedupe_removed
+            )
+        return False
+
+    def count(self, sub: str, *args: int) -> int:
+        """String-compatible count helper."""
+        return self.text.count(sub, *args)
+
+    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+        """String-compatible split helper."""
+        return self.text.split(sep, maxsplit)
+
+    def lower(self) -> str:
+        """String-compatible lowercase helper."""
+        return self.text.lower()
+
 
 class EvidenceFormatter:
     """

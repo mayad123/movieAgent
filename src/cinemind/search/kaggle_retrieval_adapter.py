@@ -208,11 +208,10 @@ class KaggleRetrievalAdapter:
                 "source_type": "kaggle_dataset",
             }
 
-            # Ensure content is not too long (EvidenceFormatter will truncate, but keep reasonable)
-            # EvidenceFormatter max_snippet_length is 400, so we can be a bit longer here
-            # but not excessive
-            if len(content) > 1000:
-                content = content[:1000] + "..."
+            # Keep snippets bounded before they reach EvidenceFormatter.
+            # Tests assert this hard limit for normalized Kaggle content.
+            if len(content) > 800:
+                content = content[:800] + "..."
 
             evidence_items.append(
                 KaggleEvidenceItem(

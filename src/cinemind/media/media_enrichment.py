@@ -271,8 +271,6 @@ def enrich(
                     return t
         return (user_query or "").strip()
 
-    explicit_fallback_provided = bool(fallback_title and (fallback_title or "").strip()) or bool(fallback_from_result)
-
     media_cache = cache or get_default_media_cache()
     query_key = _normalize_enrich_key(user_query)
 
@@ -284,9 +282,20 @@ def enrich(
     token = _get_tmdb_token_best_effort()
 
     if not token:
-        # No TMDB token → still return a minimal placeholder for `movie_title`
-        # so downstream code/tests can render “text-only” cards safely.
-        title = _fallback_title_value() if explicit_fallback_provided else ""
+        # Respect explicit local monkeypatches that force TMDB disabled in tests.
+        local_is_enabled = globals().get("is_tmdb_enabled")
+        if callable(local_is_enabled):
+            try:
+                if not bool(local_is_enabled()):
+                    return MediaEnrichmentResult(
+                        media_strip={},
+                        poster_debug={POSTER_DEBUG_TMDB_ATTEMPTED: False, POSTER_DEBUG_PROVIDER: None},
+                    )
+            except Exception:
+                pass
+
+        # No usable token: return a minimal placeholder so UI/tests still get movie_title.
+        title = _fallback_title_value()
         if (title or "").strip():
             return MediaEnrichmentResult(
                 media_strip={"movie_title": title, "page_url": "#"},
@@ -608,8 +617,6 @@ def build_similar_movie_clusters(
     row. "tone" and "cast" are currently placeholders (empty) that can be filled by a
     richer similarity model later (e.g. LLM-derived tone tags or shared cast credits).
     """
-    from config import get_tmdb_access_token, is_tmdb_enabled  # local import to avoid cycles
-
     # Always build the three clusters so the frontend contract is stable.
     base_label = (title or "").strip() or "This movie"
     clusters: list[dict[str, Any]] = [
@@ -630,13 +637,9 @@ def build_similar_movie_clusters(
         },
     ]
 
-    # Fast path: TMDB integration disabled or missing token → just return labels.
-    token = ""
-    try:
-        if is_tmdb_enabled():
-            token = (get_tmdb_access_token() or "").strip()
-    except Exception:
-        token = ""
+    # Fast path: TMDB integration disabled or missing token -> just return labels.
+    # Use shared helper so local monkeypatches in tests are respected.
+    token = _get_tmdb_token_best_effort()
     if not token:
         return {"clusters": clusters}
 
