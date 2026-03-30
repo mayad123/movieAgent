@@ -74,11 +74,9 @@ class TestScenesProviderTMDB:
                 return search_payload
             return None
 
-        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http):
-            with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
-                with patch("urllib.request.urlopen") as m:
-                    m.return_value.__enter__.return_value.read.return_value = images_response
-                    items = p.fetch_scenes("Inception")
+        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http), patch("integrations.tmdb.image_config.get_config", return_value=fixed_config), patch("urllib.request.urlopen") as m:
+            m.return_value.__enter__.return_value.read.return_value = images_response
+            items = p.fetch_scenes("Inception")
         assert len(items) == 2
         assert items[0].image_url == "https://image.tmdb.org/t/p/w780/abc.jpg"
         assert items[0].source_url == "https://www.themoviedb.org/movie/27205"
@@ -112,11 +110,9 @@ class TestScenesProviderTMDB:
                 return search_payload
             return None
 
-        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http):
-            with patch("integrations.tmdb.image_config.get_config", return_value=fixed_config):
-                with patch("urllib.request.urlopen") as m:
-                    m.return_value.__enter__.return_value.read.return_value = images_response
-                    items = p.fetch_scenes("X")
+        with patch("integrations.tmdb.resolver.tmdb_request_json", fake_resolve_http), patch("integrations.tmdb.image_config.get_config", return_value=fixed_config), patch("urllib.request.urlopen") as m:
+            m.return_value.__enter__.return_value.read.return_value = images_response
+            items = p.fetch_scenes("X")
         # Only the first (good) backdrop passes the filter
         assert len(items) == 1
         assert "good.jpg" in items[0].image_url
@@ -133,19 +129,16 @@ class TestScenesProviderTMDB:
 
 class TestGetScenesProvider:
     def test_fallback_when_tmdb_disabled(self):
-        with patch("config.ENABLE_TMDB_SCENES", False):
-            with patch("config.TMDB_READ_ACCESS_TOKEN", "token"):
-                p = get_scenes_provider()
+        with patch("config.ENABLE_TMDB_SCENES", False), patch("config.TMDB_READ_ACCESS_TOKEN", "token"):
+            p = get_scenes_provider()
         assert isinstance(p, ScenesProviderEmpty)
 
     def test_fallback_when_tmdb_token_empty(self):
-        with patch("config.ENABLE_TMDB_SCENES", True):
-            with patch("config.TMDB_READ_ACCESS_TOKEN", ""):
-                p = get_scenes_provider()
+        with patch("config.ENABLE_TMDB_SCENES", True), patch("config.TMDB_READ_ACCESS_TOKEN", ""):
+            p = get_scenes_provider()
         assert isinstance(p, ScenesProviderEmpty)
 
     def test_tmdb_provider_when_enabled_and_configured(self):
-        with patch("config.ENABLE_TMDB_SCENES", True):
-            with patch("config.TMDB_READ_ACCESS_TOKEN", "secret-token"):
-                p = get_scenes_provider()
+        with patch("config.ENABLE_TMDB_SCENES", True), patch("config.TMDB_READ_ACCESS_TOKEN", "secret-token"):
+            p = get_scenes_provider()
         assert isinstance(p, ScenesProviderTMDB)

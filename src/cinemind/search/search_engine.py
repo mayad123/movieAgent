@@ -8,15 +8,15 @@ Performance optimizations:
 Note: Kaggle dataset search is handled by KaggleRetrievalAdapter (called separately by the agent).
 This class only handles Tavily API and web search fallback.
 """
+import logging
 import os
 import re
-import requests
-import httpx
-from typing import List, Dict, Optional, Tuple, Any
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
-import logging
+from typing import Any
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,12 @@ class SearchDecision:
     """Structured metadata about search decisions."""
     tavily_used: bool = False
     fallback_used: bool = False
-    fallback_provider: Optional[str] = None
+    fallback_provider: str | None = None
     override_used: bool = False
-    override_reason: Optional[str] = None
+    override_reason: str | None = None
     # Note: Kaggle-specific fields removed - Kaggle is now handled by KaggleRetrievalAdapter
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "tavily_used": self.tavily_used,
@@ -51,100 +51,100 @@ class SearchDecision:
 
 class SearchEngine:
     """Handles real-time web searches for movie information."""
-    
-    def __init__(self, tavily_api_key: Optional[str] = None, enable_kaggle: Optional[bool] = None):
+
+    def __init__(self, tavily_api_key: str | None = None, enable_kaggle: bool | None = None):
         """
         Initialize search engine.
-        
+
         Args:
             tavily_api_key: Tavily API key for real-time search
             enable_kaggle: Whether to enable Kaggle dataset search (deprecated - use KaggleRetrievalAdapter)
         """
         self.tavily_api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
         self.session = httpx.AsyncClient(timeout=30.0)
-        
+
         # Note: Kaggle search is now handled by KaggleRetrievalAdapter (called from agent/search aggregator)
         # This class no longer manages Kaggle directly
         if enable_kaggle is not None:
             logger.warning("enable_kaggle parameter is deprecated - Kaggle is now handled by KaggleRetrievalAdapter")
-    
-    def build_intent_queries(self, intent: str, entities: List[str], 
-                           request_type: str = "info") -> List[str]:
+
+    def build_intent_queries(self, intent: str, entities: list[str],
+                           request_type: str = "info") -> list[str]:
         """
         Build intent-specific search queries that bias toward Tier A sources.
-        
+
         Args:
             intent: Structured intent (e.g., "filmography_overlap")
             entities: Extracted entities (person names, movie titles)
             request_type: Request classification type
-        
+
         Returns:
             List of optimized search queries
         """
         queries = []
-        
+
         if intent == "filmography_overlap" and len(entities) >= 2:
             # Filmography overlap: bias to IMDb and Wikipedia
             person1, person2 = entities[0], entities[1]
-            
+
             # IMDb-specific queries
             queries.append(f'site:imdb.com "{person1}" "{person2}" film')
             queries.append(f'site:imdb.com {person1} {person2} movies together')
-            
+
             # Wikipedia-specific queries
             queries.append(f'site:wikipedia.org {person1} {person2} film')
             queries.append(f'site:wikipedia.org "{person1}" "{person2}" collaboration')
-            
+
             # General query (fallback)
             queries.append(f'{person1} {person2} movies together')
-        
+
         elif intent == "director_info" and entities:
             # Director info: IMDb and Wikipedia
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" director')
             queries.append(f'site:wikipedia.org "{movie}" film director')
             queries.append(f'who directed {movie}')
-        
+
         elif intent == "release_date" and entities:
             # Release date: IMDb and Wikipedia
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" release date')
             queries.append(f'site:wikipedia.org "{movie}" film {movie} release')
             queries.append(f'{movie} release date')
-        
+
         elif intent == "cast_info" and entities:
             # Cast info: IMDb
             movie = entities[0] if entities else ""
             queries.append(f'site:imdb.com "{movie}" cast')
             queries.append(f'site:imdb.com/title "{movie}" full cast')
             queries.append(f'{movie} cast actors')
-        
+
         else:
             # Generic query
             entity_str = " ".join(entities) if entities else ""
             queries.append(entity_str if entity_str else "movie")
-        
+
         return queries
-    
+
     # Note: _derive_kaggle_query_string removed - Kaggle query derivation is now handled
     # by KaggleRetrievalAdapter internally. This method is no longer needed.
-    
+
     async def search(self, query: str, max_results: int = 5, skip_tavily: bool = False,
-                    override_reason: Optional[str] = None, kaggle_query_string: Optional[str] = None,
-                    entities_typed: Optional[Dict[str, List[str]]] = None, intent: Optional[str] = None) -> Tuple[List[Dict], SearchDecision]:
+                    override_reason: str | None = None, kaggle_query_string: str | None = None,
+                    entities_typed: dict[str, list[str]] | None = None, intent: str | None = None) -> tuple[list[dict], SearchDecision]:
         """
         Perform real-time search for movie information.
-        
+
         NOTE: This is called AFTER cache check and Kaggle retrieval (if any).
         Pipeline order:
         1. Cache (checked in agent.py before this method)
         2. Kaggle retrieval (handled by KaggleRetrievalAdapter in agent/search aggregator)
         3. Tavily API (only if skip_tavily=False OR valid override_reason provided)
         4. Web search fallback (if above methods fail)
-        
+
         IMPORTANT: Kaggle is now handled by KaggleRetrievalAdapter (called separately).
         This method only handles Tavily and web search.
-        
+
         Args:
             query: Search query
             max_results: Maximum number of results to return
@@ -153,7 +153,7 @@ class SearchEngine:
             kaggle_query_string: Deprecated (unused - Kaggle handled by adapter)
             entities_typed: Deprecated (unused - Kaggle handled by adapter)
             intent: Deprecated (unused - Kaggle handled by adapter)
-            
+
         Returns:
             (results: List[Dict], decision: SearchDecision) where decision contains:
             - tavily_used: bool - Whether Tavily was actually used
@@ -164,17 +164,17 @@ class SearchEngine:
         """
         results = []
         decision = SearchDecision()
-        
+
         # Note: Kaggle retrieval is now handled by KaggleRetrievalAdapter (called from agent/search aggregator)
         # This method only handles Tavily and web search
-        
+
         # Step 1: Determine if Tavily should be used
         # Only allow Tavily if skip_tavily=False OR a valid override_reason is provided
         should_use_tavily = False
         if not skip_tavily:
             # Tool plan allows Tavily
             should_use_tavily = True
-            logger.info(f"Tavily allowed by tool plan")
+            logger.info("Tavily allowed by tool plan")
         elif override_reason:
             # Check if override_reason is valid
             valid_reasons = [reason.value for reason in TavilyOverrideReason]
@@ -187,20 +187,18 @@ class SearchEngine:
                 logger.warning(f"Invalid override_reason '{override_reason}', ignoring. Valid reasons: {valid_reasons}")
         else:
             # skip_tavily=True and no override_reason provided - do NOT use Tavily
-            logger.info(f"Skipping Tavily API (skip_tavily=True, no valid override_reason provided)")
-        
+            logger.info("Skipping Tavily API (skip_tavily=True, no valid override_reason provided)")
+
         # Step 3: Try Tavily if allowed
-        tavily_succeeded = False
         if should_use_tavily and self.tavily_api_key:
             try:
                 tavily_results = await self._search_tavily(query, max_results)
                 if tavily_results:
                     results.extend(tavily_results)
                     decision.tavily_used = True
-                    tavily_succeeded = True
             except Exception as e:
                 logger.warning(f"Tavily search failed: {e}")
-        
+
         # Step 4: Fallback to direct web search if needed
         # IMPORTANT: Fallback must be gated by the same browse decision (skip_tavily + override reasons)
         # If browsing is not allowed (skip_tavily=True and no override), fallback must NOT run
@@ -212,20 +210,20 @@ class SearchEngine:
                     results.extend(web_results)
                     decision.fallback_used = True
                     decision.fallback_provider = "duckduckgo"
-                    logger.info(f"Fallback search used (provider: duckduckgo)")
+                    logger.info("Fallback search used (provider: duckduckgo)")
             except Exception as e:
                 logger.warning(f"Web search fallback failed: {e}")
         elif not results and not should_use_tavily:
             # Browsing is not allowed - do NOT use fallback
             logger.info(f"Fallback search skipped (browsing not allowed: skip_tavily=True, override_reason={override_reason})")
-        
+
         return (results[:max_results], decision)
-    
-    async def _search_tavily(self, query: str, max_results: int) -> List[Dict]:
+
+    async def _search_tavily(self, query: str, max_results: int) -> list[dict]:
         """Search using Tavily API."""
         try:
             from tavily import TavilyClient
-            
+
             client = TavilyClient(api_key=self.tavily_api_key)
             response = client.search(
                 query=query,
@@ -234,7 +232,7 @@ class SearchEngine:
                 include_answer=True,
                 include_raw_content=False
             )
-            
+
             results = []
             for result in response.get("results", []):
                 results.append({
@@ -245,7 +243,7 @@ class SearchEngine:
                     "published_date": result.get("published_date"),
                     "source": "tavily"
                 })
-            
+
             # Include answer if available
             if response.get("answer"):
                 results.insert(0, {
@@ -255,7 +253,7 @@ class SearchEngine:
                     "score": 1.0,
                     "source": "tavily_answer"
                 })
-            
+
             return results
         except ImportError:
             logger.error("Tavily client not installed. Install with: pip install tavily-python")
@@ -263,8 +261,8 @@ class SearchEngine:
         except Exception as e:
             logger.error(f"Tavily search error: {e}")
             return []
-    
-    async def _search_web_fallback(self, query: str, max_results: int) -> List[Dict]:
+
+    async def _search_web_fallback(self, query: str, max_results: int) -> list[dict]:
         """
         Fallback web search using DuckDuckGo or similar.
         Note: This is a basic implementation. For production, consider
@@ -280,12 +278,12 @@ class SearchEngine:
                 "no_html": "1",
                 "skip_disambig": "1"
             }
-            
+
             async with self.session.get(url, params=params) as response:
                 if response.status_code == 200:
                     data = response.json()
                     results = []
-                    
+
                     # Extract abstract/answer
                     if data.get("AbstractText"):
                         results.append({
@@ -294,7 +292,7 @@ class SearchEngine:
                             "content": data.get("AbstractText", ""),
                             "source": "duckduckgo"
                         })
-                    
+
                     # Extract related topics
                     for topic in data.get("RelatedTopics", [])[:max_results-1]:
                         if isinstance(topic, dict) and "Text" in topic:
@@ -304,33 +302,33 @@ class SearchEngine:
                                 "content": topic.get("Text", ""),
                                 "source": "duckduckgo"
                             })
-                    
+
                     return results[:max_results]
         except Exception as e:
             logger.error(f"Web search fallback error: {e}")
-        
+
         return []
-    
-    def _deduplicate_results(self, results: List[Dict]) -> List[Dict]:
+
+    def _deduplicate_results(self, results: list[dict]) -> list[dict]:
         """
         Deduplicate search results using a composite key.
-        
+
         Dedup key: (url if present) else (title + year + source)
-        
+
         Args:
             results: List of search result dictionaries
-            
+
         Returns:
             Deduplicated list of results
         """
         seen_keys = set()
         unique_results = []
-        
+
         for result in results:
             # Skip if result is not a dict
             if not isinstance(result, dict):
                 continue
-            
+
             # Build deduplication key
             url = result.get("url", "") or ""
             if url:
@@ -361,40 +359,40 @@ class SearchEngine:
                         pass
                 source = str(result.get("source", "") or "")
                 dedup_key = f"{title}|{year}|{source}"
-            
+
             # Add result if we haven't seen this key before
             if dedup_key not in seen_keys:
                 seen_keys.add(dedup_key)
                 unique_results.append(result)
-        
+
         return unique_results
-    
-    def _sort_results_by_score(self, results: List[Dict]) -> List[Dict]:
+
+    def _sort_results_by_score(self, results: list[dict]) -> list[dict]:
         """
         Sort results by score (highest first) for stable ordering.
-        
+
         Args:
             results: List of search result dictionaries
-            
+
         Returns:
             Sorted list of results (highest score first)
         """
         # Sort by score (descending), then by title for stable ordering
-        def sort_key(result: Dict) -> Tuple[float, str]:
+        def sort_key(result: dict) -> tuple[float, str]:
             score = float(result.get("score", 0.0) or 0.0)
             title = str(result.get("title", "") or "")
             return (-score, title)  # Negative score for descending order
-        
+
         return sorted(results, key=sort_key)
-    
-    async def search_movie_specific(self, movie_title: str, year: Optional[int] = None) -> List[Dict]:
+
+    async def search_movie_specific(self, movie_title: str, year: int | None = None) -> list[dict]:
         """
         Search for specific movie information.
-        
+
         Args:
             movie_title: Title of the movie
             year: Optional release year
-            
+
         Returns:
             List of deduplicated, sorted search results (highest score first)
         """
@@ -405,12 +403,12 @@ class SearchEngine:
             f"{movie_title} {year if year else ''} review",
             f"{movie_title} {year if year else ''} cast crew"
         ]
-        
+
         # Run all searches in parallel
         import asyncio
         search_tasks = [self.search(q, max_results=2, skip_tavily=False) for q in queries]
         all_results_tuples = await asyncio.gather(*search_tasks, return_exceptions=True)
-        
+
         # Flatten results and handle exceptions
         all_results = []
         for result_tuple in all_results_tuples:
@@ -419,26 +417,26 @@ class SearchEngine:
                 continue
             if isinstance(result_tuple, tuple):
                 # Extract results from tuple (results, decision)
-                results, decision = result_tuple
+                results, _decision = result_tuple
                 if isinstance(results, list):
                     all_results.extend(results)
             elif isinstance(result_tuple, list):
                 # Backward compatibility: handle old return format (list only)
                 all_results.extend(result_tuple)
-        
+
         # Deduplicate results
         unique_results = self._deduplicate_results(all_results)
-        
+
         # Sort by score (highest first) for stable ordering
         sorted_results = self._sort_results_by_score(unique_results)
-        
+
         return sorted_results[:10]
-    
+
     def close(self):
         """Close the HTTP session (synchronous wrapper)."""
         # Note: In async context, call async_close() instead
         pass
-    
+
     async def async_close(self):
         """Close the HTTP session."""
         await self.session.aclose()
@@ -446,53 +444,53 @@ class SearchEngine:
 
 class MovieDataAggregator:
     """Aggregates movie data from multiple sources with source policy enforcement."""
-    
+
     def __init__(self, search_engine: SearchEngine, source_policy=None):
         self.search_engine = search_engine
         self.source_policy = source_policy
-    
+
     async def get_movie_info(self, query: str, include_recent_news: bool = True,
-                           intent: Optional[str] = None, entities: Optional[List[str]] = None,
+                           intent: str | None = None, entities: list[str] | None = None,
                            request_type: str = "info", skip_tavily: bool = False,
-                           override_reason: Optional[str] = None,
-                           request_plan = None, entities_typed: Optional[Dict[str, List[str]]] = None) -> Dict:
+                           override_reason: str | None = None,
+                           request_plan = None, entities_typed: dict[str, list[str]] | None = None) -> dict:
         """
         Get comprehensive movie information from multiple sources with source policy.
-        
+
         Args:
             query: Movie title or search query
             include_recent_news: Whether to include recent news/articles
             intent: Structured intent (for query optimization)
             entities: Extracted entities (for query optimization)
             request_type: Request classification type (for source filtering)
-            
+
         Returns:
             Dictionary with aggregated movie information and source metadata
         """
         import asyncio
-        
+
         # Build intent-specific queries if available
         if intent and entities and self.source_policy:
             queries = self.search_engine.build_intent_queries(intent, entities, request_type)
         else:
             queries = [query]
-        
+
         # Note: Kaggle retrieval is now handled by KaggleRetrievalAdapter (called from agent)
         # SearchEngine.search() no longer handles Kaggle
-        
+
         # Run searches in parallel
         tasks = []
         for q in queries[:3]:  # Limit to 3 queries to avoid too many API calls
             tasks.append(self.search_engine.search(
                 q, max_results=5, skip_tavily=skip_tavily, override_reason=override_reason
             ))
-        
+
         if include_recent_news and not skip_tavily:
             news_query = f"{query} movie news 2024 2025"
             tasks.append(self.search_engine.search(news_query, max_results=3, skip_tavily=skip_tavily, override_reason=override_reason))
-        
+
         results_tuples = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Combine results and aggregate search metadata
         raw_results = []
         tavily_used_any = False
@@ -501,7 +499,7 @@ class MovieDataAggregator:
         override_used_any = False
         override_reasons = set()
         # Note: Kaggle-specific metadata removed - Kaggle handled by KaggleRetrievalAdapter
-        
+
         for result_tuple in results_tuples:
             if isinstance(result_tuple, Exception):
                 logger.warning(f"Search task failed: {result_tuple}")
@@ -538,7 +536,7 @@ class MovieDataAggregator:
             elif isinstance(result_tuple, list):
                 # Backward compatibility: handle old return format (list only)
                 raw_results.extend(result_tuple)
-        
+
         # Apply source policy if available
         if self.source_policy:
             # Use RequestPlan if provided, otherwise fallback to request_type
@@ -550,13 +548,13 @@ class MovieDataAggregator:
                 ranked_sources, filter_metadata = self.source_policy.rank_and_filter(
                     raw_results, plan_or_constraints=request_type
                 )
-            
+
             # Convert back to dict format for compatibility
             results = []
             source_summary = self.source_policy.get_source_summary(ranked_sources)
             # Include filtering metadata in source_summary
             source_summary.update(filter_metadata)
-            
+
             for source in ranked_sources:
                 results.append({
                     "title": source.title,
@@ -571,12 +569,12 @@ class MovieDataAggregator:
         else:
             results = raw_results
             source_summary = {}
-        
+
         # Determine final override reason (use first one if multiple)
-        override_reason_final = list(override_reasons)[0] if override_reasons else None
+        override_reason_final = next(iter(override_reasons)) if override_reasons else None
         # Determine final fallback provider (use first one if multiple)
-        fallback_provider_final = list(fallback_providers)[0] if fallback_providers else None
-        
+        fallback_provider_final = next(iter(fallback_providers)) if fallback_providers else None
+
         return {
             "query": query,
             "results": results,

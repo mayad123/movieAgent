@@ -6,19 +6,19 @@ Production: OpenAI-compatible HTTP API (e.g. local Llama / vLLM) via httpx.
 import json
 import re
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
-
-from dataclasses import dataclass
 
 
 @dataclass
 class LLMResponse:
     """Response from LLM client."""
     content: str
-    usage: Optional[Dict[str, int]] = None
-    metadata: Optional[Dict[str, Any]] = None  # e.g. similar_movies for batch enrichment
+    usage: dict[str, int] | None = None
+    metadata: dict[str, Any] | None = None  # e.g. similar_movies for batch enrichment
 
 
 class LLMClient(ABC):
@@ -28,11 +28,11 @@ class LLMClient(ABC):
     async def chat_completions_create(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
         *,
-        response_format: Optional[Dict[str, Any]] = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Generate a chat completion.
@@ -52,7 +52,7 @@ class LLMClient(ABC):
     async def chat_completions_create_stream(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
     ) -> AsyncGenerator[str, None]:
@@ -65,26 +65,26 @@ class LLMClient(ABC):
 class FakeLLMClient(LLMClient):
     """
     Deterministic fake LLM client for offline testing.
-    
+
     Returns predetermined responses based on intent and messages.
     """
-    
+
     def __init__(self) -> None:
         """Initialize fake LLM client."""
         pass
-    
+
     async def chat_completions_create(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
         *,
-        response_format: Optional[Dict[str, Any]] = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Generate a fake response based on messages.
-        
+
         Detects:
         - Intent from messages (director_info, cast_info, etc.)
         - Whether this is a repair/correction request
@@ -93,7 +93,7 @@ class FakeLLMClient(LLMClient):
         # Combine all messages to analyze
         full_text = "\n".join([msg.get("content", "") for msg in messages])
         full_text_lower = full_text.lower()
-        
+
         # Extract user query from messages (look for user message or "User Question:")
         user_query = ""
         for msg in messages:
@@ -107,7 +107,7 @@ class FakeLLMClient(LLMClient):
                 else:
                     user_query = content.strip()
                 break
-        
+
         # Check if this is a correction/repair request
         is_repair = any(
             "correction" in msg.get("content", "").lower() or
@@ -116,14 +116,14 @@ class FakeLLMClient(LLMClient):
             "error" in msg.get("content", "").lower()
             for msg in messages
         )
-        
+
         # Extract entities (movie titles, director names) from full text
         movie_title = self._extract_movie_title(full_text)
         director_name = self._extract_director_name(full_text)
-        
+
         # Detect intent from user query (more reliable than full text)
         intent = self._detect_intent(user_query.lower() if user_query else full_text_lower, messages)
-        
+
         # Generate response based on intent and context
         if is_repair:
             # For repair requests, return a minimal corrected response
@@ -157,8 +157,8 @@ class FakeLLMClient(LLMClient):
                 content=f"{movie_title or 'The movie'} information is available.",
                 usage={"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
             )
-    
-    def _detect_intent(self, text_lower: str, messages: List[Dict[str, str]]) -> str:
+
+    def _detect_intent(self, text_lower: str, messages: list[dict[str, str]]) -> str:
         """Detect intent from message content."""
         # Extract user query from messages (usually in user message)
         user_query_lower = ""
@@ -173,10 +173,10 @@ class FakeLLMClient(LLMClient):
                 else:
                     user_query_lower = content.strip().lower()
                 break
-        
+
         # Use user query for intent detection (more reliable than full text)
         text_to_check = user_query_lower if user_query_lower else text_lower
-        
+
         # Check for test markers FIRST (before intent detection)
         if "freshness_test" in text_to_check:
             return "freshness_missing"
@@ -184,7 +184,7 @@ class FakeLLMClient(LLMClient):
             return "forbidden_test"
         elif "verbosity_test" in text_to_check:
             return "verbosity_test"
-        
+
         # Check for specific intents in user query (priority order matters)
         if "compare" in text_to_check:
             return "comparison"
@@ -206,11 +206,11 @@ class FakeLLMClient(LLMClient):
             return "release_date"
         elif "runtime" in text_to_check or "how long" in text_to_check or "length" in text_to_check:
             return "runtime"
-        
+
         # Fallback to general_info
         return "general_info"
-    
-    def _extract_movie_title(self, text: str) -> Optional[str]:
+
+    def _extract_movie_title(self, text: str) -> str | None:
         """Extract movie title from text."""
         # Common movie titles in test scenarios
         titles = [
@@ -223,8 +223,8 @@ class FakeLLMClient(LLMClient):
             if title.lower() in text.lower():
                 return title
         return None
-    
-    def _extract_director_name(self, text: str) -> Optional[str]:
+
+    def _extract_director_name(self, text: str) -> str | None:
         """Extract director name from evidence or context."""
         # Common directors in test scenarios
         directors = {
@@ -244,8 +244,8 @@ class FakeLLMClient(LLMClient):
             if key in text_lower:
                 return director
         return None
-    
-    def _generate_director_response(self, movie_title: Optional[str], director_name: Optional[str]) -> LLMResponse:
+
+    def _generate_director_response(self, movie_title: str | None, director_name: str | None) -> LLMResponse:
         """Generate director_info response."""
         if movie_title and director_name:
             content = f"{movie_title} was directed by {director_name}."
@@ -257,8 +257,8 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 150, "completion_tokens": 30, "total_tokens": 180}
         )
-    
-    def _generate_cast_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
+
+    def _generate_cast_response(self, movie_title: str | None, text_lower: str) -> LLMResponse:
         """Generate cast_info response."""
         # Extract cast from evidence if available
         cast_members = []
@@ -268,7 +268,7 @@ class FakeLLMClient(LLMClient):
             cast_members.append("Christoph Waltz")
         if "sam worthington" in text_lower:
             cast_members.append("Sam Worthington")
-        
+
         if movie_title and cast_members:
             content = f"{movie_title} stars {', '.join(cast_members)}."
         elif movie_title:
@@ -279,13 +279,13 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 200, "completion_tokens": 40, "total_tokens": 240}
         )
-    
-    def _generate_release_date_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
+
+    def _generate_release_date_response(self, movie_title: str | None, text_lower: str) -> LLMResponse:
         """Generate release_date response."""
         # Extract year from evidence if available
         year_match = re.search(r'\b(19\d{2}|20\d{2})\b', text_lower)
         year = year_match.group(1) if year_match else None
-        
+
         if movie_title and year:
             content = f"{movie_title} was released in {year}."
         elif movie_title:
@@ -296,13 +296,13 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 180, "completion_tokens": 25, "total_tokens": 205}
         )
-    
-    def _generate_runtime_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
+
+    def _generate_runtime_response(self, movie_title: str | None, text_lower: str) -> LLMResponse:
         """Generate runtime response."""
         # Extract runtime from evidence if available
         runtime_match = re.search(r'(\d+)\s*minutes?', text_lower)
         runtime = runtime_match.group(1) if runtime_match else None
-        
+
         if movie_title and runtime:
             content = f"{movie_title} has a runtime of {runtime} minutes."
         elif movie_title:
@@ -313,11 +313,11 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 170, "completion_tokens": 25, "total_tokens": 195}
         )
-    
+
     def _generate_availability_response(
-        self, 
-        movie_title: Optional[str], 
-        text_lower: str, 
+        self,
+        movie_title: str | None,
+        text_lower: str,
         intent: str
     ) -> LLMResponse:
         """Generate availability/where_to_watch response (always includes timestamp for freshness)."""
@@ -331,7 +331,7 @@ class FakeLLMClient(LLMClient):
             platforms.append("HBO Max")
         if "prime video" in text_lower or "amazon" in text_lower:
             platforms.append("Amazon Prime Video")
-        
+
         if movie_title:
             # Always include timestamp for availability queries
             content = f"As of December 2024, {movie_title} is available on {', '.join(platforms) if platforms else 'various streaming platforms'}."
@@ -341,38 +341,38 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 200, "completion_tokens": 50, "total_tokens": 250}
         )
-    
-    def _generate_recommendation_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
+
+    def _generate_recommendation_response(self, movie_title: str | None, text_lower: str) -> LLMResponse:
         """Generate recommendation response (must be at least 5 sentences)."""
-        similar_movies: List[str] = []
+        similar_movies: list[str] = []
         if "matrix" in text_lower:
             similar_movies = ["Inception", "Blade Runner", "The Terminator"]
         elif "pulp fiction" in text_lower:
             similar_movies = ["Reservoir Dogs", "Kill Bill", "Django Unchained"]
         elif "avatar" in text_lower:
             similar_movies = ["Dune (2021)", "Interstellar (2014)", "The Last Airbender (2010)", "District 9 (2009)"]
-        
+
         if movie_title and similar_movies:
             content = f"Movies similar to {movie_title} include {', '.join(similar_movies)}. These films share similar themes and styles. Each offers a unique perspective on storytelling. They are perfect for fans of {movie_title}'s distinctive approach. If you enjoyed {movie_title}, these films will likely appeal to you."
         elif movie_title:
             content = f"Movies similar to {movie_title} include several films with similar themes and styles. These films share common elements that make them appealing. Each offers a unique perspective on storytelling. They are perfect for fans of {movie_title}'s distinctive approach. If you enjoyed {movie_title}, these films will likely appeal to you."
         else:
             content = "There are several movies with similar themes and styles. These films share common elements that make them appealing. Each offers a unique perspective on storytelling. They are perfect for fans seeking similar experiences. If you enjoyed the original film, these will likely appeal to you."
-        metadata: Optional[Dict[str, Any]] = {"similar_movies": similar_movies} if similar_movies else None
+        metadata: dict[str, Any] | None = {"similar_movies": similar_movies} if similar_movies else None
         return LLMResponse(
             content=content,
             usage={"prompt_tokens": 250, "completion_tokens": 80, "total_tokens": 330},
             metadata=metadata
         )
-    
-    def _generate_comparison_response(self, movie_title: Optional[str], text_lower: str) -> LLMResponse:
+
+    def _generate_comparison_response(self, movie_title: str | None, text_lower: str) -> LLMResponse:
         """Generate comparison response (must be at least 8 sentences)."""
         movies = []
         if "matrix" in text_lower:
             movies.append("The Matrix")
         if "inception" in text_lower:
             movies.append("Inception")
-        
+
         if len(movies) >= 2:
             content = f"{movies[0]} and {movies[1]} are both science fiction films. {movies[0]} was directed by one director. {movies[1]} was directed by another director. Both films feature innovative visual effects. They explore complex themes and narratives. Each film represents a significant achievement in cinema. They have influenced subsequent science fiction films. Both are considered classics of the genre."
         elif movie_title:
@@ -384,11 +384,11 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 300, "completion_tokens": 100, "total_tokens": 400}
         )
-    
+
     def _generate_forbidden_terms_response(
-        self, 
-        movie_title: Optional[str], 
-        director_name: Optional[str]
+        self,
+        movie_title: str | None,
+        director_name: str | None
     ) -> LLMResponse:
         """Generate response with forbidden terms (for negative testing)."""
         if movie_title and director_name:
@@ -401,11 +401,11 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 150, "completion_tokens": 35, "total_tokens": 185}
         )
-    
+
     def _generate_verbose_response(
-        self, 
-        movie_title: Optional[str], 
-        director_name: Optional[str]
+        self,
+        movie_title: str | None,
+        director_name: str | None
     ) -> LLMResponse:
         """Generate overly verbose response (for negative testing)."""
         if movie_title and director_name:
@@ -418,10 +418,10 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 150, "completion_tokens": 120, "total_tokens": 270}
         )
-    
+
     def _generate_freshness_missing_response(
-        self, 
-        movie_title: Optional[str], 
+        self,
+        movie_title: str | None,
         text_lower: str
     ) -> LLMResponse:
         """Generate response missing freshness timestamp (for negative testing)."""
@@ -430,7 +430,7 @@ class FakeLLMClient(LLMClient):
             platforms.append("Netflix")
         if "hulu" in text_lower:
             platforms.append("Hulu")
-        
+
         if movie_title:
             content = f"{movie_title} is available on {', '.join(platforms) if platforms else 'various streaming platforms'}."
         else:
@@ -439,12 +439,12 @@ class FakeLLMClient(LLMClient):
             content=content,
             usage={"prompt_tokens": 200, "completion_tokens": 30, "total_tokens": 230}
         )
-    
+
     def _generate_repair_response(
         self,
         intent: str,
-        movie_title: Optional[str],
-        director_name: Optional[str],
+        movie_title: str | None,
+        director_name: str | None,
         text_lower: str
     ) -> LLMResponse:
         """Generate minimal corrected response for repair requests."""
@@ -480,7 +480,7 @@ class HttpChatLLMClient(LLMClient):
         self._http = http_client
         self._api_key = (api_key or "").strip()
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         h = {"Content-Type": "application/json"}
         if self._api_key:
             h["Authorization"] = f"Bearer {self._api_key}"
@@ -489,13 +489,13 @@ class HttpChatLLMClient(LLMClient):
     async def chat_completions_create(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
         *,
-        response_format: Optional[Dict[str, Any]] = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMResponse:
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
@@ -535,7 +535,7 @@ class HttpChatLLMClient(LLMClient):
         if content is None:
             content = ""
         usage_raw = data.get("usage")
-        usage: Optional[Dict[str, int]] = None
+        usage: dict[str, int] | None = None
         if isinstance(usage_raw, dict):
             usage = {k: int(v) for k, v in usage_raw.items() if isinstance(v, (int, float))}
 
@@ -544,11 +544,11 @@ class HttpChatLLMClient(LLMClient):
     async def chat_completions_create_stream(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
     ) -> AsyncGenerator[str, None]:
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,

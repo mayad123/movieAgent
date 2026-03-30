@@ -10,11 +10,11 @@ is applied here via apply_playground_attachment_behavior. The switch is: this co
 is only used when running the playground; real agent mode does not use it.
 """
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
-from .core import CineMind
 from ..llm.client import FakeLLMClient
 from ..media.playground_attachments import apply_playground_attachment_behavior
+from .core import CineMind
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ PLAYGROUND_ATTACHMENT_RULE_ENABLED = True
 
 async def run_playground_query(
     user_query: str,
-    request_type: Optional[str] = None,
-) -> Dict[str, Any]:
+    request_type: str | None = None,
+) -> dict[str, Any]:
     """
     Execute a query through the playground pipeline (Wikipedia-only).
 

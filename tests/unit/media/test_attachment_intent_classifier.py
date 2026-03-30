@@ -4,25 +4,22 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from cinemind.extraction.response_movie_extractor import (
-    parse_response,
-    ResponseParseResult,
     ExtractedMovie,
-    ParseStructure,
     ParseSignals,
+    ParseStructure,
+    ResponseParseResult,
+    parse_response,
 )
 from cinemind.media.attachment_intent_classifier import (
-    classify_attachment_intent,
-    AttachmentIntentResult,
-    INTENT_PRIMARY_MOVIE,
-    INTENT_MOVIE_LIST,
-    INTENT_SCENES,
     INTENT_DID_YOU_MEAN,
+    INTENT_MOVIE_LIST,
     INTENT_NONE,
+    INTENT_PRIMARY_MOVIE,
+    INTENT_SCENES,
+    classify_attachment_intent,
 )
 
 

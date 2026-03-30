@@ -5,22 +5,19 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from integrations.tmdb.image_config import (
+    FALLBACK_BACKDROP_SIZE,
+    FALLBACK_SECURE_BASE,
+    SIZE_BACKDROP_GALLERY,
+    SIZE_POSTER_GALLERY,
+    SIZE_POSTER_THUMBNAIL,
     TMDBImageConfig,
-    fetch_config,
-    get_config,
     build_image_url,
     clear_config_cache,
-    SIZE_POSTER_THUMBNAIL,
-    SIZE_POSTER_GALLERY,
-    SIZE_BACKDROP_GALLERY,
-    SIZE_BACKDROP_ORIGINAL,
-    FALLBACK_SECURE_BASE,
-    FALLBACK_BACKDROP_SIZE,
+    fetch_config,
+    get_config,
 )
 
 

@@ -17,10 +17,8 @@ Usage:
 """
 import asyncio
 import sys
-import json
-import re
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 # Add src to path so we can import cinemind
 project_root = Path(__file__).parent.parent
@@ -29,26 +27,26 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 from cinemind.agent import CineMind
+from cinemind.agent.playground import PLAYGROUND_ATTACHMENT_RULE_ENABLED
 from cinemind.llm.client import FakeLLMClient
 from cinemind.media.playground_attachments import apply_playground_attachment_behavior
-from cinemind.agent.playground import PLAYGROUND_ATTACHMENT_RULE_ENABLED
 from cinemind.planning.request_type_router import get_request_type_router
 
 
 async def run_playground(
     user_query: str,
-    request_type: Optional[str] = None
-) -> Dict[str, Any]:
+    request_type: str | None = None
+) -> dict[str, Any]:
     """
     Execute a user query through CineMind using FakeLLM (offline).
-    
+
     Args:
         user_query: Free-form user query string
         request_type: Optional request type (if not provided, auto-inferred using rules-based router)
-    
+
     Returns:
         Full structured result from CineMind agent
-    
+
     Note:
         Request type is automatically inferred from the query using a deterministic
         rules-based router (fully offline, no LLM calls). If provided explicitly,
@@ -56,10 +54,10 @@ async def run_playground(
     """
     # Request type will be auto-inferred by RequestPlanner if not provided
     # (uses rules-based router, fully offline)
-    
+
     # Create FakeLLM client (same as offline e2e tests)
     fake_llm_client = FakeLLMClient()
-    
+
     # Create CineMind agent with FakeLLM (same setup as offline e2e tests)
     # Disable observability to avoid DB dependencies
     agent = CineMind(
@@ -67,7 +65,7 @@ async def run_playground(
         enable_observability=False,
         llm_client=fake_llm_client
     )
-    
+
     try:
         # Execute query through agent (same path as offline e2e tests)
         # Always disable live data to avoid external API calls
@@ -82,7 +80,7 @@ async def run_playground(
         if PLAYGROUND_ATTACHMENT_RULE_ENABLED:
             apply_playground_attachment_behavior(user_query, result)
         return result
-    
+
     finally:
         # Clean up agent resources
         await agent.close()
@@ -91,7 +89,7 @@ async def run_playground(
 async def main():
     """Command-line interface for playground runner."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="Offline playground runner for CineMind - execute queries with FakeLLM (no API calls)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -104,7 +102,7 @@ Examples:
   %(prog)s "When was Dune released?" --request-type release-date
         """
     )
-    
+
     parser.add_argument(
         "query",
         nargs="*",
@@ -115,9 +113,9 @@ Examples:
         choices=["info", "recs", "comparison", "release-date"],
         help="Request type to use (info, recs, comparison, release-date). Auto-detected if not provided."
     )
-    
+
     args = parser.parse_args()
-    
+
     # Get user query
     if args.query:
         user_query = " ".join(args.query)
@@ -132,17 +130,17 @@ Examples:
         print("  Examples: --request-type info, --request-type recs, --request-type release-date")
         print("=" * 60)
         print()
-        
+
         while True:
             try:
                 query = input("[Query]: ").strip()
-                
+
                 if query.lower() in ['exit', 'quit', 'q']:
                     break
-                
+
                 if not query:
                     continue
-                
+
                 # Parse request_type from query if provided
                 request_type = args.request_type
                 if "--request-type" in query:
@@ -150,42 +148,42 @@ Examples:
                     query = parts[0].strip()
                     if len(parts) > 1:
                         request_type = parts[1].strip().split()[0] if parts[1].strip() else None
-                
+
                 # Auto-detect if not provided (using rules-based router)
                 if not request_type:
                     router = get_request_type_router()
                     router_result = router.route(query)
                     request_type = router_result.request_type
                     print(f"\n[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]")
-                
+
                 print("\n[Executing through CineMind (offline, FakeLLM, no API calls)...]")
                 result = await run_playground(query, request_type=request_type)
-                
+
                 # Display formatted output
                 print("\n" + "=" * 60)
                 print("RESPONSE:")
                 print("=" * 60)
                 print(result.get("response", result.get("answer", "")))
-                
+
                 print("\n" + "=" * 60)
                 print("METADATA:")
                 print("=" * 60)
                 print(f"Request Type: {result.get('request_type', 'unknown')}")
-                
+
                 # Calculate sentence count
                 response_text = result.get("response", result.get("answer", ""))
                 sentences = [s.strip() for s in response_text.split(".") if s.strip()]
                 sentence_count = len(sentences)
                 print(f"Verbosity: {sentence_count} sentence(s)")
-                
+
                 if result.get("sources"):
                     print(f"Sources: {len(result['sources'])} source(s)")
                     for i, source in enumerate(result["sources"][:3], 1):
                         if source.get("url"):
                             print(f"  {i}. {source.get('title', 'Unknown')} - {source['url']}")
-                
+
                 print("\n" + "-" * 60 + "\n")
-            
+
             except KeyboardInterrupt:
                 break
             except Exception as e:
@@ -193,13 +191,13 @@ Examples:
                 print(f"\n[Error]: {error_msg}\n")
                 import traceback
                 traceback.print_exc()
-        
+
         print("\n[Goodbye!]")
         return
-    
+
     # Single query mode
     request_type = args.request_type
-    
+
     # Auto-detect if not provided (using rules-based router)
     if not request_type:
         router = get_request_type_router()
@@ -208,40 +206,40 @@ Examples:
         print(f"[Auto-detected request_type: {request_type} (confidence: {router_result.confidence:.2f})]")
     else:
         print(f"[Using provided request_type: {request_type}]")
-    
+
     print(f"\nQuery: {user_query}")
     print("\nExecuting through CineMind (offline, FakeLLM, no API calls)...\n")
-    
+
     try:
         result = await run_playground(user_query, request_type=request_type)
-        
+
         # Display formatted output
         print("=" * 60)
         print("RESPONSE:")
         print("=" * 60)
         print(result.get("response", result.get("answer", "")))
-        
+
         print("\n" + "=" * 60)
         print("METADATA:")
         print("=" * 60)
         print(f"Request Type: {result.get('request_type', 'unknown')}")
-        
+
         # Calculate sentence count (verbosity indicator)
         response_text = result.get("response", result.get("answer", ""))
         sentences = [s.strip() for s in response_text.split(".") if s.strip()]
         sentence_count = len(sentences)
         print(f"Verbosity: {sentence_count} sentence(s)")
-        
+
         if result.get("sources"):
             print(f"Sources: {len(result['sources'])} source(s)")
             for i, source in enumerate(result["sources"][:5], 1):
                 if source.get("url"):
                     print(f"  {i}. {source.get('title', 'Unknown')} - {source['url']}")
-        
+
         print("=" * 60)
-        
+
     except Exception as e:
-        print(f"\n[Error]: {str(e)}")
+        print(f"\n[Error]: {e!s}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

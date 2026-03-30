@@ -1,6 +1,6 @@
 """API request/response Pydantic models (contract with clients)."""
 from __future__ import annotations
-from typing import Optional, List
+
 from pydantic import BaseModel, Field
 
 
@@ -8,9 +8,9 @@ class MovieQuery(BaseModel):
     query: str = Field(..., description="Movie-related question or search query")
     use_live_data: bool = Field(True, description="Whether to perform real-time searches")
     stream: bool = Field(False, description="Whether to stream the response")
-    request_type: Optional[str] = Field(None, description="Request type tag (info/recs/comparison/spoiler/release-date/fact-check)")
-    outcome: Optional[str] = Field(None, description="Outcome tag (success/unclear/hallucination/user-corrected)")
-    requested_agent_mode: Optional[str] = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT (backend may override)")
+    request_type: str | None = Field(None, description="Request type tag (info/recs/comparison/spoiler/release-date/fact-check)")
+    outcome: str | None = Field(None, description="Outcome tag (success/unclear/hallucination/user-corrected)")
+    requested_agent_mode: str | None = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT (backend may override)")
 
 
 class MovieResponse(BaseModel):
@@ -21,30 +21,30 @@ class MovieResponse(BaseModel):
     sources: list
     timestamp: str
     live_data_used: bool
-    request_id: Optional[str] = None
-    token_usage: Optional[dict] = None
-    cost_usd: Optional[float] = None
-    request_type: Optional[str] = None
-    outcome: Optional[str] = None
-    agent_mode: Optional[str] = None
-    actualAgentMode: Optional[str] = None
-    requestedAgentMode: Optional[str] = None
-    modeFallback: Optional[bool] = None
-    toolsUsed: Optional[list] = None
-    fallback_reason: Optional[str] = None
+    request_id: str | None = None
+    token_usage: dict | None = None
+    cost_usd: float | None = None
+    request_type: str | None = None
+    outcome: str | None = None
+    agent_mode: str | None = None
+    actualAgentMode: str | None = None
+    requestedAgentMode: str | None = None
+    modeFallback: bool | None = None
+    toolsUsed: list | None = None
+    fallback_reason: str | None = None
     # Optional: question-driven Movie Hub clusters for Sub-context hub view.
     # Uses the same shape as `/api/movies/{id}/similar`.
-    movieHubClusters: Optional[List["SimilarCluster"]] = None
-    responseEnvelopeVersion: Optional[str] = None
-    message_id: Optional[str] = None
-    thread_id: Optional[str] = None
+    movieHubClusters: list[SimilarCluster] | None = None
+    responseEnvelopeVersion: str | None = None
+    message_id: str | None = None
+    thread_id: str | None = None
 
 
 class HealthResponse(BaseModel):
     status: str
     agent: str
     version: str
-    agent_mode: Optional[str] = None
+    agent_mode: str | None = None
 
 
 class DiagnosticResponse(BaseModel):
@@ -53,7 +53,7 @@ class DiagnosticResponse(BaseModel):
     config_loaded: bool
     tmdb_enabled: bool
     tmdb_token_present: bool
-    tmdb_config_reachable: Optional[bool] = None
+    tmdb_config_reachable: bool | None = None
 
 
 class HubHistoryMessage(BaseModel):
@@ -66,26 +66,26 @@ class HubHistoryMessage(BaseModel):
 class QueryRequest(BaseModel):
     """Request body for /query (UI contract: same as playground server)."""
     user_query: str = Field(..., description="User message")
-    request_type: Optional[str] = Field(None, description="Optional request type")
-    requested_agent_mode: Optional[str] = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT")
-    hub_conversation_history: Optional[List[HubHistoryMessage]] = Field(
+    request_type: str | None = Field(None, description="Optional request type")
+    requested_agent_mode: str | None = Field(None, alias="requestedAgentMode", description="UI hint: PLAYGROUND | REAL_AGENT")
+    hub_conversation_history: list[HubHistoryMessage] | None = Field(
         None,
         alias="hubConversationHistory",
         description="Prior sub-context hub chat turns (bounded server-side when building prompt)",
     )
-    thread_id: Optional[str] = Field(None, alias="threadId", description="Optional client thread identifier")
-    message_id: Optional[str] = Field(None, alias="messageId", description="Optional client message identifier")
+    thread_id: str | None = Field(None, alias="threadId", description="Optional client thread identifier")
+    message_id: str | None = Field(None, alias="messageId", description="Optional client message identifier")
 
 
 class SimilarMovie(BaseModel):
     """Movie card shape for similar-movies clusters."""
 
     title: str
-    year: Optional[int] = None
-    primary_image_url: Optional[str] = None
-    page_url: Optional[str] = None
-    tmdbId: Optional[int] = None
-    mediaType: Optional[str] = None
+    year: int | None = None
+    primary_image_url: str | None = None
+    page_url: str | None = None
+    tmdbId: int | None = None
+    mediaType: str | None = None
 
 
 class SimilarCluster(BaseModel):
@@ -93,23 +93,23 @@ class SimilarCluster(BaseModel):
 
     kind: str
     label: str
-    movies: List[SimilarMovie]
+    movies: list[SimilarMovie]
 
 
 class SimilarMoviesResponse(BaseModel):
     """Response payload for /api/movies/{id}/similar."""
 
-    clusters: List[SimilarCluster]
+    clusters: list[SimilarCluster]
 
 
 class RelatedMovie(BaseModel):
     """Minimal related-title shape used by the Movie Details modal."""
 
-    movie_title: Optional[str] = Field(None, description="Display title (preferred by frontend)")
-    title: Optional[str] = Field(None, description="Alternate display title")
-    year: Optional[int] = None
-    tmdbId: Optional[int] = None
-    primary_image_url: Optional[str] = None
+    movie_title: str | None = Field(None, description="Display title (preferred by frontend)")
+    title: str | None = Field(None, description="Alternate display title")
+    year: int | None = None
+    tmdbId: int | None = None
+    primary_image_url: str | None = None
 
 
 class MovieDetailsResponse(BaseModel):
@@ -124,30 +124,30 @@ class MovieDetailsResponse(BaseModel):
     tmdbId: int
 
     # Title/meta
-    movie_title: Optional[str] = None
-    year: Optional[int] = None
-    tagline: Optional[str] = None
-    overview: Optional[str] = None
+    movie_title: str | None = None
+    year: int | None = None
+    tagline: str | None = None
+    overview: str | None = None
 
     # Hero/meta
-    runtime_minutes: Optional[int] = None
-    genres: Optional[List[str]] = None
-    release_date: Optional[str] = None
-    language: Optional[str] = None
-    country: Optional[str] = None
-    rating: Optional[float] = None
-    vote_count: Optional[int] = None
+    runtime_minutes: int | None = None
+    genres: list[str] | None = None
+    release_date: str | None = None
+    language: str | None = None
+    country: str | None = None
+    rating: float | None = None
+    vote_count: int | None = None
 
     # Media
-    primary_image_url: Optional[str] = None
-    backdrop_url: Optional[str] = None
+    primary_image_url: str | None = None
+    backdrop_url: str | None = None
 
     # Credits
-    directors: Optional[List[str]] = None
-    cast: Optional[List[str]] = None
+    directors: list[str] | None = None
+    cast: list[str] | None = None
 
     # Related titles (optional enrichment)
-    relatedMovies: Optional[List[RelatedMovie]] = None
+    relatedMovies: list[RelatedMovie] | None = None
 
 
 class ProjectAsset(BaseModel):
@@ -155,13 +155,13 @@ class ProjectAsset(BaseModel):
 
     id: str
     title: str
-    posterImageUrl: Optional[str] = None
-    pageUrl: Optional[str] = None
-    pageId: Optional[str] = None
-    conversationId: Optional[str] = None
-    subConversationId: Optional[str] = None
+    posterImageUrl: str | None = None
+    pageUrl: str | None = None
+    pageId: str | None = None
+    conversationId: str | None = None
+    subConversationId: str | None = None
     capturedAt: str
-    storedRef: Optional[str] = None
+    storedRef: str | None = None
 
 
 class ProjectSummary(BaseModel):
@@ -169,8 +169,8 @@ class ProjectSummary(BaseModel):
 
     id: str
     name: str
-    description: Optional[str] = None
-    contextFocus: Optional[str] = None
+    description: str | None = None
+    contextFocus: str | None = None
     createdAt: str
     updatedAt: str
     assetCount: int = 0
@@ -179,34 +179,34 @@ class ProjectSummary(BaseModel):
 class ProjectDetail(ProjectSummary):
     """Project detail payload with assets."""
 
-    assets: List[ProjectAsset] = Field(default_factory=list)
+    assets: list[ProjectAsset] = Field(default_factory=list)
 
 
 class ProjectCreateRequest(BaseModel):
     """Request payload for creating a project."""
 
     name: str = Field(..., min_length=1, max_length=120)
-    description: Optional[str] = Field(None, max_length=500)
-    contextFocus: Optional[str] = Field(None, max_length=200)
+    description: str | None = Field(None, max_length=500)
+    contextFocus: str | None = Field(None, max_length=200)
 
 
 class ProjectAssetInput(BaseModel):
     """Input payload for adding an asset to a project."""
 
     title: str = Field(..., min_length=1, max_length=300)
-    posterImageUrl: Optional[str] = None
-    pageUrl: Optional[str] = None
-    pageId: Optional[str] = None
-    conversationId: Optional[str] = None
-    subConversationId: Optional[str] = None
-    capturedAt: Optional[str] = None
-    storedRef: Optional[str] = None
+    posterImageUrl: str | None = None
+    pageUrl: str | None = None
+    pageId: str | None = None
+    conversationId: str | None = None
+    subConversationId: str | None = None
+    capturedAt: str | None = None
+    storedRef: str | None = None
 
 
 class ProjectAssetsAddRequest(BaseModel):
     """Bulk add payload for project assets."""
 
-    assets: List[ProjectAssetInput] = Field(default_factory=list)
+    assets: list[ProjectAssetInput] = Field(default_factory=list)
 
 
 class ProjectAssetsAddResponse(BaseModel):

@@ -4,11 +4,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media.media_focus import get_media_focus, MEDIA_FOCUS_SINGLE, MEDIA_FOCUS_MULTI
+from cinemind.media.media_focus import MEDIA_FOCUS_MULTI, MEDIA_FOCUS_SINGLE, get_media_focus
 
 
 def test_compare_intent_multi():

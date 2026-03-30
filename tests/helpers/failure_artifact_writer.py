@@ -3,20 +3,21 @@ Failure artifact writer for scenario test failures.
 
 Writes detailed JSON artifacts when scenario tests fail to aid in debugging.
 """
+import contextlib
 import json
+import re
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import re
+from typing import Any
 
 
 def sanitize_filename(name: str) -> str:
     """
     Sanitize scenario name to safe filename.
-    
+
     Args:
         name: Scenario name
-        
+
     Returns:
         Safe filename string
     """
@@ -37,15 +38,15 @@ def sanitize_filename(name: str) -> str:
 
 def remove_failure_artifact(
     scenario_name: str,
-    artifacts_dir: Optional[Path] = None
+    artifacts_dir: Path | None = None
 ) -> bool:
     """
     Remove a failure artifact file for a scenario that has passed.
-    
+
     Args:
         scenario_name: Name of the scenario
         artifacts_dir: Directory containing artifacts (defaults to tests/test_reports/failures/)
-    
+
     Returns:
         True if file was removed (or didn't exist), False if removal failed
     """
@@ -55,7 +56,7 @@ def remove_failure_artifact(
     # Sanitize scenario name for filename
     safe_name = sanitize_filename(scenario_name)
     artifact_file = artifacts_dir / f"{safe_name}.json"
-    
+
     # Remove the file if it exists
     try:
         if artifact_file.exists():
@@ -69,21 +70,21 @@ def remove_failure_artifact(
 
 def write_failure_artifact(
     scenario_name: str,
-    scenario_data: Dict[str, Any],
+    scenario_data: dict[str, Any],
     request_plan: Any,
-    template_id: Optional[str],
-    messages: List[Dict[str, str]],
+    template_id: str | None,
+    messages: list[dict[str, str]],
     formatted_evidence: Any,  # EvidenceFormatResult
-    validator_result: Optional[Any],  # ValidationResult
-    failures: List[str],
-    timing_ms: Optional[float] = None,
-    artifacts_dir: Optional[Path] = None,
-    template: Optional[Any] = None,  # ResponseTemplate for building repair instruction
-    kaggle_outcome: Optional[Dict[str, Any]] = None  # Kaggle behavior outcome
-) -> Optional[Path]:
+    validator_result: Any | None,  # ValidationResult
+    failures: list[str],
+    timing_ms: float | None = None,
+    artifacts_dir: Path | None = None,
+    template: Any | None = None,  # ResponseTemplate for building repair instruction
+    kaggle_outcome: dict[str, Any] | None = None  # Kaggle behavior outcome
+) -> Path | None:
     """
     Write a failure artifact JSON file for a failed scenario test.
-    
+
     Args:
         scenario_name: Name of the scenario
         scenario_data: Original scenario input data
@@ -95,25 +96,25 @@ def write_failure_artifact(
         failures: List of failure messages
         timing_ms: Test execution time in milliseconds
         artifacts_dir: Directory to write artifacts (defaults to tests/test_reports/failures/)
-    
+
     Returns:
         Path to the written artifact file, or None if writing failed
     """
     if artifacts_dir is None:
         # Default to tests/test_reports/failures/
         artifacts_dir = Path(__file__).parent.parent / "test_reports" / "failures"
-    
+
     # Create directory if it doesn't exist
     try:
         artifacts_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         print(f"Warning: Failed to create artifacts directory {artifacts_dir}: {e}")
         return None
-    
+
     # Sanitize scenario name for filename
     safe_name = sanitize_filename(scenario_name)
     artifact_file = artifacts_dir / f"{safe_name}.json"
-    
+
     # Extract request_plan fields
     response_format = getattr(request_plan, "response_format", None)
     # Convert ResponseFormat enum to its value for JSON serialization
@@ -129,7 +130,7 @@ def write_failure_artifact(
                 response_format_str = str(response_format)
         except Exception:
             response_format_str = str(response_format) if response_format else None
-    
+
     request_plan_dict = {
         "request_type": getattr(request_plan, "request_type", None),
         "intent": getattr(request_plan, "intent", None),
@@ -141,7 +142,7 @@ def write_failure_artifact(
         "reject_tier_c": getattr(request_plan, "reject_tier_c", True),
         "response_format": response_format_str,
     }
-    
+
     # Extract formatted evidence data
     evidence_dict = {
         "text": str(formatted_evidence.text) if formatted_evidence and hasattr(formatted_evidence, 'text') else "",
@@ -150,7 +151,7 @@ def write_failure_artifact(
         "dedupe_removed": int(formatted_evidence.dedupe_removed) if formatted_evidence and hasattr(formatted_evidence, 'dedupe_removed') else 0,
         "items_count": len(formatted_evidence.items) if formatted_evidence and hasattr(formatted_evidence, 'items') else 0
     }
-    
+
     # Extract validator result
     validator_dict = None
     if validator_result:
@@ -166,7 +167,7 @@ def write_failure_artifact(
             try:
                 # Import here to avoid circular dependencies
                 from cinemind.prompting.output_validator import OutputValidator
-                
+
                 validator = OutputValidator()
                 repair_instruction = validator.build_correction_instruction(
                     validator_result.violations,
@@ -176,7 +177,7 @@ def write_failure_artifact(
             except Exception:
                 # If we can't build repair instruction, just leave it out
                 pass
-    
+
     # Extract Kaggle metadata if available
     kaggle_metadata = None
     if kaggle_outcome:
@@ -186,10 +187,10 @@ def write_failure_artifact(
         kaggle_items_after = 0
         if formatted_evidence and hasattr(formatted_evidence, 'items'):
             kaggle_items_after = sum(
-                1 for item in formatted_evidence.items 
+                1 for item in formatted_evidence.items
                 if hasattr(item, 'source_label') and 'imdb' in item.source_label.lower()
             )
-        
+
         # Determine reason for fallback if Kaggle was attempted but not used
         fallback_reason = None
         if kaggle_outcome.get("attempted") and not kaggle_outcome.get("evidence_used"):
@@ -205,7 +206,7 @@ def write_failure_artifact(
                 fallback_reason = "error"
             else:
                 fallback_reason = "no_evidence"
-        
+
         kaggle_metadata = {
             "attempted": kaggle_outcome.get("attempted", False),
             "used": kaggle_outcome.get("evidence_used", False),
@@ -214,7 +215,7 @@ def write_failure_artifact(
             "fallback_reason": fallback_reason,
             "warnings": kaggle_outcome.get("warnings", [])
         }
-    
+
     # Build artifact JSON
     artifact = {
         "scenario": {
@@ -232,7 +233,7 @@ def write_failure_artifact(
         "timing_ms": timing_ms,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
     }
-    
+
     # Write JSON file with better error handling
     try:
         # Use a custom JSON encoder to handle edge cases
@@ -244,7 +245,7 @@ def write_failure_artifact(
                 return list(obj)
             else:
                 return str(obj)
-        
+
         # Write to temporary file first, then rename (atomic write)
         temp_file = artifact_file.with_suffix('.tmp')
         try:
@@ -256,10 +257,8 @@ def write_failure_artifact(
         except Exception as e:
             # Clean up temp file if it exists
             if temp_file.exists():
-                try:
+                with contextlib.suppress(BaseException):
                     temp_file.unlink()
-                except:
-                    pass
             raise e
     except (TypeError, ValueError) as e:
         # Try to identify what's not serializable
@@ -273,7 +272,7 @@ def write_failure_artifact(
                     json.dumps(value, default=str)
                 except Exception as e2:
                     error_msg += f"  - Problem with '{key}': {e2}\n"
-        except:
+        except Exception:
             pass
         error_msg += f"Traceback: {traceback.format_exc()}"
         print(f"Warning: Failed to write failure artifact to {artifact_file}")

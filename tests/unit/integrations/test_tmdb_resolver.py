@@ -10,15 +10,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from integrations.tmdb.resolver import (
-    TMDBResolveResult,
-    TMDBCandidate,
-    resolve_movie,
-    clear_resolve_cache,
-    _normalize_title,
-    _extract_year,
-    _score_candidate,
     MIN_CONFIDENCE_AUTO_SELECT,
-    MIN_SCORE_GAP_AUTO_SELECT,
+    TMDBCandidate,
+    TMDBResolveResult,
+    _extract_year,
+    _normalize_title,
+    _score_candidate,
+    clear_resolve_cache,
+    resolve_movie,
 )
 
 

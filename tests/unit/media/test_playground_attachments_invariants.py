@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from cinemind.media.playground_attachments import apply_playground_attachment_behavior, ATTACHMENT_DEBUG_KEY
+from cinemind.media.playground_attachments import ATTACHMENT_DEBUG_KEY, apply_playground_attachment_behavior
 
 
 def test_playground_single_movie_hero_not_in_did_you_mean():
@@ -36,12 +34,8 @@ def test_playground_single_movie_hero_not_in_did_you_mean():
     intent_result = MagicMock(intent="primary_movie", titles=["Inception"], rationale="1 movie")
     parsed = MagicMock(movies=[MagicMock(title="Inception", confidence=0.9)])
 
-    with patch("cinemind.media.playground_attachments.enrich", return_value=enrichment_result):
-        with patch("cinemind.media.playground_attachments._fetch_scenes_nonblocking", return_value=[]):
-            with patch("cinemind.media.playground_attachments.get_media_focus", return_value="single_movie"):
-                with patch("cinemind.media.playground_attachments.parse_response", return_value=parsed):
-                    with patch("cinemind.media.playground_attachments.classify_attachment_intent", return_value=intent_result):
-                        apply_playground_attachment_behavior("Inception (2010)", result)
+    with patch("cinemind.media.playground_attachments.enrich", return_value=enrichment_result), patch("cinemind.media.playground_attachments._fetch_scenes_nonblocking", return_value=[]), patch("cinemind.media.playground_attachments.get_media_focus", return_value="single_movie"), patch("cinemind.media.playground_attachments.parse_response", return_value=parsed), patch("cinemind.media.playground_attachments.classify_attachment_intent", return_value=intent_result):
+        apply_playground_attachment_behavior("Inception (2010)", result)
 
     sections = result.get("attachments", {}).get("sections", [])
     primary_section = next((s for s in sections if s.get("type") == "primary_movie"), None)
@@ -63,9 +57,7 @@ def test_playground_no_attachments_when_no_titles():
     result = {"response": "Some text with no movie titles."}
     parsed = MagicMock(movies=[], structure=MagicMock(), signals=MagicMock())
     intent_result = MagicMock(intent="none", titles=[], rationale="none")
-    with patch("cinemind.media.playground_attachments.parse_response", return_value=parsed):
-        with patch("cinemind.media.playground_attachments.get_search_phrases", return_value=[]):
-            with patch("cinemind.media.playground_attachments.classify_attachment_intent", return_value=intent_result):
-                apply_playground_attachment_behavior("Some text with no movie titles.", result)
+    with patch("cinemind.media.playground_attachments.parse_response", return_value=parsed), patch("cinemind.media.playground_attachments.get_search_phrases", return_value=[]), patch("cinemind.media.playground_attachments.classify_attachment_intent", return_value=intent_result):
+        apply_playground_attachment_behavior("Some text with no movie titles.", result)
     assert ATTACHMENT_DEBUG_KEY in result
     assert result[ATTACHMENT_DEBUG_KEY].get("detected_movie_count", 0) == 0

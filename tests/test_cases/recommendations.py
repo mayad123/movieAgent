@@ -1,5 +1,5 @@
 """Recommendation query test cases."""
-from .base import TestCase, contains_all_substrings, contains_at_least_n_items, min_length, contains_any_substring
+from .base import TestCase, contains_all_substrings, contains_any_substring, contains_at_least_n_items, min_length
 
 RECOMMENDATION_TESTS = [
     TestCase(

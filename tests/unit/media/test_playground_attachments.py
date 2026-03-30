@@ -5,15 +5,13 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
+from cinemind.media.media_enrichment import SECTION_MOVIE_LIST, SECTION_PRIMARY_MOVIE, SECTION_SCENES
 from cinemind.media.playground_attachments import (
-    apply_playground_attachment_behavior,
     ATTACHMENT_DEBUG_KEY,
+    apply_playground_attachment_behavior,
 )
-from cinemind.media.media_enrichment import SECTION_PRIMARY_MOVIE, SECTION_MOVIE_LIST, SECTION_SCENES
 
 
 def test_attachment_debug_key_set():

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 
@@ -38,7 +36,6 @@ def test_parse_movie_hub_genre_buckets_parses_genre_and_numbered_items():
 
 
 def test_parse_movie_hub_genre_buckets_falls_back_when_structured_signal_too_low(monkeypatch: pytest.MonkeyPatch):
-    from src.cinemind import media as cinemind_media
 
     from src.cinemind.media import movie_hub_genre_parsing as p
 

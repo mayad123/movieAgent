@@ -1,5 +1,5 @@
 """Service interfaces used by workflows. Workflows depend on these, not on concrete implementations."""
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Protocol
 
 
 class IAgentRunner(Protocol):
@@ -9,10 +9,10 @@ class IAgentRunner(Protocol):
         self,
         user_query: str,
         use_live_data: bool = True,
-        request_id: Optional[str] = None,
-        request_type: Optional[str] = None,
-        outcome: Optional[str] = None,
+        request_id: str | None = None,
+        request_type: str | None = None,
+        outcome: str | None = None,
         playground_mode: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Run the full agent pipeline and return the result dict."""
         ...

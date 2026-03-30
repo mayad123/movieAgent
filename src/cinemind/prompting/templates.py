@@ -2,7 +2,6 @@
 Response contract templates for CineMind.
 Defines deterministic verbosity, structure, and style per request_type/intent.
 """
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
 
@@ -11,29 +10,29 @@ class ResponseTemplate:
     """Template defining response contract for a request type/intent."""
     # Identifier
     template_id: str
-    
+
     # Verbosity constraints
-    max_sentences: Optional[int] = None
-    max_words: Optional[int] = None
-    min_sentences: Optional[int] = None
-    
+    max_sentences: int | None = None
+    max_words: int | None = None
+    min_sentences: int | None = None
+
     # Required elements
-    required_elements: List[str] = field(default_factory=list)  # e.g., "answer_first", "include_as_of_date"
-    
+    required_elements: list[str] = field(default_factory=list)  # e.g., "answer_first", "include_as_of_date"
+
     # Forbidden output terms (should not appear in user-facing responses)
-    forbidden_terms: List[str] = field(default_factory=list)  # e.g., "Tier", "dataset", "confidence framework"
-    
+    forbidden_terms: list[str] = field(default_factory=list)  # e.g., "Tier", "dataset", "confidence framework"
+
     # Citation style requirements
     citation_style: str = "natural"  # "natural", "minimal", "none"
-    citation_examples: List[str] = field(default_factory=list)  # e.g., "according to IMDb", "per Wikipedia"
-    
+    citation_examples: list[str] = field(default_factory=list)  # e.g., "according to IMDb", "per Wikipedia"
+
     # Structure requirements
-    structure_hints: List[str] = field(default_factory=list)  # e.g., "direct_answer", "list_format"
-    
+    structure_hints: list[str] = field(default_factory=list)  # e.g., "direct_answer", "list_format"
+
     def to_instructions(self) -> str:
         """Convert template to instruction text for RESPONSE INSTRUCTIONS block."""
         instructions = []
-        
+
         # Verbosity constraints
         if self.max_sentences or self.max_words:
             verbosity_parts = []
@@ -43,10 +42,10 @@ class ResponseTemplate:
                 verbosity_parts.append(f"maximum {self.max_words} words")
             if verbosity_parts:
                 instructions.append(f"Length: {' or '.join(verbosity_parts)}. Be concise and direct.")
-        
+
         if self.min_sentences:
             instructions.append(f"Minimum {self.min_sentences} sentence{'s' if self.min_sentences > 1 else ''}.")
-        
+
         # Required elements
         if self.required_elements:
             elements_text = []
@@ -63,10 +62,10 @@ class ResponseTemplate:
                     elements_text.append("Use bullet list format")
                 else:
                     elements_text.append(element.replace("_", " ").title())
-            
+
             if elements_text:
                 instructions.append("Required elements: " + "; ".join(elements_text) + ".")
-        
+
         # Structure hints
         if self.structure_hints:
             for hint in self.structure_hints:
@@ -80,7 +79,7 @@ class ResponseTemplate:
                     instructions.append("Structure: Use comparison format, clearly distinguishing between items.")
                 else:
                     instructions.append(f"Structure: {hint}")
-        
+
         # Citation style
         if self.citation_style == "natural":
             instructions.append("Citation style: Cite sources naturally (e.g., 'according to IMDb', 'per Wikipedia'). Avoid technical source names.")
@@ -88,22 +87,22 @@ class ResponseTemplate:
             instructions.append("Citation style: Minimal citations, only when necessary for credibility.")
         elif self.citation_style == "none":
             instructions.append("Citation style: No explicit citations needed.")
-        
+
         # Forbidden terms
         if self.forbidden_terms:
             forbidden_text = ", ".join([f'"{term}"' for term in self.forbidden_terms])
             instructions.append(f"Forbidden terms: Never use these terms in the response: {forbidden_text}.")
-        
+
         instructions.append(
             "Plain text only: do not use markdown emphasis or dividers (no **, ***, __, or lines of only * or -). "
             "For lists use lines starting with 1. or 2. or with - ."
         )
-        
+
         return "\n".join(instructions)
 
 
 # Template registry by request_type/intent
-RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
+RESPONSE_TEMPLATES: dict[str, ResponseTemplate] = {
     # Simple fact queries - very concise
     "director_info": ResponseTemplate(
         template_id="director_info",
@@ -115,7 +114,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_examples=["according to IMDb", "per Wikipedia"],
         structure_hints=["direct_answer"]
     ),
-    
+
     "cast_info": ResponseTemplate(
         template_id="cast_info",
         max_sentences=3,
@@ -125,7 +124,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["list_format"]
     ),
-    
+
     "release_date": ResponseTemplate(
         template_id="release_date",
         max_sentences=2,
@@ -135,7 +134,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["direct_answer"]
     ),
-    
+
     "release_year": ResponseTemplate(
         template_id="release_year",
         max_sentences=2,
@@ -145,7 +144,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["direct_answer"]
     ),
-    
+
     "runtime": ResponseTemplate(
         template_id="runtime",
         max_sentences=2,
@@ -155,7 +154,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="minimal",
         structure_hints=["direct_answer"]
     ),
-    
+
     # Freshness-sensitive queries
     "where_to_watch": ResponseTemplate(
         template_id="where_to_watch",
@@ -166,7 +165,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["list_format"]
     ),
-    
+
     "availability": ResponseTemplate(
         template_id="availability",
         max_sentences=3,
@@ -176,7 +175,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["direct_answer"]
     ),
-    
+
     # Recommendations
     "recommendation": ResponseTemplate(
         template_id="recommendation",
@@ -188,7 +187,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["list_format"]
     ),
-    
+
     "similar_movies": ResponseTemplate(
         template_id="similar_movies",
         max_sentences=12,
@@ -198,7 +197,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="minimal",
         structure_hints=["list_format"]
     ),
-    
+
     # Comparison/analysis
     "comparison": ResponseTemplate(
         template_id="comparison",
@@ -210,7 +209,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["comparison_table"]
     ),
-    
+
     "filmography_overlap": ResponseTemplate(
         template_id="filmography_overlap",
         max_sentences=15,
@@ -220,7 +219,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["list_format"]
     ),
-    
+
     # General info - more flexible
     "general_info": ResponseTemplate(
         template_id="general_info",
@@ -231,7 +230,7 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
         citation_style="natural",
         structure_hints=["direct_answer"]
     ),
-    
+
     "fact_check": ResponseTemplate(
         template_id="fact_check",
         max_sentences=3,
@@ -247,23 +246,23 @@ RESPONSE_TEMPLATES: Dict[str, ResponseTemplate] = {
 def get_template(request_type: str, intent: str) -> ResponseTemplate:
     """
     Get response template for request_type/intent combination.
-    
+
     Priority:
     1. Try intent first (more specific)
     2. Fall back to request_type
     3. Fall back to general_info template
-    
+
     Args:
         request_type: Request type (e.g., "info", "recs", "comparison")
         intent: Intent (e.g., "director_info", "cast_info", "recommendation")
-    
+
     Returns:
         ResponseTemplate
     """
     # Try intent first (more specific)
     if intent and intent in RESPONSE_TEMPLATES:
         return RESPONSE_TEMPLATES[intent]
-    
+
     # Map request_type to intent-style keys
     request_type_to_template = {
         "info": "general_info",
@@ -273,16 +272,16 @@ def get_template(request_type: str, intent: str) -> ResponseTemplate:
         "release-date": "release_date",
         "spoiler": "general_info",
     }
-    
+
     template_key = request_type_to_template.get(request_type)
     if template_key and template_key in RESPONSE_TEMPLATES:
         return RESPONSE_TEMPLATES[template_key]
-    
+
     # Fallback to general_info
     return RESPONSE_TEMPLATES.get("general_info", ResponseTemplate(template_id="default"))
 
 
-def list_all_templates() -> Dict[str, ResponseTemplate]:
+def list_all_templates() -> dict[str, ResponseTemplate]:
     """List all available templates."""
     return RESPONSE_TEMPLATES.copy()
 

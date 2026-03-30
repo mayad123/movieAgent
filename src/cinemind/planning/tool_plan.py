@@ -3,9 +3,9 @@ Tool planning and routing based on freshness requirements.
 Decides which tools to call (or skip) before making any API calls.
 """
 import logging
-from typing import Any, List, Optional, Tuple, Dict
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +28,18 @@ class ToolPlan:
     use_wiki_lookup: bool = False  # Should we use Wikipedia/Wikidata?
     use_cache: bool = True  # Should we check cache first?
     use_structured_db: bool = True  # Should we try structured sources first?
-    freshness_reason: Optional[str] = None
-    skip_reason: Optional[str] = None
-    
+    freshness_reason: str | None = None
+    skip_reason: str | None = None
+
     # Search usage tracking (populated after execution)
     tool_plan_skip_tavily: bool = False  # What the tool plan said (before overrides)
     tavily_used: bool = False  # Whether Tavily was actually used
     fallback_used: bool = False  # Whether fallback search was used
-    fallback_provider: Optional[str] = None  # Name of fallback provider (e.g., "duckduckgo")
+    fallback_provider: str | None = None  # Name of fallback provider (e.g., "duckduckgo")
     override_used: bool = False  # Whether tool plan decision was overridden
-    override_reason: Optional[str] = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
-    
-    def to_dict(self) -> Dict[str, Any]:
+    override_reason: str | None = None  # Reason for override: "disambiguation_needed", "structured_lookup_empty", "tier_a_missing"
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "use_tavily": self.use_tavily,
@@ -63,42 +63,42 @@ class ToolPlanner:
     Creates tool plans based on freshness requirements and intent.
     Implements freshness-based routing that happens before Tavily is considered.
     """
-    
+
     # Movie age threshold (years) - movies older than this don't need freshness for stable metadata
     MOVIE_AGE_THRESHOLD = 2  # 2-3 years old = stable
-    
-    def __init__(self, current_year: Optional[int] = None) -> None:
+
+    def __init__(self, current_year: int | None = None) -> None:
         """
         Initialize tool planner.
-        
+
         Args:
             current_year: Current year (defaults to 2024 if not provided)
         """
         from datetime import datetime
         self.current_year = current_year or datetime.now().year
-    
-    def determine_freshness(self, intent: str, freshness_signal: bool, entities: Dict[str, List[str]], 
-                           candidate_year: Optional[int] = None, mentioned_year: Optional[int] = None) -> Tuple[bool, float, str]:
+
+    def determine_freshness(self, intent: str, freshness_signal: bool, entities: dict[str, list[str]],
+                           candidate_year: int | None = None, mentioned_year: int | None = None) -> tuple[bool, float, str]:
         """
         Determine final freshness requirement based on intent + entity year + signal.
-        
+
         Args:
             intent: Intent type (e.g., "director_info", "release_status")
             freshness_signal: Weak signal from classifier (might need fresh data - e.g., "today", "currently")
             entities: Typed entities {"movies": [...], "people": [...]}
             candidate_year: Optional year for disambiguation
             mentioned_year: Optional year mentioned in query (for award queries, etc.)
-        
+
         Returns:
             (need_freshness: bool, ttl_hours: float, reason: str)
         """
         # Determine which year to use (prefer candidate_year for disambiguation, then mentioned_year)
         entity_year = candidate_year or mentioned_year
-        
+
         # Step 1: Check if intent is stable (metadata that doesn't change)
         stable_intents = ["director_info", "cast_info", "filmography_overlap", "general_info", "comparison"]
         is_stable_intent = intent in stable_intents
-        
+
         # Step 2: For volatile intents, always need freshness
         volatile_intents = ["release_status", "where_to_watch", "awards_current_year"]
         if intent in volatile_intents:
@@ -106,7 +106,7 @@ class ToolPlanner:
             reason = f"volatile intent '{intent}' requires fresh data"
             logger.info(f"Freshness decision: {reason} - need_freshness=True")
             return (True, ttl_hours, reason)
-        
+
         # Step 3: For release_date intent, check if it's about upcoming/recent releases
         if intent == "release_date":
             # If no year or recent year, likely needs freshness
@@ -120,14 +120,14 @@ class ToolPlanner:
                 reason = f"release_date intent for old movie ({entity_year})"
                 logger.info(f"Freshness decision: {reason} - need_freshness=False")
                 return (False, ttl_hours, reason)
-        
+
         # Step 4: For stable intents with old movies, override signal to False
         if is_stable_intent and entity_year and (self.current_year - entity_year) > self.MOVIE_AGE_THRESHOLD:
             reason = f"stable intent '{intent}' with old movie ({entity_year}, age > {self.MOVIE_AGE_THRESHOLD} years)"
             ttl_hours = 720.0  # 30 days for stable metadata
             logger.info(f"Freshness override: {reason} - need_freshness=False (signal was {freshness_signal})")
             return (False, ttl_hours, reason)
-        
+
         # Step 5: For stable intents without old movie, respect freshness_signal
         # (e.g., "where to watch today" should have freshness_signal=True and result in need_freshness=True)
         if is_stable_intent:
@@ -140,19 +140,19 @@ class ToolPlanner:
                 ttl_hours = 720.0  # 30 days for stable metadata
                 reason = f"stable intent '{intent}' - metadata doesn't change"
                 return (False, ttl_hours, reason)
-        
+
         # Step 6: Default: use signal
         ttl_hours = 168.0  # 7 days default
         reason = f"default decision based on freshness_signal={freshness_signal}"
         logger.info(f"Freshness decision: {reason} - need_freshness={freshness_signal}")
         return (freshness_signal, ttl_hours, reason)
-    
-    def plan_tools(self, intent: str, need_freshness: bool, freshness_reason: Optional[str],
-                   entities: Dict[str, List[str]], candidate_year: Optional[int] = None,
+
+    def plan_tools(self, intent: str, need_freshness: bool, freshness_reason: str | None,
+                   entities: dict[str, list[str]], candidate_year: int | None = None,
                    requires_disambiguation: bool = False) -> ToolPlan:
         """
         Create tool plan based on freshness requirements.
-        
+
         Args:
             intent: Intent type (e.g., "director_info", "release_status")
             need_freshness: Whether query needs fresh data
@@ -160,24 +160,24 @@ class ToolPlanner:
             entities: Typed entities {"movies": [...], "people": [...]}
             candidate_year: Optional year from query
             requires_disambiguation: Whether title is ambiguous
-        
+
         Returns:
             ToolPlan with tool usage decisions
         """
-        movies = entities.get("movies", [])
+        entities.get("movies", [])
         movie_year = candidate_year
-        
+
         # Step 1: For stable intents, check movie age as second gate
         stable_intents = ["director_info", "cast_info", "filmography_overlap", "general_info", "comparison"]
         is_stable_intent = intent in stable_intents
-        
+
         # If we have a movie year and it's an old movie, force no freshness for stable intents
         if is_stable_intent and movie_year and (self.current_year - movie_year) > self.MOVIE_AGE_THRESHOLD:
             # Old movie + stable intent = no freshness needed
             need_freshness = False
             freshness_reason = f"movie from {movie_year} is stable metadata (age > {self.MOVIE_AGE_THRESHOLD} years)"
             logger.info(f"Movie age gate: {movie_year} is old enough, forcing need_freshness=False for stable intent")
-        
+
         # Step 2: Create tool plan based on freshness
         if not need_freshness:
             # Stable intent: Try cache → structured DB → Tier A lookup first
@@ -206,30 +206,30 @@ class ToolPlanner:
             )
             tool_plan.tool_plan_skip_tavily = False
             return tool_plan
-    
-    def should_skip_tavily(self, tool_plan: ToolPlan, cache_hit: bool = False, 
-                           need_freshness: bool = False) -> Tuple[bool, str]:
+
+    def should_skip_tavily(self, tool_plan: ToolPlan, cache_hit: bool = False,
+                           need_freshness: bool = False) -> tuple[bool, str]:
         """
         Final decision: Should we skip Tavily?
-        
+
         Simplified logic:
         - If cache_hit and need_freshness == False → skip Tavily
-        
+
         Args:
             tool_plan: Tool plan from plan_tools()
             cache_hit: Whether we have a cache hit
             need_freshness: Whether query needs fresh data
-        
+
         Returns:
             (should_skip: bool, reason: str)
         """
         # Store the tool plan's original decision
         tool_plan.tool_plan_skip_tavily = not tool_plan.use_tavily
-        
+
         # Simplified logic: skip if cache hit and no freshness needed
         if cache_hit and not need_freshness:
             return (True, "cache hit for stable intent")
-        
+
         # Default: follow tool plan
         should_skip = not tool_plan.use_tavily
         reason = tool_plan.skip_reason or ("stable intent, no Tavily needed" if should_skip else "tool plan allows Tavily")

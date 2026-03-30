@@ -2,14 +2,11 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from cinemind.extraction.title_extraction import (
     extract_movie_titles,
     get_search_phrases,
-    TitleExtractionResult,
 )
 
 

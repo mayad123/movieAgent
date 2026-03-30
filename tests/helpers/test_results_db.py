@@ -2,24 +2,21 @@
 Database schema for storing test results.
 Provides better querying and analysis than JSON files.
 """
+import logging
 import os
 import sqlite3
-import json
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from contextlib import contextmanager
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class TestResultsDB:
     """Database for storing and querying test results."""
-    
-    def __init__(self, db_path: Optional[str] = None):
+
+    def __init__(self, db_path: str | None = None):
         """
         Initialize test results database.
-        
+
         Args:
             db_path: Path to SQLite database (default: test_results.db)
         """
@@ -27,11 +24,11 @@ class TestResultsDB:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
-    
+
     def _create_tables(self):
         """Create database tables for test results."""
         cursor = self.conn.cursor()
-        
+
         # Test runs table (summary of each test run)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS test_runs (
@@ -51,7 +48,7 @@ class TestResultsDB:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # Test results table (individual test results)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS test_results (
@@ -72,7 +69,7 @@ class TestResultsDB:
                 FOREIGN KEY (run_id) REFERENCES test_runs(run_id)
             )
         """)
-        
+
         # Criteria results table (individual criteria evaluations)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS criteria_results (
@@ -85,7 +82,7 @@ class TestResultsDB:
                 FOREIGN KEY (test_result_id) REFERENCES test_results(id)
             )
         """)
-        
+
         # Search results table (search information from tests)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS test_search_results (
@@ -102,24 +99,24 @@ class TestResultsDB:
                 FOREIGN KEY (test_result_id) REFERENCES test_results(id)
             )
         """)
-        
+
         # Create indexes for faster queries
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_runs_timestamp ON test_runs(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_runs_prompt_version ON test_runs(prompt_version)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_results_run_id ON test_results(run_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_results_test_name ON test_results(test_name)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_results_passed ON test_results(passed)")
-        
+
         self.conn.commit()
         logger.info("Test results database tables created successfully")
-    
-    def save_test_run(self, run_data: Dict) -> str:
+
+    def save_test_run(self, run_data: dict) -> str:
         """
         Save a complete test run to the database.
-        
+
         Args:
             run_data: Dictionary with test run data (from evaluator.generate_report)
-            
+
         Returns:
             run_id: Unique identifier for this test run
         """
@@ -127,9 +124,9 @@ class TestResultsDB:
         run_id = str(uuid.uuid4())
         timestamp = run_data.get('timestamp', datetime.now().isoformat())
         summary = run_data.get('summary', {})
-        
+
         cursor = self.conn.cursor()
-        
+
         # Insert test run summary
         cursor.execute("""
             INSERT INTO test_runs (
@@ -151,7 +148,7 @@ class TestResultsDB:
             run_data.get('total_cost_usd', 0),
             run_data.get('test_suite', 'all')
         ))
-        
+
         # Insert individual test results
         for test_result in run_data.get('results', []):
             cursor.execute("""
@@ -174,9 +171,9 @@ class TestResultsDB:
                 test_result.get('agent_config_version'),
                 ', '.join(test_result.get('errors', []))
             ))
-            
+
             test_result_id = cursor.lastrowid
-            
+
             # Insert criteria results
             for criterion_name, passed, message in test_result.get('criteria_results', []):
                 cursor.execute("""
@@ -184,7 +181,7 @@ class TestResultsDB:
                         test_result_id, criterion_name, passed, message
                     ) VALUES (?, ?, ?, ?)
                 """, (test_result_id, criterion_name, 1 if passed else 0, message))
-            
+
             # Insert search results
             for search_group in test_result.get('searches', []):
                 for result in search_group.get('results', []):
@@ -203,58 +200,58 @@ class TestResultsDB:
                         result.get('published_at'),
                         result.get('last_updated_at')
                     ))
-        
+
         self.conn.commit()
         logger.info(f"Saved test run {run_id} with {summary.get('total_tests', 0)} tests")
         return run_id
-    
-    def get_test_runs(self, limit: int = 100, prompt_version: Optional[str] = None,
-                     start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict]:
+
+    def get_test_runs(self, limit: int = 100, prompt_version: str | None = None,
+                     start_date: str | None = None, end_date: str | None = None) -> list[dict]:
         """Get test runs with optional filtering."""
         cursor = self.conn.cursor()
         where_clauses = []
         params = []
-        
+
         if prompt_version:
             where_clauses.append("prompt_version = ?")
             params.append(prompt_version)
-        
+
         if start_date:
             where_clauses.append("timestamp >= ?")
             params.append(start_date)
-        
+
         if end_date:
             where_clauses.append("timestamp <= ?")
             params.append(end_date)
-        
+
         where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
         params.append(limit)
-        
+
         cursor.execute(f"""
             SELECT * FROM test_runs
             {where_sql}
             ORDER BY timestamp DESC
             LIMIT ?
         """, params)
-        
+
         rows = cursor.fetchall()
-        return [dict(zip([col[0] for col in cursor.description], row)) for row in rows]
-    
-    def get_test_statistics(self, prompt_version: Optional[str] = None,
-                           days: int = 30) -> Dict:
+        return [dict(zip([col[0] for col in cursor.description], row, strict=False)) for row in rows]
+
+    def get_test_statistics(self, prompt_version: str | None = None,
+                           days: int = 30) -> dict:
         """Get aggregated statistics for test runs."""
         cursor = self.conn.cursor()
         params = []
-        
+
         where_clause = "WHERE timestamp >= datetime('now', '-' || ? || ' days')"
         params.append(str(days))
-        
+
         if prompt_version:
             where_clause += " AND prompt_version = ?"
             params.append(prompt_version)
-        
+
         cursor.execute(f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_runs,
                 AVG(pass_rate) as avg_pass_rate,
                 AVG(avg_execution_time_ms) as avg_execution_time,
@@ -265,17 +262,17 @@ class TestResultsDB:
             FROM test_runs
             {where_clause}
         """, params)
-        
+
         row = cursor.fetchone()
         if row:
-            return dict(zip([col[0] for col in cursor.description], row))
+            return dict(zip([col[0] for col in cursor.description], row, strict=False))
         return {}
-    
-    def get_test_by_name_history(self, test_name: str, limit: int = 50) -> List[Dict]:
+
+    def get_test_by_name_history(self, test_name: str, limit: int = 50) -> list[dict]:
         """Get history of a specific test across all runs."""
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT 
+            SELECT
                 tr.run_id,
                 tr.timestamp,
                 tr.prompt_version,
@@ -290,10 +287,10 @@ class TestResultsDB:
             ORDER BY tr.timestamp DESC
             LIMIT ?
         """, (test_name, limit))
-        
+
         rows = cursor.fetchall()
-        return [dict(zip([col[0] for col in cursor.description], row)) for row in rows]
-    
+        return [dict(zip([col[0] for col in cursor.description], row, strict=False)) for row in rows]
+
     def close(self):
         """Close database connection."""
         if self.conn:

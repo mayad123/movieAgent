@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 
-**An applied AI system for real-time movie intelligence.** CineMind combines agentic LLM orchestration, multi-source retrieval, fact verification, and semantic caching into a production-quality pipeline — built to explore what it takes to ship a reliable, grounded LLM-powered product end-to-end.
+**An applied AI system for real-time movie intelligence.** CineMind combines agentic LLM orchestration, multi-source retrieval, fact verification, and semantic caching into a pipeline.
 
 ---
 
@@ -23,7 +23,7 @@ Ask anything about movies — cast, directors, recommendations, trivia. Response
   <img src="assets/hub-preview.svg" alt="CineMind Movie Hub — sub-context exploration with AI-curated similar film clusters" width="100%"/>
 </p>
 
-Click any movie in a response to open its **Movie Hub** — a dedicated sub-conversation with three AI-curated clusters of similar titles organised by **genre**, **tone/theme**, and **cast/crew**. Ask follow-up questions within the hub to filter the results in real time; each filter is logged in a **filter history** strip so you can see how the LLM narrowed the selection. The breadcrumb header keeps you oriented and lets you return to the main conversation at any point.
+Click any movie in a response to open its **Movie Hub** — a dedicated sub-conversation with three AI-curated clusters of similar titles organised by **genre** Ask follow-up questions within the hub to filter the results in real time; each filter is logged in a **filter history** strip so you can see how the LLM narrowed the selection. The breadcrumb header keeps you oriented and lets you return to the main conversation at any point.
 
 ### Movie Details — full-screen view with cast, streaming availability, and direct ask-about CTA
 

@@ -1,51 +1,52 @@
 """
 Enhanced scenario loader for constructing RequestPlan and EvidenceBundle from fixtures.
 """
-import yaml
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
+
+import yaml
 
 from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
 from cinemind.prompting import EvidenceBundle
 
 
-def load_scenario_file(scenario_path: Path) -> Dict[str, Any]:
+def load_scenario_file(scenario_path: Path) -> dict[str, Any]:
     """
     Load a scenario file (YAML or JSON).
-    
+
     Args:
         scenario_path: Path to scenario file
-        
+
     Returns:
         Dictionary containing scenario data
     """
-    with open(scenario_path, "r", encoding="utf-8") as f:
+    with open(scenario_path, encoding="utf-8") as f:
         if scenario_path.suffix in (".yaml", ".yml"):
             return yaml.safe_load(f)
         else:
             return json.load(f)
 
 
-def load_all_scenarios(scenario_set_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+def load_all_scenarios(scenario_set_filter: str | None = None) -> list[dict[str, Any]]:
     """
     Load all scenario files from tests/fixtures/scenarios/gold/ and tests/fixtures/scenarios/explore/.
-    
+
     Args:
         scenario_set_filter: Optional filter to load only "gold" or "explore" scenarios.
                             If None, loads both sets.
-    
+
     Returns:
         List of scenario dictionaries with scenario_set metadata
     """
     fixtures_dir = Path(__file__).parent
     scenarios_dir = fixtures_dir / "scenarios"
-    
+
     if not scenarios_dir.exists():
         return []
-    
+
     scenarios = []
-    
+
     # Define which sets to load
     sets_to_load = []
     # Treat empty string as None (no filter)
@@ -53,13 +54,13 @@ def load_all_scenarios(scenario_set_filter: Optional[str] = None) -> List[Dict[s
         sets_to_load = [scenario_set_filter.strip().lower()]
     else:
         sets_to_load = ["gold", "explore"]
-    
+
     # Load scenarios from each set
     for scenario_set in sets_to_load:
         set_dir = scenarios_dir / scenario_set
         if not set_dir.exists():
             continue
-        
+
         for ext in ["yaml", "yml", "json"]:
             for path in sorted(set_dir.glob(f"*.{ext}")):  # Sort for consistent ordering
                 try:
@@ -78,26 +79,26 @@ def load_all_scenarios(scenario_set_filter: Optional[str] = None) -> List[Dict[s
                     import traceback
                     traceback.print_exc()
                     continue
-    
+
     return scenarios
 
 
-def build_request_plan(scenario: Dict[str, Any]) -> RequestPlan:
+def build_request_plan(scenario: dict[str, Any]) -> RequestPlan:
     """
     Construct a RequestPlan from scenario data.
-    
+
     Args:
         scenario: Scenario dictionary with "request_plan" key
-        
+
     Returns:
         RequestPlan object
     """
     rp_data = scenario.get("request_plan", {})
-    
+
     # Extract required fields
     intent = rp_data.get("intent", "general_info")
     request_type = rp_data.get("request_type", "info")
-    
+
     # Extract entities_typed
     entities_typed = rp_data.get("entities_typed", {})
     if not isinstance(entities_typed, dict):
@@ -106,7 +107,7 @@ def build_request_plan(scenario: Dict[str, Any]) -> RequestPlan:
         entities_typed["movies"] = []
     if "people" not in entities_typed:
         entities_typed["people"] = []
-    
+
     # Extract optional fields with defaults
     need_freshness = rp_data.get("need_freshness", False)
     freshness_ttl_hours = rp_data.get("freshness_ttl_hours", 24.0)
@@ -115,13 +116,13 @@ def build_request_plan(scenario: Dict[str, Any]) -> RequestPlan:
     reject_tier_c = rp_data.get("reject_tier_c", True)
     response_format_str = rp_data.get("response_format", "short_fact")
     entity_years = rp_data.get("entity_years", {})
-    
+
     # Convert response_format string to enum
     try:
         response_format = ResponseFormat(response_format_str)
     except ValueError:
         response_format = ResponseFormat.SHORT_FACT
-    
+
     # Build RequestPlan
     # Note: constraints are not stored in RequestPlan, they're part of StructuredIntent
     return RequestPlan(
@@ -141,18 +142,18 @@ def build_request_plan(scenario: Dict[str, Any]) -> RequestPlan:
     )
 
 
-def build_evidence_bundle(scenario: Dict[str, Any]) -> EvidenceBundle:
+def build_evidence_bundle(scenario: dict[str, Any]) -> EvidenceBundle:
     """
     Construct an EvidenceBundle from scenario data.
-    
+
     Args:
         scenario: Scenario dictionary with "evidence_input" key
-        
+
     Returns:
         EvidenceBundle object
     """
     evidence_input = scenario.get("evidence_input", [])
-    
+
     # Convert evidence items to search_results format
     search_results = []
     for item in evidence_input:
@@ -168,20 +169,20 @@ def build_evidence_bundle(scenario: Dict[str, Any]) -> EvidenceBundle:
         if "year" in item:
             result["release_year"] = item["year"]
         search_results.append(result)
-    
+
     return EvidenceBundle(
         search_results=search_results,
         verified_facts=None
     )
 
 
-def get_expected_checks(scenario: Dict[str, Any]) -> Dict[str, Any]:
+def get_expected_checks(scenario: dict[str, Any]) -> dict[str, Any]:
     """
     Extract expected checks from scenario.
-    
+
     Args:
         scenario: Scenario dictionary with "expected" key
-        
+
     Returns:
         Dictionary with expected checks
     """

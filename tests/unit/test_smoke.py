@@ -1,12 +1,10 @@
 """
 Smoke test to verify the pytest test harness is working correctly.
 """
-import pytest
-from pathlib import Path
 
-from tests.fixtures.loader import load_scenario, list_scenarios
 from cinemind.planning.request_plan import RequestPlan
 from cinemind.prompting.prompt_builder import EvidenceBundle
+from tests.fixtures.loader import list_scenarios
 
 
 def test_harness_imports():
@@ -20,7 +18,7 @@ def test_fixtures_available(minimal_request_plan, minimal_evidence_bundle):
     assert minimal_request_plan is not None
     assert isinstance(minimal_request_plan, RequestPlan)
     assert minimal_request_plan.intent == "general_info"
-    
+
     assert minimal_evidence_bundle is not None
     assert isinstance(minimal_evidence_bundle, EvidenceBundle)
     assert minimal_evidence_bundle.search_results == []

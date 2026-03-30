@@ -5,8 +5,6 @@ Run with: PYTHONPATH=src pytest tests/unit/test_where_to_watch_normalizer.py -v
 import sys
 from pathlib import Path
 
-import pytest
-
 _src = Path(__file__).resolve().parent.parent.parent / "src"
 if _src.exists() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))

@@ -11,9 +11,8 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, List, Optional
 
 # Default path: project_root/data/playground_projects.json (create data/ if needed)
 _project_root = Path(__file__).resolve().parent.parent
@@ -25,12 +24,12 @@ def _ensure_data_dir() -> None:
     _data_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _read_raw() -> List[dict]:
+def _read_raw() -> list[dict]:
     """Read projects from file. Returns empty list if missing or invalid."""
     if not _store_path.exists():
         return []
     try:
-        with open(_store_path, "r", encoding="utf-8") as f:
+        with open(_store_path, encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
         return []
@@ -39,7 +38,7 @@ def _read_raw() -> List[dict]:
     return data
 
 
-def _write_raw(projects: List[dict]) -> None:
+def _write_raw(projects: list[dict]) -> None:
     _ensure_data_dir()
     with open(_store_path, "w", encoding="utf-8") as f:
         json.dump(projects, f, indent=2, ensure_ascii=False)
@@ -53,7 +52,7 @@ def _normalize(raw: dict) -> dict:
     return {
         "id": str(raw.get("id") or uuid.uuid4()),
         "name": str(raw.get("name") or "").strip() or "Unnamed",
-        "createdAt": raw.get("createdAt") or datetime.now(timezone.utc).isoformat(),
+        "createdAt": raw.get("createdAt") or datetime.now(UTC).isoformat(),
         "description": str(raw.get("description") or "").strip() if raw.get("description") is not None else "",
         "assets": [_normalize_asset(a) for a in assets if isinstance(a, dict)],
     }
@@ -79,7 +78,7 @@ def _normalize_asset(raw: dict) -> dict:
         "pageUrl": page_url or None,
         "pageId": (page_id or "").strip() or None,
         "conversationId": str(raw.get("conversationId") or "").strip() or None,
-        "capturedAt": raw.get("capturedAt") or datetime.now(timezone.utc).isoformat(),
+        "capturedAt": raw.get("capturedAt") or datetime.now(UTC).isoformat(),
         "storedRef": stored_ref,
     }
 
@@ -94,13 +93,13 @@ def _asset_dedup_key(asset: dict) -> str:
 # --- Public API (replace implementation for auth/hosting later) ---
 
 
-def list_all() -> List[dict]:
+def list_all() -> list[dict]:
     """Return all projects (id, name, createdAt, description, assets)."""
     raw_list = _read_raw()
     return [_normalize(p) for p in raw_list if isinstance(p, dict)]
 
 
-def get_by_id(project_id: str) -> Optional[dict]:
+def get_by_id(project_id: str) -> dict | None:
     """Return one project by id (with assets) or None."""
     project_id = str(project_id).strip()
     if not project_id:
@@ -112,7 +111,7 @@ def get_by_id(project_id: str) -> Optional[dict]:
     return None
 
 
-def add_assets(project_id: str, new_assets: List[dict]) -> int:
+def add_assets(project_id: str, new_assets: list[dict]) -> int:
     """
     Append assets to a project with de-duplication (by pageUrl or posterImageUrl+title).
     Returns the number of assets actually added.
@@ -178,7 +177,7 @@ def create(name: str, description: str = "") -> dict:
     project = _normalize({
         "id": str(uuid.uuid4()),
         "name": name,
-        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "createdAt": datetime.now(UTC).isoformat(),
         "description": description,
     })
     projects.append(project)

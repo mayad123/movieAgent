@@ -2,19 +2,17 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from cinemind.media.media_enrichment import (
+    SECTION_DID_YOU_MEAN,
+    SECTION_MOVIE_LIST,
+    SECTION_PRIMARY_MOVIE,
     MediaEnrichmentResult,
-    enrich,
-    enrich_batch,
     attach_media_to_result,
     build_attachments_from_media,
-    SECTION_PRIMARY_MOVIE,
-    SECTION_MOVIE_LIST,
-    SECTION_DID_YOU_MEAN,
+    enrich,
+    enrich_batch,
 )
 
 

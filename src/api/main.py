@@ -2,16 +2,17 @@
 REST API wrapper for CineMind agent.
 For operationalization and deployment.
 """
+import contextlib
 import json
 import logging
 import os
 import re
 import time
 import uuid
-from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Path as ApiPath, Query
+from fastapi import FastAPI, HTTPException, Query
+from fastapi import Path as ApiPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -23,34 +24,32 @@ try:
     if str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
 
-    from cinemind.agent import CineMind
-    from cinemind.agent import AgentMode, get_configured_mode, resolve_effective_mode
-    from config import REAL_AGENT_TIMEOUT_SECONDS, is_watchmode_configured, is_llm_configured
-    from cinemind.infrastructure import Database
-    from cinemind.infrastructure import Observability
-    from cinemind.infrastructure import ProjectsStore
-    from cinemind.infrastructure.tagging import RequestTagger, OUTCOMES
-    from workflows import run_real_agent_with_fallback as run_real_agent_workflow, run_playground
+    from cinemind.agent import AgentMode, CineMind, get_configured_mode, resolve_effective_mode
+    from cinemind.infrastructure import Database, Observability, ProjectsStore
+    from cinemind.infrastructure.tagging import OUTCOMES, RequestTagger
+    from cinemind.media.media_enrichment import build_similar_movie_clusters, enrich_batch
+    from cinemind.media.movie_hub_genre_parsing import parse_movie_hub_genre_buckets
+    from config import REAL_AGENT_TIMEOUT_SECONDS, is_llm_configured, is_watchmode_configured
     from schemas import (
+        DiagnosticResponse,
+        HealthResponse,
+        MovieDetailsResponse,
         MovieQuery,
         MovieResponse,
-        QueryRequest,
-        HealthResponse,
-        DiagnosticResponse,
-        SimilarMoviesResponse,
-        MovieDetailsResponse,
-        ProjectSummary,
-        ProjectDetail,
-        ProjectCreateRequest,
         ProjectAssetsAddRequest,
         ProjectAssetsAddResponse,
+        ProjectCreateRequest,
+        ProjectDetail,
+        ProjectSummary,
+        QueryRequest,
+        SimilarMoviesResponse,
     )
-    from cinemind.media.media_enrichment import enrich_batch, build_similar_movie_clusters
-    from cinemind.media.movie_hub_genre_parsing import parse_movie_hub_genre_buckets
+    from workflows import run_playground
+    from workflows import run_real_agent_with_fallback as run_real_agent_workflow
 except ImportError as e:
     raise ImportError(
         f"CineMind module not found. Make sure all dependencies are installed: {e}"
-    )
+    ) from e
 
 # Configure logging
 logging.basicConfig(
@@ -76,9 +75,9 @@ app.add_middleware(
 )
 
 # Global agent instance (lazy initialization)
-_agent: Optional[CineMind] = None
-_observability: Optional[Observability] = None
-_projects_store: Optional[ProjectsStore] = None
+_agent: CineMind | None = None
+_observability: Observability | None = None
+_projects_store: ProjectsStore | None = None
 
 
 @app.on_event("startup")
@@ -125,9 +124,9 @@ def get_projects_store() -> ProjectsStore:
 def _inject_mode_metadata(
     result: dict,
     actual_agent_mode: str,
-    requested_agent_mode: Optional[str],
+    requested_agent_mode: str | None,
     mode_fallback: bool,
-    mode_override_reason: Optional[str] = None,
+    mode_override_reason: str | None = None,
 ) -> None:
     """Inject explicit mode metadata into every response. No ambiguity about which path ran."""
     result["actualAgentMode"] = actual_agent_mode
@@ -148,7 +147,7 @@ def _inject_mode_metadata(
     result["toolsUsed"] = tools_used
 
 
-def _effective_mode(requested: Optional[str] = None) -> str:
+def _effective_mode(requested: str | None = None) -> str:
     """
     Resolve effective agent mode. If requested is PLAYGROUND or REAL_AGENT, use as hint;
     backend still applies safety (e.g. fallback to PLAYGROUND if keys missing).
@@ -183,7 +182,7 @@ async def health():
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {e}")
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {e}") from e
 
 
 @app.get("/health/diagnostic", response_model=DiagnosticResponse)
@@ -196,7 +195,7 @@ async def health_diagnostic():
     tmdb_enabled = False
     tmdb_token_present = False
     try:
-        from config import is_tmdb_enabled, get_tmdb_access_token
+        from config import get_tmdb_access_token, is_tmdb_enabled
         config_loaded = True
         tmdb_enabled = is_tmdb_enabled()
         token = get_tmdb_access_token()
@@ -204,7 +203,7 @@ async def health_diagnostic():
     except Exception as e:
         logger.debug("Diagnostic config load failed: %s", e)
 
-    tmdb_config_reachable: Optional[bool] = None
+    tmdb_config_reachable: bool | None = None
     if tmdb_enabled and config_loaded and tmdb_token_present:
         try:
             from config import get_tmdb_access_token as _get_token
@@ -243,11 +242,11 @@ def _watchmode_error_response(status_code: int, error: str, message: str):
 
 @app.get("/api/watch/where-to-watch")
 async def where_to_watch_by_tmdb(
-    tmdbId: Optional[str] = Query(None, alias="tmdbId", description="TMDB movie or TV id (optional if title provided)"),
+    tmdbId: str | None = Query(None, alias="tmdbId", description="TMDB movie or TV id (optional if title provided)"),
     mediaType: str = Query("movie", alias="mediaType", description="movie or tv"),
     country: str = Query("US", description="Country code (e.g. US, GB)"),
-    title: Optional[str] = Query(None, description="Movie title (used when tmdbId missing; also display name)"),
-    year: Optional[str] = Query(None, description="Release year (optional, improves title lookup)"),
+    title: str | None = Query(None, description="Movie title (used when tmdbId missing; also display name)"),
+    year: str | None = Query(None, description="Release year (optional, improves title lookup)"),
 ):
     """
     Where to Watch: by TMDB id or by title. Returns availability by access type (subscription/free/rent/buy/tve).
@@ -263,10 +262,8 @@ async def where_to_watch_by_tmdb(
     title_name = (title or "").strip() or None
     year_val = None
     if year and str(year).strip().isdigit():
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             year_val = int(year)
-        except (TypeError, ValueError):
-            pass
     use_tmdb = bool((tmdbId or "").strip())
     if not use_tmdb and not title_name:
         return _watchmode_error_response(400, "missing_params", "Provide tmdbId or title to find where to watch.")
@@ -308,9 +305,9 @@ async def where_to_watch_by_tmdb(
 async def get_similar_movies(
     movie_id: str = ApiPath(..., description="Backend movie identifier (typically TMDB id)"),
     by: str = Query("genre,tone,cast", description="Comma-separated cluster kinds to request"),
-    title: Optional[str] = Query(None, description="Optional movie title hint"),
-    year: Optional[int] = Query(None, description="Optional release year"),
-    mediaType: Optional[str] = Query(None, description="Optional media type (movie/tv)"),
+    title: str | None = Query(None, description="Optional movie title hint"),
+    year: int | None = Query(None, description="Optional release year"),
+    mediaType: str | None = Query(None, description="Optional media type (movie/tv)"),
 ) -> SimilarMoviesResponse:
     """
     Similar movies endpoint for the Sub-context Movie Hub.
@@ -360,7 +357,7 @@ async def get_movie_details(
         payload = build_movie_details_payload(mid, token=token, timeout=6.0, include_related=True)
         return MovieDetailsResponse(**payload)
     except ValueError:
-        raise HTTPException(status_code=400, detail="tmdbId must be an integer")
+        raise HTTPException(status_code=400, detail="tmdbId must be an integer") from None
     except Exception as e:
         logger.debug("Movie details endpoint failed: %s", e)
         try:
@@ -374,9 +371,9 @@ async def get_movie_details(
 @app.get("/api/where-to-watch")
 async def where_to_watch(
     title: str = Query(..., description="Movie title"),
-    year: Optional[int] = Query(None),
-    pageUrl: Optional[str] = Query(None, alias="pageUrl"),
-    pageId: Optional[str] = Query(None, alias="pageId"),
+    year: int | None = Query(None),
+    pageUrl: str | None = Query(None, alias="pageUrl"),
+    pageId: str | None = Query(None, alias="pageId"),
 ):
     """
     Where to Watch (legacy): title-based. Prefer GET /api/watch/where-to-watch?tmdbId=&mediaType=&country= for TMDB-based lookup.
@@ -491,16 +488,16 @@ async def search_movies(query: MovieQuery):
 
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Search error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
+            detail=f"Internal server error: {e!s}"
+        ) from e
 
 
-def _format_hub_conversation_history_block(history: Optional[list], *, max_per_message: int = 2000, max_block_total: int = 12000) -> str:
+def _format_hub_conversation_history_block(history: list | None, *, max_per_message: int = 2000, max_block_total: int = 12000) -> str:
     """
     Bounded prior-turn block for sub-context Movie Hub multi-turn prompts.
     """
@@ -552,7 +549,7 @@ async def query(req: QueryRequest):
         # Optional Sub-context Movie Hub context marker:
         # When present, we parse it and use it to build + filter `movieHubClusters`,
         # while stripping the marker before sending text to the agent.
-        context_movie: Optional[dict] = None
+        context_movie: dict | None = None
         candidate_titles: list[str] = []
         hub_marker_re = re.compile(
             r"\[\[CINEMIND_HUB_CONTEXT\]\](.*?)\[\[\/CINEMIND_HUB_CONTEXT\]\]",
@@ -618,7 +615,7 @@ async def query(req: QueryRequest):
                 + hub_contract
             )
 
-        def build_filtered_candidate_movie_hub_clusters() -> Optional[list[dict]]:
+        def build_filtered_candidate_movie_hub_clusters() -> list[dict] | None:
             """
             Deterministic filtering for candidateTitles-based hub queries.
 
@@ -704,7 +701,7 @@ async def query(req: QueryRequest):
         def _normalize_movie_hub_title(value: object) -> str:
             return re.sub(r"\s+", " ", str(value or "").strip()).lower()
 
-        def _normalize_movie_hub_year(value: object) -> Optional[int]:
+        def _normalize_movie_hub_year(value: object) -> int | None:
             if value is None:
                 return None
             try:
@@ -713,7 +710,7 @@ async def query(req: QueryRequest):
                 return None
             return y if 1800 <= y <= 2100 else None
 
-        def _movie_hub_key(movie: object) -> Optional[str]:
+        def _movie_hub_key(movie: object) -> str | None:
             """
             Canonical identity order for sub-context dedupe:
             1) tmdbId
@@ -855,7 +852,7 @@ async def query(req: QueryRequest):
                 bucket_sizes: list[int] = []
                 bucket_genres: list[str] = []
 
-                year_tail_re = re.compile(r"^\s*.+?\(\s*(\d{4})\s*\)\s*$")
+                re.compile(r"^\s*.+?\(\s*(\d{4})\s*\)\s*$")
                 year_parse_re = re.compile(r"\(\s*(\d{4})\s*\)\s*$")
 
                 def strip_year_tail(item: str) -> str:
@@ -913,7 +910,7 @@ async def query(req: QueryRequest):
                 enriched_cards = enriched_cards or []
 
                 # Align enriched cards back to the input order.
-                aligned_cards: list[Optional[dict]] = []
+                aligned_cards: list[dict | None] = []
                 if not enrich_titles:
                     aligned_cards = []
                 elif len(enriched_cards) == len(enrich_titles):
@@ -980,7 +977,7 @@ async def query(req: QueryRequest):
                 # Re-bucket by the parsed genre categories.
                 clusters: list[dict] = []
                 pos = 0
-                for genre, sz in zip(bucket_genres, bucket_sizes):
+                for genre, sz in zip(bucket_genres, bucket_sizes, strict=False):
                     if pos >= len(flat_movies):
                         break
                     movies = flat_movies[pos : pos + sz]
@@ -1027,7 +1024,7 @@ async def query(req: QueryRequest):
             if not isinstance(result_dict, dict):
                 return
             t_attach = time.perf_counter()
-            deterministic_clusters: Optional[list[dict]] = None
+            deterministic_clusters: list[dict] | None = None
             deterministic_total = 0
             try:
                 t_det = time.perf_counter()
@@ -1120,7 +1117,7 @@ async def query(req: QueryRequest):
         raise
     except Exception as e:
         logger.error(f"Query error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/search")
@@ -1158,7 +1155,7 @@ async def search_movies_get(query: str, use_live_data: bool = True):
         raise
     except Exception as e:
         logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/search/stream")
@@ -1166,8 +1163,9 @@ async def search_movies_stream(query: MovieQuery):
     """
     Stream movie analysis response. REAL_AGENT streams tokens; PLAYGROUND returns one chunk.
     """
-    from fastapi.responses import StreamingResponse
     import json
+
+    from fastapi.responses import StreamingResponse
 
     mode = _effective_mode()
     logger.info("Executing stream request in mode: %s", mode)
@@ -1224,29 +1222,29 @@ async def search_movies_stream(query: MovieQuery):
 async def get_request_trace(request_id: str):
     """
     Get complete trace for a specific request.
-    
+
     Returns request details, response, metrics, and search operations.
     """
     try:
         obs = get_observability()
         trace = obs.get_request_trace(request_id)
-        
+
         if not trace:
             raise HTTPException(status_code=404, detail=f"Request {request_id} not found")
-        
+
         return trace
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting request trace: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/observability/requests")
 async def get_recent_requests(limit: int = Query(100, ge=1, le=1000)):
     """
     Get recent requests.
-    
+
     Args:
         limit: Maximum number of requests to return (1-1000)
     """
@@ -1256,16 +1254,16 @@ async def get_recent_requests(limit: int = Query(100, ge=1, le=1000)):
         return {"requests": requests, "count": len(requests)}
     except Exception as e:
         logger.error(f"Error getting recent requests: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/observability/stats")
 async def get_stats(days: int = Query(7, ge=1, le=365),
-                    request_type: Optional[str] = Query(None, description="Filter by request type"),
-                    outcome: Optional[str] = Query(None, description="Filter by outcome")):
+                    request_type: str | None = Query(None, description="Filter by request type"),
+                    outcome: str | None = Query(None, description="Filter by outcome")):
     """
     Get statistics for the last N days, optionally filtered by type/outcome.
-    
+
     Args:
         days: Number of days to include in statistics (1-365)
         request_type: Optional filter by request type
@@ -1277,14 +1275,14 @@ async def get_stats(days: int = Query(7, ge=1, le=365),
         return {"period_days": days, "request_type": request_type, "outcome": outcome, "statistics": stats}
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/observability/tags")
 async def get_tag_distribution(days: int = Query(7, ge=1, le=365)):
     """
     Get distribution of request types and outcomes.
-    
+
     Args:
         days: Number of days to include (1-365)
     """
@@ -1294,14 +1292,14 @@ async def get_tag_distribution(days: int = Query(7, ge=1, le=365)):
         return {"period_days": days, "distribution": distribution}
     except Exception as e:
         logger.error(f"Error getting tag distribution: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.put("/observability/requests/{request_id}/outcome")
 async def update_request_outcome(request_id: str, outcome: str = Query(..., description="Outcome tag")):
     """
     Update the outcome tag for a request.
-    
+
     Valid outcomes: success, unclear, hallucination, user-corrected
     """
     tagger = RequestTagger()
@@ -1310,14 +1308,14 @@ async def update_request_outcome(request_id: str, outcome: str = Query(..., desc
             status_code=400,
             detail=f"Invalid outcome. Must be one of: {list(OUTCOMES.keys())}"
         )
-    
+
     try:
         obs = get_observability()
         obs.db.update_request(request_id, outcome=outcome)
         return {"request_id": request_id, "outcome": outcome, "status": "updated"}
     except Exception as e:
         logger.error(f"Error updating outcome: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.on_event("shutdown")

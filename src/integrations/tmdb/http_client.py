@@ -6,16 +6,17 @@ Used by resolver, image_config, and movie_metadata. Prefer tmdb_request_json() f
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-_client: Optional[httpx.Client] = None
+_client: httpx.Client | None = None
 _client_lock = threading.Lock()
 
 
@@ -37,10 +38,8 @@ def close_sync_client() -> None:
     global _client
     with _client_lock:
         if _client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 _client.close()
-            except Exception:
-                pass
             _client = None
 
 
@@ -50,7 +49,7 @@ def tmdb_request_json(
     *,
     timeout: float = 10.0,
     log_label: str = "TMDB",
-) -> Optional[Any]:
+) -> Any | None:
     """
     GET JSON from TMDB. Returns parsed dict/list or None on failure.
     Token must not be logged.
@@ -76,4 +75,4 @@ def tmdb_request_json(
         return None
 
 
-__all__ = ["get_sync_client", "close_sync_client", "tmdb_request_json"]
+__all__ = ["close_sync_client", "get_sync_client", "tmdb_request_json"]

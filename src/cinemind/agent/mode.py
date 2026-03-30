@@ -9,14 +9,13 @@ The backend is the final authority. If REAL_AGENT is requested but
 required environment variables are missing, we fall back to PLAYGROUND
 and log a warning.
 """
-import os
 import logging
-from enum import Enum
-from typing import Optional
+import os
+from enum import StrEnum
 
 logger = logging.getLogger(__name__)
 
-class AgentMode(str, Enum):
+class AgentMode(StrEnum):
     """Execution mode: playground (Wikipedia-only) or full agent."""
     PLAYGROUND = "PLAYGROUND"
     REAL_AGENT = "REAL_AGENT"
@@ -40,7 +39,7 @@ def _has_required_keys_for_real_agent() -> bool:
     return is_llm_configured()
 
 
-def resolve_effective_mode(configured: Optional[AgentMode] = None) -> AgentMode:
+def resolve_effective_mode(configured: AgentMode | None = None) -> AgentMode:
     """
     Resolve the mode that will actually be used (safety guard).
     If configured is REAL_AGENT but required API keys are missing,

@@ -9,7 +9,7 @@ Watchmode API client for Where to Watch (server-side only).
 """
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import httpx
 
@@ -39,7 +39,7 @@ ACCESS_TYPE_MAP = {
 }
 
 
-def _normalize_access_type(wm_type: str) -> Tuple[str, str]:
+def _normalize_access_type(wm_type: str) -> tuple[str, str]:
     if not wm_type:
         return ("other", "Other")
     key = (wm_type or "").strip().lower()
@@ -52,15 +52,15 @@ class WatchmodeClient:
     def __init__(self, api_key: str, timeout: float = 15.0):
         self._api_key = api_key
         self._timeout = timeout
-        self._sources_cache: Optional[Dict[str, Any]] = None
+        self._sources_cache: dict[str, Any] | None = None
         self._sources_cache_ts: float = 0
-        self._availability_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
-        self._provider_names: Dict[int, str] = {}
+        self._availability_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._provider_names: dict[int, str] = {}
 
     def _cache_key(self, title_id: str, country: str) -> str:
         return f"{title_id}|{country.upper()}"
 
-    async def _get_sources_catalog_uncached(self) -> Dict[int, str]:
+    async def _get_sources_catalog_uncached(self) -> dict[int, str]:
         """Fetch /v1/sources/ and return mapping source_id -> name."""
         url = f"{WATCHMODE_BASE}/sources/"
         params = {"apiKey": self._api_key}
@@ -72,7 +72,7 @@ class WatchmodeClient:
             return {int(s.get("id", 0)): str(s.get("name", "") or "").strip() or f"Source {s.get('id')}" for s in data if s.get("id") is not None}
         return {}
 
-    async def get_sources_catalog(self) -> Dict[int, str]:
+    async def get_sources_catalog(self) -> dict[int, str]:
         """Provider catalog (source_id -> name), cached ~30 days."""
         now = time.monotonic()
         if self._sources_cache is not None and (now - self._sources_cache_ts) < SOURCES_CACHE_TTL_SEC:
@@ -88,7 +88,7 @@ class WatchmodeClient:
                 return self._sources_cache
             return {}
 
-    async def find_title_id_by_tmdb(self, tmdb_id: str, media_type: str) -> Optional[int]:
+    async def find_title_id_by_tmdb(self, tmdb_id: str, media_type: str) -> int | None:
         """
         Resolve Watchmode title id from TMDB id + type.
         Tries title details with composite id (movie-603 / tv-1396) first; falls back to autocomplete-search.
@@ -134,7 +134,7 @@ class WatchmodeClient:
             logger.debug("Watchmode autocomplete-search failed: %s", e)
         return None
 
-    async def find_title_id_by_name(self, title: str, year: Optional[int], media_type: str) -> Optional[int]:
+    async def find_title_id_by_name(self, title: str, year: int | None, media_type: str) -> int | None:
         """
         Resolve Watchmode title id from title name (and optional year) via autocomplete-search.
         Uses search_field=name, search_value=title. Returns first result's id when available.
@@ -169,7 +169,7 @@ class WatchmodeClient:
             logger.debug("Watchmode autocomplete-search by name failed: %s", e)
         return None
 
-    async def get_title_details(self, title_id: str) -> Optional[Dict[str, Any]]:
+    async def get_title_details(self, title_id: str) -> dict[str, Any] | None:
         """GET /v1/title/{title_id}/details/ to get title info including external_ids (e.g. tmdb_id)."""
         url = f"{WATCHMODE_BASE}/title/{title_id}/details/"
         params = {"apiKey": self._api_key}
@@ -183,7 +183,7 @@ class WatchmodeClient:
         except (httpx.HTTPStatusError, ValueError, KeyError):
             return None
 
-    def _extract_tmdb_id_from_details(self, details: Optional[Dict[str, Any]]) -> Optional[str]:
+    def _extract_tmdb_id_from_details(self, details: dict[str, Any] | None) -> str | None:
         """Extract TMDB id from Watchmode title details response."""
         if not details or not isinstance(details, dict):
             return None
@@ -197,7 +197,7 @@ class WatchmodeClient:
                 return str(tid).strip()
         return None
 
-    async def get_title_sources_raw(self, title_id: str, regions: str) -> Dict[str, Any]:
+    async def get_title_sources_raw(self, title_id: str, regions: str) -> dict[str, Any]:
         """
         GET /v1/title/{title_id}/sources/?regions=...&types=...
 
@@ -218,7 +218,7 @@ class WatchmodeClient:
 
     async def get_availability(
         self, tmdb_id: str, media_type: str, country: str
-    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    ) -> tuple[str | None, dict[str, Any] | None]:
         """
         Get availability for a title. Returns (error_message, normalized_response).
         Uses Watchmode getTitleSources with TMDB-format title_id (e.g. movie-278, tv-1396).
@@ -246,7 +246,7 @@ class WatchmodeClient:
             if e.response.status_code == 429:
                 return "Rate limit exceeded. Try again later.", None
             return f"Watchmode API error: {e.response.status_code}.", None
-        except Exception as e:
+        except Exception:
             logger.exception("Watchmode sources request failed")
             return "Service temporarily unavailable.", None
 
@@ -255,7 +255,7 @@ class WatchmodeClient:
         self._availability_cache[ck] = (now_sec, normalized)
         return None, normalized
 
-    def _strip_disambiguation_suffix(self, title: str) -> Optional[str]:
+    def _strip_disambiguation_suffix(self, title: str) -> str | None:
         """
         If title ends with ' (something)' and 'something' is not a 4-digit year,
         return the base title without the parenthetical (for retry when exact match fails).
@@ -272,8 +272,8 @@ class WatchmodeClient:
         return base.strip() or None
 
     async def get_availability_by_title(
-        self, title: str, year: Optional[int], media_type: str, country: str
-    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        self, title: str, year: int | None, media_type: str, country: str
+    ) -> tuple[str | None, dict[str, Any] | None]:
         """
         Get availability by title name (and optional year). Uses autocomplete-search then sources.
         Returns (error_message, normalized_response) like get_availability.
@@ -309,7 +309,7 @@ class WatchmodeClient:
             if e.response.status_code == 429:
                 return "Rate limit exceeded. Try again later.", None
             return f"Watchmode API error: {e.response.status_code}.", None
-        except Exception as e:
+        except Exception:
             logger.exception("Watchmode sources request failed")
             return "Service temporarily unavailable.", None
         catalog = await self.get_sources_catalog()
@@ -322,8 +322,8 @@ class WatchmodeClient:
         return None, normalized
 
     def _normalize_sources_response(
-        self, raw: Any, region: str, provider_names: Dict[int, str]
-    ) -> Dict[str, Any]:
+        self, raw: Any, region: str, provider_names: dict[int, str]
+    ) -> dict[str, Any]:
         """Convert Watchmode sources response to UI contract: movie, region, groups[].accessType, label, offers[]."""
         out = {
             "movie": {},
@@ -350,7 +350,7 @@ class WatchmodeClient:
         if len(sources) == 0 and isinstance(raw, dict):
             logger.debug("Watchmode sources response empty; keys received: %s", list(raw.keys()))
 
-        by_type: Dict[str, List[Dict[str, Any]]] = {}
+        by_type: dict[str, list[dict[str, Any]]] = {}
         for s in sources:
             if not isinstance(s, dict):
                 continue
@@ -380,14 +380,13 @@ class WatchmodeClient:
 
         # Dedupe by provider per type; build groups in fixed order
         order = ["subscription", "free", "rental", "purchase", "tve", "other"]
-        seen_labels = set()
         for at in order:
             if at not in by_type:
                 continue
             labels_offers = by_type[at]
-            unique_offers: List[Dict[str, Any]] = []
+            unique_offers: list[dict[str, Any]] = []
             seen_names = set()
-            for label, offer in labels_offers:
+            for _label, offer in labels_offers:
                 if offer["providerName"] in seen_names:
                     continue
                 seen_names.add(offer["providerName"])
@@ -408,7 +407,7 @@ class WatchmodeClient:
         return out
 
 
-def get_watchmode_client(api_key: Optional[str] = None) -> Optional[WatchmodeClient]:
+def get_watchmode_client(api_key: str | None = None) -> WatchmodeClient | None:
     """Factory: returns WatchmodeClient if api_key is set, else None."""
     from config import get_watchmode_api_key
     key = (api_key or get_watchmode_api_key() or "").strip()

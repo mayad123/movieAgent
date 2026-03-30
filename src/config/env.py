@@ -6,14 +6,13 @@ in the repository).  It now lives at ``config.env`` and is imported by
 ``config.__init__``.
 """
 from pathlib import Path
-from typing import Optional
 
 
 def find_dotenv_path(
     filename: str = ".env",
-    start: Optional[Path] = None,
+    start: Path | None = None,
     max_depth: int = 5,
-) -> Optional[str]:
+) -> str | None:
     """Walk up from *start* (default: cwd) looking for *filename*.
 
     Returns the absolute path as a string if found, otherwise ``None``.

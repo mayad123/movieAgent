@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _normalize_enrich_key(query: str) -> str:
     return " ".join((query or "").strip().lower().split())
 
 
-def _normalize_tmdb_poster_key(title: str, year: Optional[int]) -> str:
+def _normalize_tmdb_poster_key(title: str, year: int | None) -> str:
     t = (title or "").strip().lower()
     t = " ".join(t.split())
     y = (str(year) if year is not None else "")
@@ -55,7 +55,7 @@ class TTLCache:
         self._expired = 0
         self._evictions = 0
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         with self._lock:
             entry = self._cache.get(key)
             if entry is None:
@@ -120,7 +120,7 @@ class MediaCache:
         self._ttl_enrich = ttl_enrich
         self._ttl_tmdb_poster = ttl_tmdb_poster
 
-    def get_enrich(self, query_key: str) -> Optional[Any]:
+    def get_enrich(self, query_key: str) -> Any | None:
         key = "enrich:" + query_key
         val = self._cache.get(key)
         logger.debug("MediaCache enrich %s", "hit" if val is not None else "miss")
@@ -130,7 +130,7 @@ class MediaCache:
         key = "enrich:" + query_key
         self._cache.set(key, result, self._ttl_enrich)
 
-    def get_tmdb_poster(self, title: str, year: Optional[int]) -> tuple[Optional[str], bool]:
+    def get_tmdb_poster(self, title: str, year: int | None) -> tuple[str | None, bool]:
         key = "tmdb_poster:" + _normalize_tmdb_poster_key(title, year)
         val = self._cache.get(key)
         if val is None:
@@ -139,7 +139,7 @@ class MediaCache:
         logger.debug("MediaCache tmdb_poster hit title=%r year=%s", (title or "")[:60], year)
         return (None if val == self._NO_POSTER else val, True)
 
-    def set_tmdb_poster(self, title: str, year: Optional[int], url: Optional[str]) -> None:
+    def set_tmdb_poster(self, title: str, year: int | None, url: str | None) -> None:
         key = "tmdb_poster:" + _normalize_tmdb_poster_key(title, year)
         self._cache.set(key, url if url else self._NO_POSTER, self._ttl_tmdb_poster)
 
@@ -147,7 +147,7 @@ class MediaCache:
         return self._cache.stats()
 
 
-_default_cache: Optional[MediaCache] = None
+_default_cache: MediaCache | None = None
 
 
 def get_default_media_cache() -> MediaCache:
@@ -157,6 +157,6 @@ def get_default_media_cache() -> MediaCache:
     return _default_cache
 
 
-def set_default_media_cache(cache: Optional[MediaCache]) -> None:
+def set_default_media_cache(cache: MediaCache | None) -> None:
     global _default_cache
     _default_cache = cache

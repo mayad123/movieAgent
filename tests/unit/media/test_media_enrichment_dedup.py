@@ -3,20 +3,16 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from cinemind.media.media_enrichment import (
-    enrich,
-    build_attachments_from_media,
-    _movie_card_item,
     _same_movie_as_strip,
-    MediaEnrichmentResult,
+    build_attachments_from_media,
+    enrich,
 )
-from integrations.tmdb.resolver import TMDBResolveResult, TMDBCandidate
+from integrations.tmdb.resolver import TMDBCandidate, TMDBResolveResult
 
 
 def test_same_movie_as_strip_by_tmdb_id():

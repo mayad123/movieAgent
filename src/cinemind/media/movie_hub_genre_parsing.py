@@ -19,20 +19,19 @@ Safety:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from cinemind.extraction.response_movie_extractor import extract_titles_for_enrichment
-
 
 _GENRE_LINE_RE = re.compile(
     r"^\s*(?:Genre|Genres|Category|Type)\s*[:\-]\s*(.+?)\s*$",
     flags=re.IGNORECASE,
 )
 _NUMBERED_ITEM_RE = re.compile(
-    r"^\s*(?:[-*•–◦]\s*)?(?P<num>\d+)\s*[\.\)]\s*(?P<body>.+?)\s*$",
+    r"^\s*(?:[-*\u2022\u2013\u25E6]\s*)?(?P<num>\d+)\s*[\.\)]\s*(?P<body>.+?)\s*$",
 )
 # Bullet item fallback: "- Title (YYYY) ..." or "* Title (YYYY) ..."
-_BULLET_ITEM_RE = re.compile(r"^\s*(?:[-*•–◦])\s*(?P<body>.+?)\s*$")
+_BULLET_ITEM_RE = re.compile(r"^\s*(?:[-*\u2022\u2013\u25E6])\s*(?P<body>.+?)\s*$")
 # Title/year can appear at the end ("Title (2014)") or inside a line ("Title (2014) - ...")
 _TITLE_YEAR_ANYWHERE_RE = re.compile(r"(?P<title>.+?)\s*\((?P<year>\d{4})\)", flags=re.IGNORECASE)
 _TITLE_YEAR_TAIL_RE = re.compile(r"^(?P<title>.+?)\s*\((?P<year>\d{4})\)\s*$")
@@ -48,7 +47,7 @@ def _strip_leading_list_markers(s: str) -> str:
     if not t:
         return t
     # Remove optional bullet prefix first.
-    t = re.sub(r"^\s*[-*•–◦]\s*", "", t).strip()
+    t = re.sub(r"^\s*[-*\u2022\u2013\u25E6]\s*", "", t).strip()
     # Remove numeric prefix like "1." / "1)" / "(1)." / "(1)"
     t = re.sub(r"^\s*\(?\s*\d+\s*\)?\s*[\.\)]\s*", "", t).strip()
     return t
@@ -64,7 +63,7 @@ def _safe_normalize_item_str(s: Any) -> str:
     return (s or "").strip()
 
 
-def _extract_title_year(item_text: str) -> tuple[str, Optional[int]]:
+def _extract_title_year(item_text: str) -> tuple[str, int | None]:
     """
     Extract (title, year) from `Title (YYYY)` strings.
     If no year tail exists, return (normalized_title, None).
@@ -92,7 +91,7 @@ def _extract_title_year(item_text: str) -> tuple[str, Optional[int]]:
     return title, year
 
 
-def _extract_title_years_anywhere(response_text: str, *, max_items: int) -> List[str]:
+def _extract_title_years_anywhere(response_text: str, *, max_items: int) -> list[str]:
     """
     Loose extraction of `Title (YYYY)` anywhere in response text.
     Returns formatted strings so the rest of the enrichment pipeline can use them.
@@ -102,7 +101,7 @@ def _extract_title_years_anywhere(response_text: str, *, max_items: int) -> List
         return []
 
     matches = _TITLE_YEAR_ANYWHERE_RE.finditer(t)
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for m in matches:
         title = _strip_leading_list_markers((m.group("title") or "").strip())
@@ -127,7 +126,7 @@ def parse_movie_hub_genre_buckets(
     expected_items_per_genre: int = 5,
     min_total_items: int = 30,
     min_genre_items_signal: int = 5,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Parse LLM response into:
       [{ "genre": <str>, "items": [<str>, ...] }, ...]
@@ -142,8 +141,8 @@ def parse_movie_hub_genre_buckets(
 
         lines = text.splitlines()
 
-        buckets: List[Dict[str, Any]] = []
-        current_bucket: Optional[Dict[str, Any]] = None
+        buckets: list[dict[str, Any]] = []
+        current_bucket: dict[str, Any] | None = None
         seen_items_per_bucket: set[str] = set()
 
         def start_bucket(genre: str) -> None:
@@ -223,7 +222,7 @@ def parse_movie_hub_genre_buckets(
         # Only accept the structured parsing result if we have enough signal.
         if total_items >= min_total_items or total_items >= (expected_genres * min_genre_items_signal):
             # Enforce expected limits for stability.
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             for b in buckets[:expected_genres]:
                 items = (b.get("items") or [])[:expected_items_per_genre]
                 if not items:
@@ -236,7 +235,7 @@ def parse_movie_hub_genre_buckets(
 
         # Fallback: extract titles, but restrict to list-like lines so we don't
         # accidentally pull movie titles from narrative prose.
-        list_like_lines: List[str] = []
+        list_like_lines: list[str] = []
         for ln in text.splitlines():
             line = (ln or "").strip()
             if not line:
@@ -245,7 +244,7 @@ def parse_movie_hub_genre_buckets(
             if not has_year:
                 continue
             looks_listed = bool(
-                re.match(r"^\s*(?:[-*•–◦]\s+)", line)
+                re.match(r"^\s*(?:[-*\u2022\u2013\u25E6]\s+)", line)
                 or re.match(r"^\s*\(?\s*\d+\s*\)?\s*[\.\)]\s+", line)
                 or re.match(r"^\s*\d+\s*[\.\)]\s+", line)
             )

@@ -1,7 +1,7 @@
 """
 Base test case definitions and acceptance criteria functions.
 """
-from typing import Dict, List, Optional, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
@@ -10,11 +10,11 @@ class TestCase:
     """Single test case definition."""
     name: str
     prompt: str
-    reference_answer: Optional[str] = None
-    acceptance_criteria: List[Callable] = field(default_factory=list)
-    expected_type: Optional[str] = None
+    reference_answer: str | None = None
+    acceptance_criteria: list[Callable] = field(default_factory=list)
+    expected_type: str | None = None
     expected_outcome: str = "success"
-    metadata: Dict = field(default_factory=dict)
+    metadata: dict = field(default_factory=dict)
 
 
 # Acceptance Criteria Functions

@@ -13,8 +13,8 @@ Rules:
 - Prefer deeplink when present; keep web fallback (webUrl for web, iosUrl/androidUrl from deeplink when available).
 - lastUpdated: ISO timestamp for caching transparency.
 """
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 # UI contract: subscription | free | rent | buy | tve | unknown
 ACCESS_TYPE_ORDER = ("subscription", "free", "rent", "buy", "tve", "unknown", "other")
@@ -23,14 +23,14 @@ ACCESS_TYPE_ALIAS = {"rental": "rent", "purchase": "buy"}
 
 
 def normalize_where_to_watch_response(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     *,
-    title_id: Optional[str] = None,
-    title_name: Optional[str] = None,
-    year: Optional[int] = None,
+    title_id: str | None = None,
+    title_name: str | None = None,
+    year: int | None = None,
     media_type: str = "movie",
-    last_updated: Optional[str] = None,
-) -> Dict[str, Any]:
+    last_updated: str | None = None,
+) -> dict[str, Any]:
     """
     Normalize API response to UI contract: title, region, offers (flat, grouped and sorted, de-duped).
 
@@ -39,7 +39,7 @@ def normalize_where_to_watch_response(
       - or offers: already flat list (will still be deduped and sorted)
     Optional request context: title_id (e.g. TMDB id), title_name, year, media_type.
     """
-    now_iso = last_updated or datetime.now(timezone.utc).isoformat()
+    now_iso = last_updated or datetime.now(UTC).isoformat()
     region = (data.get("region") or "").strip() or "US"
     title = {
         "id": (title_id or data.get("movie", {}).get("id") or "").strip() or None,
@@ -51,7 +51,7 @@ def normalize_where_to_watch_response(
         title["mediaType"] = "movie"
 
     # Build flat list from groups or existing offers
-    flat: List[Dict[str, Any]] = []
+    flat: list[dict[str, Any]] = []
     if data.get("offers") and isinstance(data["offers"], list):
         flat = list(data["offers"])
     elif data.get("groups") and isinstance(data["groups"], list):
@@ -83,7 +83,7 @@ def normalize_where_to_watch_response(
         return {"title": title, "region": region, "offers": [], "lastUpdated": now_iso}
 
     # Normalize each into offer shape; prefer deeplink, keep web fallback
-    normalized: List[Dict[str, Any]] = []
+    normalized: list[dict[str, Any]] = []
     seen: set = set()
     for o in flat:
         at = (o.get("_accessType") or "unknown").strip().lower() or "unknown"
@@ -124,7 +124,7 @@ def normalize_where_to_watch_response(
         })
 
     # Sort: by accessType order then provider name
-    def sort_key(item: Dict[str, Any]) -> tuple:
+    def sort_key(item: dict[str, Any]) -> tuple:
         at = item.get("accessType") or "other"
         try:
             at_index = ACCESS_TYPE_ORDER.index(at)

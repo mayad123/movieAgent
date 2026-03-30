@@ -24,26 +24,27 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
+
+from integrations.tmdb.scenes import get_scenes_provider
 
 from ..extraction.response_movie_extractor import parse_response
+from ..extraction.title_extraction import extract_movie_titles, get_search_phrases
 from .attachment_intent_classifier import (
-    classify_attachment_intent,
-    INTENT_MOVIE_LIST,
     INTENT_DID_YOU_MEAN,
+    INTENT_MOVIE_LIST,
+    classify_attachment_intent,
 )
-from .media_focus import get_media_focus, MEDIA_FOCUS_SINGLE
 from .media_enrichment import (
-    enrich,
-    enrich_batch,
-    SECTION_PRIMARY_MOVIE,
-    SECTION_MOVIE_LIST,
     SECTION_DID_YOU_MEAN,
+    SECTION_MOVIE_LIST,
+    SECTION_PRIMARY_MOVIE,
     _movie_card_item,
     _same_movie_as_strip,
+    enrich,
+    enrich_batch,
 )
-from ..extraction.title_extraction import get_search_phrases, extract_movie_titles
-from integrations.tmdb.scenes import get_scenes_provider
+from .media_focus import MEDIA_FOCUS_SINGLE, get_media_focus
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 ATTACHMENT_DEBUG_KEY = "attachment_debug"
 
 
-def _fetch_scenes_nonblocking(title: str, year: Optional[int] = None) -> list[dict[str, Any]]:
+def _fetch_scenes_nonblocking(title: str, year: int | None = None) -> list[dict[str, Any]]:
     """
     Fetch scene/backdrop items for a movie via the pluggable scenes provider.
 

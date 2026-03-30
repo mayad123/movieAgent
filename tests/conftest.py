@@ -3,10 +3,10 @@ Pytest configuration and fixtures for CineMind tests.
 """
 import pytest
 from freezegun import freeze_time
-from tests.helpers.report_generator import get_collector
 
-from cinemind.planning.request_plan import RequestPlan, ResponseFormat, ToolType
+from cinemind.planning.request_plan import RequestPlan
 from cinemind.prompting.prompt_builder import EvidenceBundle
+from tests.helpers.report_generator import get_collector
 
 
 def pytest_configure(config):
@@ -21,7 +21,7 @@ def pytest_runtest_makereport(item, call):
     # Execute all other hooks to obtain the report object
     outcome = yield
     rep = outcome.get_result()
-    
+
     # Set a report attribute for each phase of a call, which can
     # be "setup", "call", "teardown"
     setattr(item, "rep_" + rep.when, rep)
@@ -37,7 +37,7 @@ def pytest_sessionfinish(session, exitstatus):
     """Called after whole test run finished, right before returning the exit status."""
     collector = get_collector()
     collector.end_test_run()
-    
+
     # Write the report
     try:
         report_file = collector.write_report()

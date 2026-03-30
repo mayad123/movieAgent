@@ -16,10 +16,11 @@ import re
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from .http_client import tmdb_request_json
-from .resolve_cache import cache_key, clear_resolve_cache as _clear_resolve_cache, get_cached, set_cached
+from .resolve_cache import cache_key, get_cached, set_cached
+from .resolve_cache import clear_resolve_cache as _clear_resolve_cache
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def _normalize_title(s: str) -> str:
     return t.strip()
 
 
-def _extract_year(release_date: Any) -> Optional[int]:
+def _extract_year(release_date: Any) -> int | None:
     """From TMDB release_date (YYYY-MM-DD or empty) return 4-digit year or None."""
     if not release_date or not isinstance(release_date, str):
         return None
@@ -54,7 +55,7 @@ def _extract_year(release_date: Any) -> Optional[int]:
 def _score_candidate(
     r: dict[str, Any],
     query_title: str,
-    query_year: Optional[int],
+    query_year: int | None,
 ) -> float:
     """
     Deterministic score for one search result (higher = better match).
@@ -106,8 +107,8 @@ class TMDBCandidate:
     """One candidate for display in 'Did you mean?' (id, title, year, optional poster_path)."""
     id: int
     title: str
-    year: Optional[int] = None
-    poster_path: Optional[str] = None
+    year: int | None = None
+    poster_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"id": self.id, "title": self.title}
@@ -126,12 +127,12 @@ class TMDBResolveResult:
     - status: "resolved" | "ambiguous" | "not_found"
     - movie_id: set when status is "resolved"
     - poster_path: TMDB poster path (e.g. /abc.jpg) when resolved and available; for building poster URL
-    - confidence: 0.0–1.0 when resolved
+    - confidence: 0.0-1.0 when resolved
     - candidates: list for "Did you mean?" when ambiguous or for reference
     """
     status: str  # "resolved" | "ambiguous" | "not_found"
-    movie_id: Optional[int] = None
-    poster_path: Optional[str] = None
+    movie_id: int | None = None
+    poster_path: str | None = None
     confidence: float = 0.0
     candidates: list[TMDBCandidate] = field(default_factory=list)
 
@@ -151,7 +152,7 @@ class TMDBResolveResult:
 def _resolve_from_results(
     results: list[dict[str, Any]],
     title: str,
-    year: Optional[int],
+    year: int | None,
     min_confidence: float,
     min_score_gap: float,
     max_candidates: int,
@@ -199,7 +200,7 @@ def _resolve_from_results(
 
 def resolve_movie(
     title: str,
-    year: Optional[int] = None,
+    year: int | None = None,
     *,
     access_token: str,
     timeout: float = 10.0,
@@ -279,13 +280,13 @@ def resolve_movie(
 clear_resolve_cache = _clear_resolve_cache
 
 __all__ = [
-    "TMDBCandidate",
-    "TMDBResolveResult",
-    "resolve_movie",
-    "clear_resolve_cache",
-    "_normalize_title",
-    "_extract_year",
-    "_score_candidate",
     "MIN_CONFIDENCE_AUTO_SELECT",
     "MIN_SCORE_GAP_AUTO_SELECT",
+    "TMDBCandidate",
+    "TMDBResolveResult",
+    "_extract_year",
+    "_normalize_title",
+    "_score_candidate",
+    "clear_resolve_cache",
+    "resolve_movie",
 ]

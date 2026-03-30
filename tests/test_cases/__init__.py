@@ -2,17 +2,24 @@
 Modular test case organization for CineMind.
 Import all test cases from category modules.
 """
-from .base import TestCase, contains_all_substrings, contains_any_substring, \
-    contains_spoiler_warning, min_length, contains_at_least_n_items, \
-    mentions_director, mentions_movie
+from .base import (
+    TestCase,
+    contains_all_substrings,
+    contains_any_substring,
+    contains_at_least_n_items,
+    contains_spoiler_warning,
+    mentions_director,
+    mentions_movie,
+    min_length,
+)
+from .comparisons import COMPARISON_TESTS
+from .fact_checking import FACT_CHECK_TESTS
+from .multi_hop import MULTI_HOP_TESTS
+from .recommendations import RECOMMENDATION_TESTS
 
 # Import test cases from category modules
 from .simple_facts import SIMPLE_FACT_TESTS
-from .multi_hop import MULTI_HOP_TESTS
-from .recommendations import RECOMMENDATION_TESTS
-from .comparisons import COMPARISON_TESTS
 from .spoilers import SPOILER_TESTS
-from .fact_checking import FACT_CHECK_TESTS
 
 # Combine all test cases
 TEST_CASES = (
@@ -36,15 +43,15 @@ TEST_SUITES = {
 }
 
 __all__ = [
-    'TestCase',
     'TEST_CASES',
     'TEST_SUITES',
+    'TestCase',
     'contains_all_substrings',
     'contains_any_substring',
-    'contains_spoiler_warning',
-    'min_length',
     'contains_at_least_n_items',
+    'contains_spoiler_warning',
     'mentions_director',
     'mentions_movie',
+    'min_length',
 ]
 

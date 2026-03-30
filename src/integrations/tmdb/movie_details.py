@@ -13,14 +13,14 @@ import json
 import logging
 import re
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from config import get_tmdb_access_token, is_tmdb_enabled
 from integrations.tmdb.image_config import (
-    build_image_url,
-    get_config,
     SIZE_BACKDROP_GALLERY,
     SIZE_POSTER_GALLERY,
+    build_image_url,
+    get_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ BASE_URL = "https://api.themoviedb.org/3"
 YEAR_RE = re.compile(r"^\s*(\d{4})")
 
 
-def _safe_int(x: Any) -> Optional[int]:
+def _safe_int(x: Any) -> int | None:
     try:
         if x is None:
             return None
@@ -47,7 +47,7 @@ def _safe_str(x: Any) -> str:
     return str(x).strip()
 
 
-def _safe_year(release_date: Any) -> Optional[int]:
+def _safe_year(release_date: Any) -> int | None:
     s = _safe_str(release_date)
     if not s:
         return None
@@ -102,7 +102,7 @@ def _map_details(movie: dict[str, Any], *, token: str) -> dict[str, Any]:
                 genres_out.append(str(g.get("name")).strip())
 
     spoken_languages = movie.get("spoken_languages") or []
-    language: Optional[str] = None
+    language: str | None = None
     if isinstance(spoken_languages, list) and spoken_languages:
         first = spoken_languages[0]
         if isinstance(first, dict):
@@ -110,7 +110,7 @@ def _map_details(movie: dict[str, Any], *, token: str) -> dict[str, Any]:
             language = language or None
 
     production_countries = movie.get("production_countries") or []
-    country: Optional[str] = None
+    country: str | None = None
     if isinstance(production_countries, list) and production_countries:
         first = production_countries[0]
         if isinstance(first, dict):
@@ -218,7 +218,7 @@ def _map_related_results(
 def build_movie_details_payload(
     tmdb_id: Any,
     *,
-    token: Optional[str] = None,
+    token: str | None = None,
     timeout: float = 6.0,
     include_related: bool = True,
 ) -> dict[str, Any]:

@@ -1,2 +1,2 @@
 """Fact verification modules."""
-from .fact_verifier import VerifiedFact, FactVerifier
+from .fact_verifier import FactVerifier, VerifiedFact

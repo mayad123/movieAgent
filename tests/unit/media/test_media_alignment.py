@@ -1,16 +1,14 @@
 """Media alignment tests: posters/media should match resolved movies or be omitted."""
 from __future__ import annotations
 
-from typing import Any
-
 import types
+from typing import Any
 
 from cinemind.media.media_enrichment import (
     MediaEnrichmentResult,
     attach_media_to_result,
-    enrich,
-    build_attachments_from_media,
     build_similar_movie_clusters,
+    enrich,
 )
 
 
@@ -102,7 +100,7 @@ def test_attach_media_uses_resolved_title_not_query(monkeypatch):
 def test_build_similar_movie_clusters_uses_tmdb_results(monkeypatch):
     """build_similar_movie_clusters should surface multiple TMDB similar titles."""
 
-    # Enable TMDB + provide fake token so the helper does not early‑exit.
+    # Enable TMDB + provide fake token so the helper does not early-exit.
     monkeypatch.setattr(
         "cinemind.media.media_enrichment.is_tmdb_enabled",
         lambda: True,
@@ -162,7 +160,7 @@ def test_build_similar_movie_clusters_uses_tmdb_results(monkeypatch):
         ]
     }
 
-    def fake_tmdb_json(url: str, token: str, **_kwargs: Any):  # noqa: ARG001
+    def fake_tmdb_json(url: str, token: str, **_kwargs: Any):
         if "similar" in url:
             return similar_payload
         return None

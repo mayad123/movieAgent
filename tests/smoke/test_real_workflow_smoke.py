@@ -10,7 +10,6 @@ Optional: CINEMIND_LLM_API_KEY
 From repo root with PYTHONPATH=src.
 """
 import asyncio
-import os
 import sys
 from pathlib import Path
 

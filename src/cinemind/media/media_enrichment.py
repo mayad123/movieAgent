@@ -13,10 +13,10 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Optional, List, Dict
+from typing import Any
 
+from ..extraction.title_extraction import get_search_phrases
 from .media_cache import MediaCache, get_default_media_cache
-from ..extraction.title_extraction import get_search_phrases, extract_movie_titles
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def _get_tmdb_token_best_effort() -> str:
         pass
 
     try:
-        from config import is_tmdb_enabled, get_tmdb_access_token
+        from config import get_tmdb_access_token, is_tmdb_enabled
         if is_tmdb_enabled():
             return (get_tmdb_access_token() or "").strip()
     except Exception:
@@ -77,7 +77,7 @@ def _build_strip_from_tmdb(
     tr: Any,
     search_text: str,
     token: str,
-    cache: Optional[MediaCache] = None,
+    cache: MediaCache | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Build media_strip and poster_debug from TMDBResolveResult.
@@ -108,13 +108,13 @@ def _build_strip_from_tmdb(
         strip["page_url"] = _tmdb_movie_url(movie_id)
 
     # Poster: from cache or from tr.poster_path
-    poster_url: Optional[str] = None
+    poster_url: str | None = None
     if cache is not None:
         cached_url, hit = cache.get_tmdb_poster(title, year)
         if hit and cached_url:
             poster_url = cached_url
     if not poster_url and (tr.poster_path or "").strip():
-        from integrations.tmdb.image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
+        from integrations.tmdb.image_config import SIZE_POSTER_GALLERY, build_image_url, get_config
         cfg = get_config(token)
         poster_url = build_image_url((tr.poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
         if cache is not None and poster_url:
@@ -141,7 +141,7 @@ def _build_candidate_from_tmdb(c: Any, token: str = "") -> dict[str, Any]:
     poster_path = getattr(c, "poster_path", None) or (c.get("poster_path") if isinstance(c, dict) else None)
     if (poster_path or "").strip() and token:
         try:
-            from integrations.tmdb.image_config import get_config, build_image_url, SIZE_POSTER_GALLERY
+            from integrations.tmdb.image_config import SIZE_POSTER_GALLERY, build_image_url, get_config
             cfg = get_config(token)
             url = build_image_url((poster_path or "").strip(), SIZE_POSTER_GALLERY, cfg)
             if url:
@@ -200,7 +200,7 @@ BATCH_MAX_TITLES = 8
 def _enrich_one_title_tmdb(
     title: str,
     token: str,
-    cache: Optional[MediaCache] = None,
+    cache: MediaCache | None = None,
 ) -> dict[str, Any]:
     """Enrich a single title using TMDB only. Returns UI-ready card dict."""
     title = (title or "").strip()
@@ -241,10 +241,10 @@ def _enrich_one_title_tmdb(
 
 def enrich(
     user_query: str,
-    fallback_title: Optional[str] = None,
-    fallback_from_result: Optional[dict[str, Any]] = None,
+    fallback_title: str | None = None,
+    fallback_from_result: dict[str, Any] | None = None,
     *,
-    cache: Optional[MediaCache] = None,
+    cache: MediaCache | None = None,
     use_enrich_cache: bool = True,
 ) -> MediaEnrichmentResult:
     """
@@ -282,10 +282,7 @@ def enrich(
     if not token:
         # No TMDB token → still return a minimal placeholder for `movie_title`
         # so downstream code/tests can render “text-only” cards safely.
-        if explicit_fallback_provided:
-            title = _fallback_title_value()
-        else:
-            title = ""
+        title = _fallback_title_value() if explicit_fallback_provided else ""
         if (title or "").strip():
             return MediaEnrichmentResult(
                 media_strip={"movie_title": title, "page_url": "#"},
@@ -309,7 +306,7 @@ def enrich(
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 resolved_list = list(pool.map(_resolve_phrase, phrases))
 
-            for search_text, tr in zip(phrases, resolved_list):
+            for search_text, tr in zip(phrases, resolved_list, strict=False):
                 if tr.status == "not_found":
                     continue
                 media_strip, poster_debug = _build_strip_from_tmdb(tr, search_text, token, cache=media_cache)
@@ -362,7 +359,7 @@ def enrich_batch(
     *,
     max_concurrent: int = BATCH_MAX_CONCURRENT,
     max_titles: int = BATCH_MAX_TITLES,
-    cache: Optional[MediaCache] = None,
+    cache: MediaCache | None = None,
 ) -> list[dict[str, Any]]:
     """
     Enrich multiple titles using TMDB only. Returns list of UI-ready cards.
@@ -384,7 +381,7 @@ def enrich_batch(
     if not unique:
         return []
 
-    cards: list[Optional[dict[str, Any]]] = [None] * len(unique)
+    cards: list[dict[str, Any] | None] = [None] * len(unique)
 
     def _task(i: int, title: str) -> tuple[int, dict[str, Any]]:
         return (i, _enrich_one_title_tmdb(title, token, cache=media_cache))
@@ -479,7 +476,7 @@ def build_attachments_from_media(result: dict[str, Any]) -> dict[str, Any]:
 def _attach_single(
     title: str,
     result: dict[str, Any],
-    cache: Optional[MediaCache],
+    cache: MediaCache | None,
 ) -> None:
     """Enrich a single title and attach to result."""
     enrichment = enrich(
@@ -498,8 +495,8 @@ def _attach_single(
 def _attach_batch(
     batch_titles: list[str],
     result: dict[str, Any],
-    gallery_label: Optional[str],
-    cache: Optional[MediaCache],
+    gallery_label: str | None,
+    cache: MediaCache | None,
 ) -> None:
     """Enrich multiple titles via batch and attach to result."""
     cards = enrich_batch(batch_titles, cache=cache)
@@ -515,9 +512,9 @@ def attach_media_to_result(
     user_query: str,
     result: dict[str, Any],
     *,
-    titles: Optional[list[str]] = None,
-    gallery_label: Optional[str] = None,
-    cache: Optional[MediaCache] = None,
+    titles: list[str] | None = None,
+    gallery_label: str | None = None,
+    cache: MediaCache | None = None,
 ) -> None:
     """
     Attach media_strip (and optional media_candidates) to result using TMDB only.
@@ -567,18 +564,18 @@ def attach_media_to_result(
 
 def build_similar_movie_clusters(
     title: str,
-    year: Optional[int] = None,
-    tmdb_id: Optional[int] = None,
-    media_type: Optional[str] = None,
+    year: int | None = None,
+    tmdb_id: int | None = None,
+    media_type: str | None = None,
     max_results: int = 18,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build genre/tone/cast clusters for a movie using TMDB "similar" titles.
 
     Contract:
       - Returns {"clusters": [SimilarCluster, ...]} where each cluster has:
           kind: "genre" | "tone" | "cast"
-          label: human‑readable string
+          label: human-readable string
           movies: list of movie card dicts compatible with SimilarMovie / Movie Hub.
 
     Data sourcing strategy:
@@ -587,15 +584,15 @@ def build_similar_movie_clusters(
       2. If tmdb_id is provided (preferred) → call TMDB /movie/{id}/similar.
       3. Else, resolve by title/year via integrations.tmdb.resolver.resolve_movie.
 
-    The "genre" cluster is the primary IMDb‑style "People who liked this also liked..."
+    The "genre" cluster is the primary IMDb-style "People who liked this also liked..."
     row. "tone" and "cast" are currently placeholders (empty) that can be filled by a
-    richer similarity model later (e.g. LLM‑derived tone tags or shared cast credits).
+    richer similarity model later (e.g. LLM-derived tone tags or shared cast credits).
     """
-    from config import is_tmdb_enabled, get_tmdb_access_token  # local import to avoid cycles
+    from config import get_tmdb_access_token, is_tmdb_enabled  # local import to avoid cycles
 
     # Always build the three clusters so the frontend contract is stable.
     base_label = (title or "").strip() or "This movie"
-    clusters: List[Dict[str, Any]] = [
+    clusters: list[dict[str, Any]] = [
         {
             "kind": "genre",
             "label": f"Similar by genre to {base_label}",
@@ -626,21 +623,21 @@ def build_similar_movie_clusters(
     # Helper imports kept inside the function to avoid hard dependencies at module import.
     try:
         from integrations.tmdb.http_client import tmdb_request_json  # type: ignore
+        from integrations.tmdb.image_config import (  # type: ignore
+            SIZE_POSTER_GALLERY,
+            build_image_url,
+        )
         from integrations.tmdb.resolver import (  # type: ignore
             BASE_URL,
             _extract_year,
             resolve_movie,
-        )
-        from integrations.tmdb.image_config import (  # type: ignore
-            SIZE_POSTER_GALLERY,
-            build_image_url,
         )
     except Exception:
         # If TMDB modules are not available for any reason, keep graceful fallback.
         return {"clusters": clusters}
 
     # Resolve TMDB id if not provided.
-    resolved_id: Optional[int] = tmdb_id
+    resolved_id: int | None = tmdb_id
     if resolved_id is None:
         try:
             search_title = (title or "").strip()
@@ -657,7 +654,7 @@ def build_similar_movie_clusters(
     import urllib.parse
 
     url = f"{BASE_URL}/movie/{resolved_id}/similar"
-    qs: Dict[str, str] = {"page": "1"}
+    qs: dict[str, str] = {"page": "1"}
     full_url = f"{url}?{urllib.parse.urlencode(qs)}"
     data = tmdb_request_json(full_url, token, timeout=10.0, log_label="TMDB_similar")
     if not isinstance(data, dict):
@@ -667,7 +664,7 @@ def build_similar_movie_clusters(
     if not results:
         return {"clusters": clusters}
 
-    movies: List[Dict[str, Any]] = []
+    movies: list[dict[str, Any]] = []
     slice_limit = max(0, int(max_results) if max_results is not None else 0)
     for r in results[:slice_limit]:
         try:
@@ -682,7 +679,7 @@ def build_similar_movie_clusters(
             continue
 
         poster_path = (r.get("poster_path") or "").strip()
-        primary_image_url: Optional[str] = None
+        primary_image_url: str | None = None
         if poster_path:
             try:
                 primary_image_url = build_image_url(poster_path, SIZE_POSTER_GALLERY)
@@ -694,7 +691,7 @@ def build_similar_movie_clusters(
         media_kind = (media_type or "movie").strip() or "movie"
         page_url = f"https://www.themoviedb.org/{'movie' if media_kind == 'movie' else 'tv'}/{tmdb_movie_id}"
 
-        movie_item: Dict[str, Any] = {
+        movie_item: dict[str, Any] = {
             "title": raw_title,
             "year": release_year,
             "primary_image_url": primary_image_url,

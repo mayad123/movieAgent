@@ -6,7 +6,7 @@ the concrete agent (CineMind); workflows do not import cinemind.agent.
 """
 import asyncio
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from services.interfaces import IAgentRunner
 
@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 async def run_real_agent_with_fallback(
     user_query: str,
-    request_type: Optional[str],
+    request_type: str | None,
     use_live_data: bool,
     timeout_seconds: float,
     agent_runner: IAgentRunner,
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+) -> tuple[dict[str, Any] | None, str | None]:
     """
     Run real agent with timeout. On timeout or exception, return (None, fallback_reason)
     so the caller can switch to playground. No silent crash.
@@ -37,7 +37,7 @@ async def run_real_agent_with_fallback(
             timeout=timeout_seconds,
         )
         return result, None
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error(
             "Real agent timed out after %.0fs (query: %s...). Falling back to PLAYGROUND.",
             timeout_seconds,

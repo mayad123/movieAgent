@@ -1,5 +1,5 @@
 """Fact-checking query test cases."""
-from .base import TestCase, contains_all_substrings, contains_any_substring, min_length
+from .base import TestCase, contains_all_substrings, contains_any_substring
 
 FACT_CHECK_TESTS = [
     TestCase(

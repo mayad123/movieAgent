@@ -7,9 +7,8 @@ with confidence scores, working fully offline without any LLM calls.
 Used to automatically infer request_type when not provided externally, enabling
 seamless routing without requiring user selection.
 """
-import re
 import logging
-from typing import Optional, Tuple
+import re
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -20,17 +19,17 @@ class RequestTypeResult:
     """Result of request_type routing with confidence score."""
     request_type: str
     confidence: float  # 0.0 to 1.0
-    rule_hit: Optional[str] = None  # Which rule matched (for debugging)
+    rule_hit: str | None = None  # Which rule matched (for debugging)
 
 
 class RequestTypeRouter:
     """
     Deterministic rules-first router for request_type inference.
-    
+
     Maps user prompts to request_type with confidence scores. Fully offline,
     no LLM calls required. Defaults to "info" if confidence is low.
     """
-    
+
     # High-confidence patterns (specific, unambiguous)
     HIGH_CONFIDENCE_PATTERNS = {
         "comparison": [
@@ -58,7 +57,7 @@ class RequestTypeRouter:
             r"\b(how long|how many|how much)\s+(is|was|are|were)\b",  # "how long is X"
         ],
     }
-    
+
     # Medium-confidence patterns (less specific, may overlap)
     MEDIUM_CONFIDENCE_PATTERNS = {
         "recs": [
@@ -80,19 +79,19 @@ class RequestTypeRouter:
             r"\b(tell me|tell me about|information about|info about)\b",  # "tell me about X"
         ],
     }
-    
+
     # Low-confidence patterns (ambiguous, should default to info)
     LOW_CONFIDENCE_PATTERNS = {
         "recs": [
             r"\b(movie|film)\b",  # Just mentions "movie" (very generic)
         ],
     }
-    
+
     # Guardrail patterns (override everything else, highest priority)
     GUARDRAILS = [
         # "similar" + "recommend" → recs (high confidence)
         (
-            lambda q: bool(re.search(r"\b(similar|like)\b", q, re.IGNORECASE) and 
+            lambda q: bool(re.search(r"\b(similar|like)\b", q, re.IGNORECASE) and
                           re.search(r"\b(recommend|suggest)\b", q, re.IGNORECASE)),
             "recs", 0.95, "guardrail: similar+recommend"
         ),
@@ -112,22 +111,22 @@ class RequestTypeRouter:
             "info", 0.95, "guardrail: movies in order"
         ),
     ]
-    
+
     # Default confidence thresholds
     HIGH_CONFIDENCE_THRESHOLD = 0.8
     MEDIUM_CONFIDENCE_THRESHOLD = 0.5
     LOW_CONFIDENCE_THRESHOLD = 0.3
-    
+
     def route(self, query: str) -> RequestTypeResult:
         """
         Route a user query to a request_type with confidence score.
-        
+
         Args:
             query: User's query string
-            
+
         Returns:
             RequestTypeResult with request_type, confidence, and rule_hit
-            
+
         Rules:
         1. Check guardrails first (highest priority)
         2. Check high-confidence patterns
@@ -135,7 +134,7 @@ class RequestTypeRouter:
         4. If confidence is low, default to "info"
         """
         query_lower = query.lower().strip()
-        
+
         # Empty query defaults to info
         if not query_lower:
             return RequestTypeResult(
@@ -143,7 +142,7 @@ class RequestTypeRouter:
                 confidence=0.5,
                 rule_hit="default: empty query"
             )
-        
+
         # Step 1: Check guardrails (highest priority, override everything)
         for guardrail_fn, req_type, confidence, rule_name in self.GUARDRAILS:
             if guardrail_fn(query):
@@ -153,7 +152,7 @@ class RequestTypeRouter:
                     confidence=confidence,
                     rule_hit=rule_name
                 )
-        
+
         # Step 2: Check high-confidence patterns (most specific first)
         for req_type, patterns in self.HIGH_CONFIDENCE_PATTERNS.items():
             for pattern in patterns:
@@ -164,7 +163,7 @@ class RequestTypeRouter:
                         confidence=0.9,
                         rule_hit=f"high_confidence:{pattern[:30]}"
                     )
-        
+
         # Step 3: Check medium-confidence patterns
         matches_by_type = {}
         for req_type, patterns in self.MEDIUM_CONFIDENCE_PATTERNS.items():
@@ -173,7 +172,7 @@ class RequestTypeRouter:
                     if req_type not in matches_by_type:
                         matches_by_type[req_type] = []
                     matches_by_type[req_type].append(pattern)
-        
+
         # If we have medium-confidence matches, pick the most specific one
         if matches_by_type:
             # Prioritize: comparison > recs > release-date > info
@@ -187,7 +186,7 @@ class RequestTypeRouter:
                         confidence=0.65,
                         rule_hit=f"medium_confidence:{pattern[:30]}"
                     )
-        
+
         # Step 4: Check low-confidence patterns (but still assign lower confidence)
         for req_type, patterns in self.LOW_CONFIDENCE_PATTERNS.items():
             for pattern in patterns:
@@ -195,22 +194,22 @@ class RequestTypeRouter:
                     logger.debug(f"RequestTypeRouter: Low-confidence match - {pattern[:40]} → {req_type} (defaulting to info)")
                     # Low confidence, but we matched something - still default to info
                     break
-        
+
         # Step 5: Default to "info" with low confidence
-        logger.debug(f"RequestTypeRouter: No pattern match, defaulting to info")
+        logger.debug("RequestTypeRouter: No pattern match, defaulting to info")
         return RequestTypeResult(
             request_type="info",
             confidence=0.4,  # Low confidence default
             rule_hit="default: no pattern match"
         )
-    
+
     def should_use_inferred_type(self, result: RequestTypeResult) -> bool:
         """
         Determine if inferred request_type should be used.
-        
+
         Args:
             result: RequestTypeResult from route()
-            
+
         Returns:
             True if confidence is high enough to use, False to default to "info"
         """
@@ -220,7 +219,7 @@ class RequestTypeRouter:
 
 
 # Global singleton instance
-_router_instance: Optional[RequestTypeRouter] = None
+_router_instance: RequestTypeRouter | None = None
 
 
 def get_request_type_router() -> RequestTypeRouter:

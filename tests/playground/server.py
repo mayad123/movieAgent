@@ -10,13 +10,13 @@ Endpoints:
 
 Usage:
     python -m tests.playground_server
-    
+
     Server runs on http://localhost:8000 by default.
-    
+
 Examples:
     # Health check
     curl http://localhost:8000/health
-    
+
     # Execute query
     curl -X POST http://localhost:8000/query \
          -H "Content-Type: application/json" \
@@ -24,7 +24,7 @@ Examples:
 """
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,15 +38,27 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from tests.playground.runner import run_playground
+import contextlib
+
+from tests.playground.projects_store import (
+    add_assets as projects_add_assets,
+)
+from tests.playground.projects_store import (
+    create as projects_create,
+)
+from tests.playground.projects_store import (
+    get_by_id as projects_get_by_id,
+)
 from tests.playground.projects_store import (
     list_all as projects_list_all,
-    get_by_id as projects_get_by_id,
-    create as projects_create,
-    seed_if_needed as projects_seed_if_needed,
-    add_assets as projects_add_assets,
+)
+from tests.playground.projects_store import (
     remove_asset as projects_remove_asset,
 )
+from tests.playground.projects_store import (
+    seed_if_needed as projects_seed_if_needed,
+)
+from tests.playground.runner import run_playground
 
 # Create FastAPI app
 app = FastAPI(
@@ -76,23 +88,23 @@ web_dir = project_root / "web"
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
     user_query: str
-    request_type: Optional[str] = None  # Optional: if not provided, auto-inferred using rules-based router
-    requestedAgentMode: Optional[str] = None  # UI hint; playground always runs PLAYGROUND, returns agent_mode
+    request_type: str | None = None  # Optional: if not provided, auto-inferred using rules-based router
+    requestedAgentMode: str | None = None  # UI hint; playground always runs PLAYGROUND, returns agent_mode
 
 
 class ProjectCreate(BaseModel):
     """Request body for creating a project."""
     name: str
-    description: Optional[str] = ""
+    description: str | None = ""
 
 
 class AssetIn(BaseModel):
     """One asset to capture (poster image, title, page, conversation)."""
-    posterImageUrl: Optional[str] = None
+    posterImageUrl: str | None = None
     title: str
-    pageUrl: Optional[str] = None
-    pageId: Optional[str] = None
-    conversationId: Optional[str] = None
+    pageUrl: str | None = None
+    pageId: str | None = None
+    conversationId: str | None = None
 
 
 class ProjectAssetsBody(BaseModel):
@@ -110,7 +122,7 @@ class HealthResponse(BaseModel):
 async def health_check():
     """
     Health check endpoint for sanity checks.
-    
+
     Returns:
         JSON with status and service name
     """
@@ -121,17 +133,17 @@ async def health_check():
 
 
 @app.post("/query")
-async def execute_query(request: QueryRequest) -> Dict[str, Any]:
+async def execute_query(request: QueryRequest) -> dict[str, Any]:
     """
     Execute a user query through the offline playground runner.
     When a single movie entity is resolved, attaches media_strip (movie_title + optional primary_image_url).
-    
+
     Args:
         request: QueryRequest with user_query and optional request_type
-        
+
     Returns:
         Full structured result from CineMind agent, with media_strip when applicable
-        
+
     Raises:
         HTTPException: If query execution fails
     """
@@ -171,11 +183,11 @@ def _playground_watchmode_500():
 
 @app.get("/api/watch/where-to-watch")
 async def where_to_watch(
-    tmdbId: Optional[str] = Query(None, alias="tmdbId"),
+    tmdbId: str | None = Query(None, alias="tmdbId"),
     mediaType: str = Query("movie", alias="mediaType"),
     country: str = Query("US"),
-    title: Optional[str] = Query(None),
-    year: Optional[str] = Query(None),
+    title: str | None = Query(None),
+    year: str | None = Query(None),
 ):
     """Where to Watch: by tmdbId or by title. Same contract as main API; uses Watchmode."""
     from config import is_watchmode_configured
@@ -193,10 +205,8 @@ async def where_to_watch(
     title_name = (title or "").strip() or None
     year_val = None
     if year and str(year).strip().isdigit():
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             year_val = int(year)
-        except (TypeError, ValueError):
-            pass
     use_tmdb = bool((tmdbId or "").strip())
     if not use_tmdb and not title_name:
         return JSONResponse(status_code=400, content={"error": "missing_params", "message": "Provide tmdbId or title."})
@@ -278,6 +288,7 @@ if web_dir.is_dir():
 def main():
     """Run the server using uvicorn."""
     import os
+
     import uvicorn
 
     port = int(os.getenv("PORT", "8000"))
@@ -299,7 +310,7 @@ def main():
     print("\nPress Ctrl+C to stop the server")
     print("=" * 60)
     print()
-    
+
     # Run server (use PORT env var if 8000 is already in use)
     uvicorn.run(
         "tests.playground_server:app",

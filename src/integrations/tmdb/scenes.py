@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,10 @@ MIN_BACKDROP_HEIGHT = 150
 @dataclass(frozen=True)
 class SceneItem:
     image_url: str
-    caption: Optional[str] = None
-    source_url: Optional[str] = None
-    source: Optional[str] = None  # e.g. "TMDB" for attribution
-    source_label: Optional[str] = None  # e.g. "The Movie Database" for UI
+    caption: str | None = None
+    source_url: str | None = None
+    source: str | None = None  # e.g. "TMDB" for attribution
+    source_label: str | None = None  # e.g. "The Movie Database" for UI
 
     def to_attachment_item(self) -> dict[str, Any]:
         out: dict[str, Any] = {"imageUrl": self.image_url}
@@ -53,7 +53,7 @@ class SceneItem:
 class ScenesProvider(Protocol):
     """Interface for pluggable scenes/backdrops providers. Server-side only."""
 
-    def fetch_scenes(self, title: str, year: Optional[int] = None) -> list[SceneItem]:
+    def fetch_scenes(self, title: str, year: int | None = None) -> list[SceneItem]:
         """
         Return a normalized list of scene/backdrop images for the given movie.
 
@@ -65,7 +65,7 @@ class ScenesProvider(Protocol):
 class ScenesProviderEmpty:
     """Fallback provider: returns no scenes (Wikipedia-only / no external scenes)."""
 
-    def fetch_scenes(self, title: str, year: Optional[int] = None) -> list[SceneItem]:
+    def fetch_scenes(self, title: str, year: int | None = None) -> list[SceneItem]:
         return []
 
 
@@ -91,7 +91,7 @@ class ScenesProviderTMDB:
         self._timeout = max(1.0, timeout)
         self._max_backdrops = max(1, min(20, max_backdrops))
 
-    def fetch_scenes(self, title: str, year: Optional[int] = None) -> list[SceneItem]:
+    def fetch_scenes(self, title: str, year: int | None = None) -> list[SceneItem]:
         """
         Fetch backdrops for the movie. Does not raise; returns [] on any failure.
 
@@ -140,9 +140,7 @@ class ScenesProviderTMDB:
                 h = b.get("height") or 0
                 if MIN_BACKDROP_WIDTH and w > 0 and w < MIN_BACKDROP_WIDTH:
                     return False
-                if MIN_BACKDROP_HEIGHT and h > 0 and h < MIN_BACKDROP_HEIGHT:
-                    return False
-                return True
+                return not (MIN_BACKDROP_HEIGHT and h > 0 and h < MIN_BACKDROP_HEIGHT)
 
             backdrops = [b for b in backdrops if _accept(b)]
 
@@ -152,7 +150,7 @@ class ScenesProviderTMDB:
                 key=lambda b: (-(b.get("vote_average") or 0), -(b.get("vote_count") or 0)),
             )
 
-            from .image_config import get_config, build_image_url, SIZE_BACKDROP_GALLERY
+            from .image_config import SIZE_BACKDROP_GALLERY, build_image_url, get_config
             img_config = get_config(self._token, timeout=self._timeout)
             source_url = f"{self.MOVIE_PAGE_BASE}/{movie_id}"
             seen_urls: set[str] = set()

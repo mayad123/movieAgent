@@ -4,7 +4,7 @@ Playground workflow: deterministic pipeline with TMDB media.
 Thin orchestration layer; implementation lives in cinemind.playground.
 Callers (API, tests) use this entry point so wiring stays thin.
 """
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Implementation remains in cinemind; workflow layer delegates
 from cinemind.agent.playground import run_playground_query
@@ -12,8 +12,8 @@ from cinemind.agent.playground import run_playground_query
 
 async def run_playground(
     user_query: str,
-    request_type: Optional[str] = None,
-) -> Dict[str, Any]:
+    request_type: str | None = None,
+) -> dict[str, Any]:
     """
     Execute a query through the playground pipeline (TMDB media, no real LLM).
 

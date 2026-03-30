@@ -14,8 +14,9 @@ if _src.exists() and str(_src) not in sys.path:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PROJECTS_STORE_PATH", str(tmp_path / "projects_api.json"))
-    from api import main as api_main
     from fastapi.testclient import TestClient
+
+    from api import main as api_main
 
     api_main._projects_store = None
     with TestClient(api_main.app) as test_client:

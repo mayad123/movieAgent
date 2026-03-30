@@ -8,8 +8,6 @@ From repo root with PYTHONPATH=src (or install package).
 import sys
 from pathlib import Path
 
-import pytest
-
 # Ensure src is on path when running from repo root
 _repo_root = Path(__file__).resolve().parent.parent.parent
 _src = _repo_root / "src"
@@ -26,6 +24,7 @@ def test_playground_app_imports():
 def test_playground_health():
     """GET /health returns 200 and ok status."""
     from fastapi.testclient import TestClient
+
     from tests.playground.server import app
 
     client = TestClient(app)
@@ -39,6 +38,7 @@ def test_playground_health():
 def test_playground_query_one_request():
     """POST /query with minimal body returns 200 and expected shape (smoke)."""
     from fastapi.testclient import TestClient
+
     from tests.playground.server import app
 
     client = TestClient(app)

@@ -2,18 +2,12 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from cinemind.extraction.response_movie_extractor import (
+    extract_titles_for_enrichment,
     normalize_title,
     parse_response,
-    extract_titles_for_enrichment,
-    ResponseParseResult,
-    ExtractedMovie,
-    ParseStructure,
-    ParseSignals,
 )
 
 
@@ -67,7 +61,7 @@ class TestParseStructure:
         assert r.structure.has_title_year_pattern is True
 
     def test_has_dash_blurb_pattern(self):
-        r = parse_response("Inception (2010) – a sci-fi thriller. Dune (2021): epic.")
+        r = parse_response("Inception (2010) - a sci-fi thriller. Dune (2021): epic.")
         assert r.structure.has_dash_blurb_pattern is True
 
     def test_paragraph_like_no_flags(self):
@@ -100,7 +94,7 @@ class TestParseMovies:
 
     def test_title_year_dash_blurb(self):
         r = parse_response(
-            "Inception (2010) – A mind-bending sci-fi. Dune (2021): Epic adaptation."
+            "Inception (2010) - A mind-bending sci-fi. Dune (2021): Epic adaptation."
         )
         assert len(r.movies) >= 1
         by_title = {m.title: m for m in r.movies}
@@ -120,7 +114,7 @@ class TestParseMovies:
 
     def test_dedupe_first_seen_order(self):
         r = parse_response(
-            "**Inception** (2010) – great. Also:\n- Inception (2010)\n- Dune (2021)"
+            "**Inception** (2010) - great. Also:\n- Inception (2010)\n- Dune (2021)"
         )
         # Inception should appear once (first from bold/title-year), then Dune
         titles = [m.title for m in r.movies]

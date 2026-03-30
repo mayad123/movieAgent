@@ -11,7 +11,6 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 from .http_client import tmdb_request_json
 
@@ -69,14 +68,14 @@ class TMDBImageConfig:
         return size
 
     @staticmethod
-    def _pick_first_of(available: list[str], preferred: list[str]) -> Optional[str]:
+    def _pick_first_of(available: list[str], preferred: list[str]) -> str | None:
         for p in preferred:
             if p in (available or []):
                 return p
         return available[0] if available else None
 
 
-_cache: Optional[tuple[TMDBImageConfig, float]] = None
+_cache: tuple[TMDBImageConfig, float] | None = None
 _cache_lock = threading.Lock()
 
 
@@ -143,7 +142,7 @@ def get_config(
 def build_image_url(
     file_path: str,
     size_key: str,
-    config: Optional[TMDBImageConfig] = None,
+    config: TMDBImageConfig | None = None,
 ) -> str:
     """
     Build full image URL from TMDB file_path and size key.
@@ -182,13 +181,13 @@ def clear_config_cache() -> None:
 
 
 __all__ = [
-    "TMDBImageConfig",
-    "fetch_config",
-    "get_config",
-    "build_image_url",
-    "clear_config_cache",
-    "SIZE_POSTER_THUMBNAIL",
-    "SIZE_POSTER_GALLERY",
     "SIZE_BACKDROP_GALLERY",
     "SIZE_BACKDROP_ORIGINAL",
+    "SIZE_POSTER_GALLERY",
+    "SIZE_POSTER_THUMBNAIL",
+    "TMDBImageConfig",
+    "build_image_url",
+    "clear_config_cache",
+    "fetch_config",
+    "get_config",
 ]

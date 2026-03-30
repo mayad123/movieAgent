@@ -1,8 +1,6 @@
 """
 System prompt versioning for A/B testing and iterative improvement.
 """
-from typing import Dict, Optional
-from datetime import datetime
 
 
 PROMPT_VERSIONS = {
@@ -84,11 +82,11 @@ def get_prompt_version(version: str = "v1") -> str:
     return PROMPT_VERSIONS.get(version, PROMPT_VERSIONS["v1"])
 
 
-def list_versions() -> Dict[str, Dict]:
+def list_versions() -> dict[str, dict]:
     """List all available prompt versions with metadata."""
     import tiktoken
     enc = tiktoken.encoding_for_model('gpt-4')
-    
+
     versions = {}
     for version, prompt in PROMPT_VERSIONS.items():
         versions[version] = {
@@ -112,7 +110,7 @@ def _get_version_description(version: str) -> str:
     return descriptions.get(version, "Unknown version")
 
 
-def compare_versions(v1: str, v2: str) -> Dict:
+def compare_versions(v1: str, v2: str) -> dict:
     """Compare two prompt versions."""
     return {
         "v1_length": len(PROMPT_VERSIONS.get(v1, "")),

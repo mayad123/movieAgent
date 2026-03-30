@@ -10,8 +10,8 @@ All rules are deterministic (regex and string patterns). Use parse_response(text
 and pass result.to_dict() or the dataclasses to the intent classifier or
 media enrichment pipeline.
 
-List patterns: bullet lines (-, *, •, –), numbered (1. 2. or 1) 2)), Markdown
-bold (**Title**), and "Title (Year) – blurb" or "Title (Year):" or standalone
+List patterns: bullet lines (-, *, •, -), numbered (1. 2. or 1) 2)), Markdown
+bold (**Title**), and "Title (Year) - blurb" or "Title (Year):" or standalone
 "Title (Year)".
 """
 from __future__ import annotations
@@ -21,13 +21,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 __all__ = [
+    "ExtractedMovie",
+    "ParseSignals",
+    "ParseStructure",
+    "ResponseParseResult",
+    "extract_titles_for_enrichment",
     "normalize_title",
     "parse_response",
-    "extract_titles_for_enrichment",
-    "ResponseParseResult",
-    "ExtractedMovie",
-    "ParseStructure",
-    "ParseSignals",
 ]
 
 
@@ -63,14 +63,14 @@ def normalize_title(s: str) -> str:
     #   "1. Interstellar" -> "Interstellar"
     #   "(1) Interstellar" -> "Interstellar"
     #   "2) Inception" -> "Inception"
-    t = re.sub(r"^\s*(?:[-*•–◦]\s*)?\(?\s*\d+\s*\)?\s*[\.\)]\s*", "", t).strip()
+    t = re.sub(r"^\s*(?:[-*\u2022\u2013\u25E6]\s*)?\(?\s*\d+\s*\)?\s*[\.\)]\s*", "", t).strip()
     return t.strip()
 
 
 # --- Year extraction ---
 
 _YEAR_PATTERN = re.compile(r"\((\d{4})\)")
-_YEAR_AT_END = re.compile(r"\((\d{4})\)\s*[:–\-]\s*")  # (1999): or (1999) – or (1999) -
+_YEAR_AT_END = re.compile(r"\((\d{4})\)\s*[:\u2013\-]\s*")  # (1999): or (1999) -
 
 
 def _extract_year_from_tail(s: str) -> tuple[str, int | None]:
@@ -88,15 +88,15 @@ def _extract_year_from_tail(s: str) -> tuple[str, int | None]:
 
 # --- List and structure patterns ---
 
-# Bullet: line start with -, *, •, – (en-dash), or ◦
-_BULLET_START = re.compile(r"^\s*[\-\*•–◦]\s+", re.MULTILINE)
+# Bullet: line start with -, *, •, - (hyphen), or ◦
+_BULLET_START = re.compile(r"^\s*[\-\*\u2022\u2013\u25E6]\s+", re.MULTILINE)
 # Numbered: 1. 2. or 1) 2) or (1) (2) or 1) 2)
 _NUMBERED_START = re.compile(r"^\s*(?:\(\s*\d+\s*\)|\d+\s*[.\)])\s+", re.MULTILINE)
 # Markdown bold: **text** or *text*
 _BOLD_TITLE = re.compile(r"\*\*([^*]+)\*\*|\*([^*]+)\*")
-# Title (Year) – blurb or Title (Year): blurb (captures title and year)
+# Title (Year) - blurb or Title (Year): blurb (captures title and year)
 _TITLE_YEAR_DASH = re.compile(
-    r"([^\n*\-•–◦]+?)\s*\((\d{4})\)\s*[:–\-]\s*",
+    r"([^\n*\-\u2022\u2013\u25E6]+?)\s*\((\d{4})\)\s*[:\u2013\-]\s*",
     re.MULTILINE,
 )
 # Standalone Title (Year) at word boundary (for extraction)
@@ -218,7 +218,7 @@ def _compute_structure(text: str) -> ParseStructure:
     s.has_numbered_list = bool(_NUMBERED_START.search(text))
     s.has_bold_titles = bool(_BOLD_TITLE.search(text))
     s.has_title_year_pattern = bool(_YEAR_PATTERN.search(text))
-    # Dash-blurb: (Year) followed by – or : and more text
+    # Dash-blurb: (Year) followed by - or : and more text
     s.has_dash_blurb_pattern = bool(_YEAR_AT_END.search(text))
     return s
 
@@ -394,10 +394,10 @@ def _extract_from_bold(text: str) -> list[tuple[str, int | None, float]]:
 
 
 def _extract_from_title_year_patterns(text: str) -> list[tuple[str, int | None, float]]:
-    """Extract from 'Title (Year) – blurb' or 'Title (Year):' or standalone 'Title (Year)'."""
+    """Extract from 'Title (Year) - blurb' or 'Title (Year):' or standalone 'Title (Year)'."""
     out: list[tuple[str, int | None, float]] = []
     seen_keys: set[str] = set()
-    # Title (Year) – or :
+    # Title (Year) - or :
     for m in _TITLE_YEAR_DASH.finditer(text):
         title_raw, year_s = m.group(1).strip(), m.group(2)
         year = int(year_s) if 1900 <= int(year_s) <= 2100 else None

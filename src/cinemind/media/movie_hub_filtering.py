@@ -14,10 +14,9 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from config import get_tmdb_access_token, is_tmdb_enabled
-
 from integrations.tmdb.movie_metadata import fetch_movie_filter_bundle
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ def _norm_text(s: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(t).lower()).strip()
 
 
-def extract_actor_constraint(question: str) -> Optional[str]:
+def extract_actor_constraint(question: str) -> str | None:
     """
     Extract an actor name from patterns like:
     - "which movies star leonardo dicaprio?"
@@ -51,7 +50,7 @@ def extract_actor_constraint(question: str) -> Optional[str]:
     return actor
 
 
-def extract_horror_constraint(question: str) -> Tuple[bool, bool]:
+def extract_horror_constraint(question: str) -> tuple[bool, bool]:
     """
     Returns (include_horror, exclude_horror).
     - include_horror: question implies positive interest in horror/scary
@@ -66,7 +65,7 @@ def extract_horror_constraint(question: str) -> Tuple[bool, bool]:
     return (include, exclude)
 
 
-def extract_like_movie_title(question: str) -> Optional[str]:
+def extract_like_movie_title(question: str) -> str | None:
     """
     Extract a referenced movie title from patterns like:
     - "What movies like Scary Movie?"
@@ -87,7 +86,7 @@ def extract_like_movie_title(question: str) -> Optional[str]:
     return title or None
 
 
-def _ensure_hub_filter_metadata(tmdb_id: int, token: str, cache: Dict[int, Dict[str, Any]]) -> None:
+def _ensure_hub_filter_metadata(tmdb_id: int, token: str, cache: dict[int, dict[str, Any]]) -> None:
     """Load genres, keywords, and cast in one TMDB request per id (append_to_response)."""
     cur = cache.get(tmdb_id) or {}
     if "genres" in cur and "keywords" in cur and "cast" in cur:
@@ -104,7 +103,7 @@ def _ensure_hub_filter_metadata(tmdb_id: int, token: str, cache: Dict[int, Dict[
     }
 
 
-def _is_horror_movie(tmdb_id: int, token: str, cache: Dict[int, Dict[str, Any]]) -> bool:
+def _is_horror_movie(tmdb_id: int, token: str, cache: dict[int, dict[str, Any]]) -> bool:
     cached = cache.get(tmdb_id) or {}
     if "is_horror" in cached:
         return bool(cached["is_horror"])
@@ -125,7 +124,7 @@ def _is_horror_movie(tmdb_id: int, token: str, cache: Dict[int, Dict[str, Any]])
     return is_horror
 
 
-def _cast_matches_actor(tmdb_id: int, token: str, actor_norm: str, cache: Dict[int, Dict[str, Any]]) -> bool:
+def _cast_matches_actor(tmdb_id: int, token: str, actor_norm: str, cache: dict[int, dict[str, Any]]) -> bool:
     _ensure_hub_filter_metadata(tmdb_id, token, cache)
     cached = cache.get(tmdb_id) or {}
 
@@ -140,9 +139,9 @@ def _cast_matches_actor(tmdb_id: int, token: str, actor_norm: str, cache: Dict[i
 
 
 def filter_movie_hub_clusters_by_question(
-    clusters: List[Dict[str, Any]],
+    clusters: list[dict[str, Any]],
     question: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Deterministically filter candidates.
 
@@ -186,7 +185,7 @@ def filter_movie_hub_clusters_by_question(
                             continue
 
                 if target_ids:
-                    out_like: List[Dict[str, Any]] = []
+                    out_like: list[dict[str, Any]] = []
                     for c in clusters:
                         if not isinstance(c, dict):
                             continue
@@ -239,9 +238,9 @@ def filter_movie_hub_clusters_by_question(
     actor_norm = _norm_text(actor) if actor else ""
 
     # Cache per TMDB id during one filtering pass.
-    cache: Dict[int, Dict[str, Any]] = {}
+    cache: dict[int, dict[str, Any]] = {}
 
-    def movie_matches(movie: Dict[str, Any]) -> bool:
+    def movie_matches(movie: dict[str, Any]) -> bool:
         tmdb_id = movie.get("tmdbId") or movie.get("tmdb_id")
         if tmdb_id is None:
             # Missing identifiers can't be reliably matched.
@@ -251,9 +250,8 @@ def filter_movie_hub_clusters_by_question(
         except Exception:
             return False
 
-        if actor_norm:
-            if not _cast_matches_actor(tmid_int, token, actor_norm, cache):
-                return False
+        if actor_norm and not _cast_matches_actor(tmid_int, token, actor_norm, cache):
+            return False
 
         if include_horror or exclude_horror:
             is_horror = _is_horror_movie(tmid_int, token, cache)
@@ -264,7 +262,7 @@ def filter_movie_hub_clusters_by_question(
 
         return True
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for c in clusters:
         if not isinstance(c, dict):
             continue

@@ -15,7 +15,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 from .http_client import tmdb_request_json
 
@@ -40,7 +40,7 @@ _bundle_misses = 0
 _bundle_evictions = 0
 
 
-def _safe_int(x: Any) -> Optional[int]:
+def _safe_int(x: Any) -> int | None:
     try:
         if x is None:
             return None
@@ -77,7 +77,7 @@ def fetch_movie_filter_bundle(
     token: str,
     *,
     timeout: float = 10.0,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Single GET /movie/{id}?append_to_response=credits,keywords.
 
@@ -119,7 +119,7 @@ def fetch_movie_filter_bundle(
     return {"genres": genres, "cast": cast_names, "keywords": keyword_names}
 
 
-def _memoized_bundle(movie_id: Any, token: str) -> Optional[dict[str, Any]]:
+def _memoized_bundle(movie_id: Any, token: str) -> dict[str, Any] | None:
     global _bundle_hits, _bundle_misses, _bundle_evictions
     mid = _safe_int(movie_id)
     if mid is None:
@@ -169,10 +169,10 @@ def fetch_movie_keyword_names(movie_id: Any, token: str) -> list[str]:
 
 
 __all__ = [
+    "clear_movie_metadata_bundle_cache",
     "fetch_movie_cast_names",
+    "fetch_movie_filter_bundle",
     "fetch_movie_genre_names",
     "fetch_movie_keyword_names",
-    "fetch_movie_filter_bundle",
-    "clear_movie_metadata_bundle_cache",
     "movie_metadata_bundle_stats",
 ]

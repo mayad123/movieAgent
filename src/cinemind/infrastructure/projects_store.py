@@ -5,20 +5,20 @@ import json
 import os
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _norm_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _asset_dedupe_key(asset: Dict[str, Any]) -> str:
+def _asset_dedupe_key(asset: dict[str, Any]) -> str:
     page_id = _norm_text(asset.get("pageId"))
     if page_id:
         return "pageId:" + page_id.lower()
@@ -33,7 +33,7 @@ def _asset_dedupe_key(asset: Dict[str, Any]) -> str:
 class ProjectsStore:
     """File-backed project storage used by API endpoints."""
 
-    def __init__(self, storage_path: Optional[str] = None) -> None:
+    def __init__(self, storage_path: str | None = None) -> None:
         env_path = os.getenv("PROJECTS_STORE_PATH", "").strip()
         path_value = storage_path or env_path or "data/projects_store.json"
         self._path = Path(path_value)
@@ -45,7 +45,7 @@ class ProjectsStore:
         if not self._path.exists():
             self._write({"projects": []})
 
-    def _read(self) -> Dict[str, Any]:
+    def _read(self) -> dict[str, Any]:
         if not self._path.exists():
             return {"projects": []}
         with self._path.open("r", encoding="utf-8") as f:
@@ -57,14 +57,14 @@ class ProjectsStore:
             data["projects"] = []
         return data
 
-    def _write(self, payload: Dict[str, Any]) -> None:
+    def _write(self, payload: dict[str, Any]) -> None:
         with self._path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
 
-    def list_projects(self) -> List[Dict[str, Any]]:
+    def list_projects(self) -> list[dict[str, Any]]:
         with self._lock:
             data = self._read()
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             for project in data.get("projects", []):
                 assets = project.get("assets", []) if isinstance(project.get("assets"), list) else []
                 out.append(
@@ -80,7 +80,7 @@ class ProjectsStore:
                 )
             return out
 
-    def create_project(self, *, name: str, description: Optional[str], context_focus: Optional[str]) -> Dict[str, Any]:
+    def create_project(self, *, name: str, description: str | None, context_focus: str | None) -> dict[str, Any]:
         with self._lock:
             data = self._read()
             now = _utc_now_iso()
@@ -105,7 +105,7 @@ class ProjectsStore:
                 "assetCount": 0,
             }
 
-    def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+    def get_project(self, project_id: str) -> dict[str, Any] | None:
         with self._lock:
             data = self._read()
             for project in data.get("projects", []):
@@ -124,7 +124,7 @@ class ProjectsStore:
                 }
             return None
 
-    def add_assets(self, project_id: str, assets: List[Dict[str, Any]]) -> Optional[Dict[str, int]]:
+    def add_assets(self, project_id: str, assets: list[dict[str, Any]]) -> dict[str, int] | None:
         with self._lock:
             data = self._read()
             for project in data.get("projects", []):
@@ -168,7 +168,7 @@ class ProjectsStore:
                 return {"added": added, "skipped": skipped, "total": added + skipped}
             return None
 
-    def delete_asset(self, project_id: str, asset_ref: str) -> Optional[bool]:
+    def delete_asset(self, project_id: str, asset_ref: str) -> bool | None:
         with self._lock:
             data = self._read()
             for project in data.get("projects", []):

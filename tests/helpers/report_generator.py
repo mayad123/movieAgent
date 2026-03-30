@@ -5,63 +5,63 @@ Collects statistics during test runs and generates a JSON report.
 """
 import json
 import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from collections import defaultdict
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 
 @dataclass
 class ScenarioResult:
     """Result for a single scenario test."""
     scenario_name: str
-    template_id: Optional[str]
+    template_id: str | None
     passed: bool
     duration_ms: float
     failure_count: int
-    failures: List[str] = field(default_factory=list)
-    violation_types: List[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    violation_types: list[str] = field(default_factory=list)
     evidence_items: int = 0
     evidence_deduped_count: int = 0
     evidence_max_snippet_len: int = 0
-    scenario_set: Optional[str] = None
+    scenario_set: str | None = None
     passed_clean: bool = True  # True if passed with zero violations
     has_violations: bool = False  # True if validation found violations
-    kaggle_outcome: Optional[Dict[str, Any]] = None  # Kaggle behavior outcome
+    kaggle_outcome: dict[str, Any] | None = None  # Kaggle behavior outcome
 
 
 class ScenarioReportCollector:
     """Collects statistics during scenario test runs."""
-    
+
     def __init__(self):
-        self.results: List[ScenarioResult] = []
-        self.start_time: Optional[float] = None
-        self.end_time: Optional[float] = None
-    
+        self.results: list[ScenarioResult] = []
+        self.start_time: float | None = None
+        self.end_time: float | None = None
+
     def start_test_run(self):
         """Mark the start of a test run."""
         self.start_time = time.time()
         self.results = []
-    
+
     def record_scenario_result(
         self,
         scenario_name: str,
-        template_id: Optional[str],
+        template_id: str | None,
         passed: bool,
         duration_ms: float,
-        failures: List[str],
-        violation_types: List[str] = None,
+        failures: list[str],
+        violation_types: list[str] | None = None,
         evidence_items: int = 0,
         evidence_deduped_count: int = 0,
         evidence_max_snippet_len: int = 0,
-        scenario_set: Optional[str] = None,
+        scenario_set: str | None = None,
         passed_clean: bool = True,
         has_violations: bool = False,
-        kaggle_outcome: Optional[Dict[str, Any]] = None
+        kaggle_outcome: dict[str, Any] | None = None
     ):
         """
         Record the result of a single scenario test.
-        
+
         Args:
             scenario_name: Name of the scenario
             template_id: Template ID used
@@ -90,12 +90,12 @@ class ScenarioReportCollector:
             kaggle_outcome=kaggle_outcome
         )
         self.results.append(result)
-    
+
     def end_test_run(self):
         """Mark the end of a test run."""
         self.end_time = time.time()
-    
-    def generate_report(self) -> Dict[str, Any]:
+
+    def generate_report(self) -> dict[str, Any]:
         """Generate a JSON report from collected results."""
         if not self.results:
             return {
@@ -118,7 +118,7 @@ class ScenarioReportCollector:
                     "max_snippet_length": 0
                 }
             }
-        
+
         # Calculate summary statistics
         total = len(self.results)
         passed = sum(1 for r in self.results if r.passed)
@@ -127,9 +127,9 @@ class ScenarioReportCollector:
         passed_clean = sum(1 for r in self.results if r.passed and r.passed_clean)
         passed_with_violations = sum(1 for r in self.results if r.passed and r.has_violations)
         avg_time_ms = sum(r.duration_ms for r in self.results) / total if total > 0 else 0.0
-        
+
         # Group by template_id
-        by_template: Dict[str, Dict[str, int]] = defaultdict(lambda: {"passed": 0, "failed": 0, "total": 0})
+        by_template: dict[str, dict[str, int]] = defaultdict(lambda: {"passed": 0, "failed": 0, "total": 0})
         for result in self.results:
             template_key = result.template_id or "unknown"
             by_template[template_key]["total"] += 1
@@ -137,11 +137,11 @@ class ScenarioReportCollector:
                 by_template[template_key]["passed"] += 1
             else:
                 by_template[template_key]["failed"] += 1
-        
+
         # Group by scenario_set
-        by_scenario_set: Dict[str, Dict[str, int]] = defaultdict(lambda: {
-            "passed": 0, 
-            "failed": 0, 
+        by_scenario_set: dict[str, dict[str, int]] = defaultdict(lambda: {
+            "passed": 0,
+            "failed": 0,
             "total": 0,
             "passed_clean": 0,
             "passed_with_violations": 0
@@ -157,23 +157,23 @@ class ScenarioReportCollector:
                     by_scenario_set[set_key]["passed_with_violations"] += 1
             else:
                 by_scenario_set[set_key]["failed"] += 1
-        
+
         # Calculate top violations
-        violation_counts: Dict[str, int] = defaultdict(int)
+        violation_counts: dict[str, int] = defaultdict(int)
         for result in self.results:
             for violation_type in result.violation_types:
                 violation_counts[violation_type] += 1
-        
+
         # Sort violations by frequency (descending)
         top_violations = [
             {"violation_type": v_type, "count": count}
             for v_type, count in sorted(violation_counts.items(), key=lambda x: x[1], reverse=True)
         ]
-        
+
         # Calculate evidence statistics
         evidence_items_list = [r.evidence_items for r in self.results if r.evidence_items > 0]
         avg_evidence_items = sum(evidence_items_list) / len(evidence_items_list) if evidence_items_list else 0.0
-        
+
         # Calculate dedupe reduction (percentage reduction from original to deduped)
         dedupe_reductions = []
         for result in self.results:
@@ -181,9 +181,9 @@ class ScenarioReportCollector:
                 reduction = ((result.evidence_items - result.evidence_deduped_count) / result.evidence_items * 100)
                 dedupe_reductions.append(reduction)
         avg_dedupe_reduction = sum(dedupe_reductions) / len(dedupe_reductions) if dedupe_reductions else 0.0
-        
+
         max_snippet_length = max((r.evidence_max_snippet_len for r in self.results), default=0)
-        
+
         report = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "summary": {
@@ -204,27 +204,27 @@ class ScenarioReportCollector:
                 "max_snippet_length": max_snippet_length
             }
         }
-        
+
         return report
-    
-    def write_report(self, report_dir: Path = None):
+
+    def write_report(self, report_dir: Path | None = None):
         """Write the report to test_reports/latest.json and generate violations index."""
         if report_dir is None:
             # Default to tests/test_reports/
             report_dir = Path(__file__).parent.parent / "test_reports"
-        
+
         # Create directory if it doesn't exist
         report_dir.mkdir(parents=True, exist_ok=True)
-        
+
         report_file = report_dir / "latest.json"
-        
+
         report = self.generate_report()
-        
+
         # Write JSON report with indentation for readability
         try:
             with open(report_file, "w", encoding="utf-8") as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
-            
+
             # Generate violations index after writing report
             try:
                 from tests.helpers.violation_artifact_writer import generate_violations_index
@@ -235,7 +235,7 @@ class ScenarioReportCollector:
             except Exception as e:
                 # Don't fail report writing if index generation fails
                 print(f"Warning: Failed to generate violations index: {e}")
-            
+
             return report_file
         except Exception as e:
             print(f"Warning: Failed to write test report to {report_file}: {e}")

@@ -26,20 +26,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from ..extraction.response_movie_extractor import ResponseParseResult
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "classify_attachment_intent",
-    "AttachmentIntentResult",
-    "INTENT_PRIMARY_MOVIE",
-    "INTENT_MOVIE_LIST",
-    "INTENT_SCENES",
     "INTENT_DID_YOU_MEAN",
+    "INTENT_MOVIE_LIST",
     "INTENT_NONE",
+    "INTENT_PRIMARY_MOVIE",
+    "INTENT_SCENES",
+    "AttachmentIntentResult",
+    "classify_attachment_intent",
 ]
 
 # Intent values (align with attachment section types where applicable)
@@ -102,16 +101,14 @@ def _should_trigger_scenes(parsed: ResponseParseResult) -> bool:
         return True
     if s.scene_like_enumeration:
         return True
-    if s.the_film_movie_references >= _SCENES_FILM_MOVIE_REF_THRESHOLD:
-        return True
-    return False
+    return s.the_film_movie_references >= _SCENES_FILM_MOVIE_REF_THRESHOLD
 
 
 def classify_attachment_intent(
     parsed_response: ResponseParseResult,
     *,
-    user_query_title: Optional[str] = None,
-    resolver_ambiguous: Optional[bool] = None,
+    user_query_title: str | None = None,
+    resolver_ambiguous: bool | None = None,
 ) -> AttachmentIntentResult:
     """
     Deterministic attachment intent from parsed response; user query and

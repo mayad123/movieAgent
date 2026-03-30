@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class _TTLCache:
         self._expired = 0
         self._evictions = 0
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         with self._lock:
             ent = self._data.get(key)
             if ent is None:
@@ -97,7 +97,7 @@ _resolve_cache = _TTLCache(RESOLVE_CACHE_MAX)
 
 def cache_key(
     title: str,
-    year: Optional[int],
+    year: int | None,
     min_confidence: float,
     min_score_gap: float,
     max_candidates: int,
@@ -107,7 +107,7 @@ def cache_key(
     return f"{min_confidence}|{min_score_gap}|{max_candidates}|{t}|{y}"
 
 
-def get_cached(key: str) -> Optional[Any]:
+def get_cached(key: str) -> Any | None:
     val = _resolve_cache.get(key)
     logger.debug("TMDB resolve_cache %s", "hit" if val is not None else "miss")
     return val
@@ -126,10 +126,10 @@ def resolve_cache_stats() -> dict[str, int]:
 
 
 __all__ = [
-    "cache_key",
-    "get_cached",
-    "set_cached",
-    "clear_resolve_cache",
-    "resolve_cache_stats",
     "RESOLVE_CACHE_TTL",
+    "cache_key",
+    "clear_resolve_cache",
+    "get_cached",
+    "resolve_cache_stats",
+    "set_cached",
 ]

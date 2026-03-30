@@ -6,7 +6,6 @@ that handles common misspellings and paraphrases while preserving exact-match
 behavior.
 """
 import re
-from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 
@@ -16,17 +15,17 @@ class FuzzyMatchResult:
     intent: str
     match_strength: float  # 0.0 to 1.0, where 1.0 is exact match
     match_type: str  # "exact", "fuzzy_typo", "fuzzy_paraphrase"
-    matched_pattern: Optional[str] = None
+    matched_pattern: str | None = None
 
 
 class FuzzyIntentMatcher:
     """
     Fuzzy matcher for intent detection that handles typos and paraphrases.
-    
+
     Deterministic and offline-capable. Provides match strength scores
     and never overrides strong exact matches.
     """
-    
+
     # Common misspelling patterns (typo → correct)
     TYPO_PATTERNS = {
         "director_info": [
@@ -69,7 +68,7 @@ class FuzzyIntentMatcher:
             (r"watch", "watch"),  # Already correct
         ],
     }
-    
+
     # Common paraphrase patterns (alternative phrasings)
     PARAPHRASE_PATTERNS = {
         "director_info": [
@@ -122,19 +121,19 @@ class FuzzyIntentMatcher:
             r"compare and contrast",  # "compare and contrast"
         ],
     }
-    
+
     # Match strength thresholds
     EXACT_MATCH_STRENGTH = 1.0
     FUZZY_TYPO_STRENGTH = 0.85  # High confidence for typos
     FUZZY_PARAPHRASE_STRENGTH = 0.80  # Good confidence for paraphrases
-    
+
     def __init__(self) -> None:
         """Initialize the fuzzy matcher."""
         # Pre-compile regex patterns for performance
         self._compiled_typo_patterns = self._compile_typo_patterns()
         self._compiled_paraphrase_patterns = self._compile_paraphrase_patterns()
-    
-    def _compile_typo_patterns(self) -> Dict[str, List[Tuple[re.Pattern, str]]]:
+
+    def _compile_typo_patterns(self) -> dict[str, list[tuple[re.Pattern, str]]]:
         """Compile typo patterns into regex."""
         compiled = {}
         for intent, patterns in self.TYPO_PATTERNS.items():
@@ -144,37 +143,37 @@ class FuzzyIntentMatcher:
                 pattern = re.compile(rf"\b{re.escape(typo)}\b", re.IGNORECASE)
                 compiled[intent].append((pattern, correct))
         return compiled
-    
-    def _compile_paraphrase_patterns(self) -> Dict[str, List[re.Pattern]]:
+
+    def _compile_paraphrase_patterns(self) -> dict[str, list[re.Pattern]]:
         """Compile paraphrase patterns into regex."""
         compiled = {}
         for intent, patterns in self.PARAPHRASE_PATTERNS.items():
             compiled[intent] = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
         return compiled
-    
-    def match_fuzzy(self, query: str, exact_match_found: bool = False) -> Optional[FuzzyMatchResult]:
+
+    def match_fuzzy(self, query: str, exact_match_found: bool = False) -> FuzzyMatchResult | None:
         """
         Attempt fuzzy matching for typos and paraphrases.
-        
+
         Args:
             query: User query (lowercased)
             exact_match_found: Whether an exact match was already found (if True, fuzzy won't override)
-        
+
         Returns:
             FuzzyMatchResult if fuzzy match found, None otherwise
-            
+
         Note:
             If exact_match_found is True, this returns None to preserve exact-match behavior.
         """
         query_lower = query.lower()
-        
+
         # Never override exact matches
         if exact_match_found:
             return None
-        
+
         # Try typo matching first (higher confidence)
         for intent, patterns in self._compiled_typo_patterns.items():
-            for pattern, correct_form in patterns:
+            for pattern, _correct_form in patterns:
                 if pattern.search(query_lower):
                     # Found a typo match
                     return FuzzyMatchResult(
@@ -183,7 +182,7 @@ class FuzzyIntentMatcher:
                         match_type="fuzzy_typo",
                         matched_pattern=pattern.pattern
                     )
-        
+
         # Try paraphrase matching (slightly lower confidence)
         for intent, patterns in self._compiled_paraphrase_patterns.items():
             for pattern in patterns:
@@ -195,22 +194,22 @@ class FuzzyIntentMatcher:
                         match_type="fuzzy_paraphrase",
                         matched_pattern=pattern.pattern
                     )
-        
+
         return None
-    
-    def match_exact(self, query: str, exact_patterns: Dict[str, List[re.Pattern]]) -> Optional[FuzzyMatchResult]:
+
+    def match_exact(self, query: str, exact_patterns: dict[str, list[re.Pattern]]) -> FuzzyMatchResult | None:
         """
         Check for exact pattern matches.
-        
+
         Args:
             query: User query (lowercased)
             exact_patterns: Dict of intent -> list of compiled regex patterns
-            
+
         Returns:
             FuzzyMatchResult if exact match found, None otherwise
         """
         query_lower = query.lower()
-        
+
         for intent, patterns in exact_patterns.items():
             for pattern in patterns:
                 if pattern.search(query_lower):
@@ -220,12 +219,12 @@ class FuzzyIntentMatcher:
                         match_type="exact",
                         matched_pattern=pattern.pattern
                     )
-        
+
         return None
 
 
 # Global singleton instance
-_matcher_instance: Optional[FuzzyIntentMatcher] = None
+_matcher_instance: FuzzyIntentMatcher | None = None
 
 
 def get_fuzzy_matcher() -> FuzzyIntentMatcher:

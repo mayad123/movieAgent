@@ -135,7 +135,7 @@ REAL_AGENT_TIMEOUT_SECONDS = float(os.getenv("CINEMIND_REAL_AGENT_TIMEOUT", "90"
 REAL_AGENT_MAX_TOKENS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOKENS", "2000"))
 REAL_AGENT_MAX_TOOL_CALLS = int(os.getenv("CINEMIND_REAL_AGENT_MAX_TOOL_CALLS", "10"))
 
-def get_system_prompt(version: Optional[str] = None) -> str:
+def get_system_prompt(version: str | None = None) -> str:
     """Get system prompt for specified version."""
     try:
         from cinemind.prompting.versions import get_prompt_version

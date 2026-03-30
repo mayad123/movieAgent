@@ -4,9 +4,8 @@ Unit tests for EvidenceFormatter structured metadata.
 Tests that EvidenceFormatter returns structured metadata correctly,
 including deduplication counts and snippet length tracking.
 """
-import pytest
-from cinemind.prompting.evidence_formatter import EvidenceFormatter, EvidenceFormatResult, FormattedEvidenceItem
 from cinemind.prompting import EvidenceBundle
+from cinemind.prompting.evidence_formatter import EvidenceFormatResult, EvidenceFormatter, FormattedEvidenceItem
 
 
 def test_format_returns_structured_result():
@@ -20,9 +19,9 @@ def test_format_returns_structured_result():
             "source": "test"
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     assert isinstance(result, EvidenceFormatResult)
     assert hasattr(result, "text")
     assert hasattr(result, "items")
@@ -43,14 +42,14 @@ def test_backward_compatibility_string_usage():
             "source": "test"
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     # Should work as string (backward compatibility)
     text = str(result)
     assert isinstance(text, str)
     assert len(text) > 0
-    
+
     # Should work with len()
     assert len(result) > 0
 
@@ -58,7 +57,7 @@ def test_backward_compatibility_string_usage():
 def test_deduplication_counts():
     """Test that deduplication counts are tracked correctly."""
     formatter = EvidenceFormatter()
-    
+
     # Create bundle with duplicates
     bundle = EvidenceBundle(search_results=[
         {
@@ -83,9 +82,9 @@ def test_deduplication_counts():
             "year": 2010
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     assert result.counts["before"] == 3
     assert result.counts["after"] == 2  # One duplicate removed
     assert result.dedupe_removed == 1
@@ -95,7 +94,7 @@ def test_deduplication_counts():
 def test_max_snippet_length():
     """Test that max snippet length is tracked correctly."""
     formatter = EvidenceFormatter(max_snippet_length=50)
-    
+
     bundle = EvidenceBundle(search_results=[
         {
             "title": "Movie 1",
@@ -110,9 +109,9 @@ def test_max_snippet_length():
             "source": "test"
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     # Max snippet length should be at most max_snippet_length
     assert result.max_snippet_len <= formatter.max_snippet_length
     # Should be at least the length of the shorter content
@@ -122,7 +121,7 @@ def test_max_snippet_length():
 def test_formatted_item_metadata():
     """Test that FormattedEvidenceItem metadata is correct."""
     formatter = EvidenceFormatter()
-    
+
     bundle = EvidenceBundle(search_results=[
         {
             "title": "Test Movie",
@@ -132,12 +131,12 @@ def test_formatted_item_metadata():
             "year": 2020
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     assert len(result.items) == 1
     item = result.items[0]
-    
+
     assert isinstance(item, FormattedEvidenceItem)
     assert item.url == "http://example.com/movie"
     assert item.title == "Test Movie"
@@ -150,9 +149,9 @@ def test_empty_bundle():
     """Test that empty bundle returns empty result."""
     formatter = EvidenceFormatter()
     bundle = EvidenceBundle(search_results=[])
-    
+
     result = formatter.format(bundle)
-    
+
     assert isinstance(result, EvidenceFormatResult)
     assert result.text == ""
     assert result.counts["before"] == 0
@@ -164,7 +163,7 @@ def test_empty_bundle():
 def test_items_with_no_content_excluded():
     """Test that items with no content are excluded from items list."""
     formatter = EvidenceFormatter()
-    
+
     bundle = EvidenceBundle(search_results=[
         {
             "title": "Movie 1",
@@ -179,9 +178,9 @@ def test_items_with_no_content_excluded():
             "source": "test"
         }
     ])
-    
+
     result = formatter.format(bundle)
-    
+
     # Should only have 1 item (the one with content)
     assert result.counts["after"] == 1
     assert len(result.items) == 1
