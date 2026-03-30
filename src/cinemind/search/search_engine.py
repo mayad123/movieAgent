@@ -187,9 +187,7 @@ class SearchEngine:
         if self.kaggle_searcher and hasattr(self.kaggle_searcher, "is_highly_correlated"):
             try:
                 effective_kaggle_query = kaggle_query_string or query
-                is_high, kaggle_results, max_corr = self.kaggle_searcher.is_highly_correlated(
-                    effective_kaggle_query
-                )
+                is_high, kaggle_results, max_corr = self.kaggle_searcher.is_highly_correlated(effective_kaggle_query)
                 decision.kaggle_query_string = effective_kaggle_query
                 decision.kaggle_max_score = float(max_corr or 0.0)
                 decision.kaggle_stage_a_candidates = len(kaggle_results or [])
