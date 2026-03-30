@@ -1,10 +1,15 @@
 """
 LLM client interface and implementations for CineMind.
 Supports dependency injection for testing with FakeLLM.
+Production: OpenAI-compatible HTTP API (e.g. local Llama / vLLM) via httpx.
 """
+import json
 import re
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncGenerator
+
+import httpx
+
 from dataclasses import dataclass
 
 
@@ -18,28 +23,43 @@ class LLMResponse:
 
 class LLMClient(ABC):
     """Abstract interface for LLM clients."""
-    
+
     @abstractmethod
     async def chat_completions_create(
         self,
         model: str,
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        *,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
         Generate a chat completion.
-        
+
         Args:
-            model: Model name (e.g., "gpt-4")
+            model: Model id on the inference server
             messages: List of message dicts with "role" and "content"
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
-            
+            response_format: Optional OpenAI-style {"type": "json_object"} when supported
+
         Returns:
             LLMResponse with content and usage
         """
         pass
+
+    async def chat_completions_create_stream(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> AsyncGenerator[str, None]:
+        """Stream text deltas (OpenAI-style SSE). Default: single chunk from non-streaming call."""
+        resp = await self.chat_completions_create(model, messages, temperature, max_tokens)
+        if resp.content:
+            yield resp.content
 
 
 class FakeLLMClient(LLMClient):
@@ -58,7 +78,9 @@ class FakeLLMClient(LLMClient):
         model: str,
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        *,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """
         Generate a fake response based on messages.
@@ -451,35 +473,120 @@ class FakeLLMClient(LLMClient):
         )
 
 
-class OpenAILLMClient(LLMClient):
-    """Wrapper for OpenAI client to match LLMClient interface."""
-    
-    def __init__(self, openai_client: Any) -> None:
-        """
-        Initialize OpenAI LLM client wrapper.
-        
-        Args:
-            openai_client: AsyncOpenAI client instance
-        """
-        self.client = openai_client
-    
+class HttpChatLLMClient(LLMClient):
+    """OpenAI-compatible Chat Completions over HTTP (Llama, vLLM, LM Studio, etc.)."""
+
+    def __init__(self, http_client: httpx.AsyncClient, api_key: str = "") -> None:
+        self._http = http_client
+        self._api_key = (api_key or "").strip()
+
+    def _headers(self) -> Dict[str, str]:
+        h = {"Content-Type": "application/json"}
+        if self._api_key:
+            h["Authorization"] = f"Bearer {self._api_key}"
+        return h
+
     async def chat_completions_create(
         self,
         model: str,
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        *,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
-        """Call OpenAI API and wrap response."""
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        
-        content = response.choices[0].message.content
-        usage = response.usage.__dict__ if response.usage else None
-        
+        body: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if response_format:
+            body["response_format"] = response_format
+
+        try:
+            r = await self._http.post("chat/completions", json=body, headers=self._headers())
+        except httpx.TimeoutException as e:
+            raise RuntimeError(f"LLM request timed out: {e}") from e
+        except httpx.RequestError as e:
+            raise RuntimeError(f"LLM connection error: {e}") from e
+
+        if r.status_code == 401:
+            raise ValueError("LLM returned 401 Unauthorized. Check CINEMIND_LLM_API_KEY if the server requires it.")
+        if r.status_code == 404:
+            raise ValueError(
+                f"LLM returned 404. Check CINEMIND_LLM_BASE_URL and that the server exposes "
+                f"/v1/chat/completions. Response: {r.text[:500]}"
+            )
+        if r.status_code >= 400:
+            raise ValueError(f"LLM error HTTP {r.status_code}: {r.text[:800]}")
+
+        try:
+            data = r.json()
+        except json.JSONDecodeError as e:
+            raise ValueError(f"LLM returned non-JSON: {r.text[:500]}") from e
+
+        choices = data.get("choices") or []
+        if not choices:
+            raise ValueError(f"LLM response missing choices: {str(data)[:800]}")
+
+        message = (choices[0].get("message") or {})
+        content = message.get("content")
+        if content is None:
+            content = ""
+        usage_raw = data.get("usage")
+        usage: Optional[Dict[str, int]] = None
+        if isinstance(usage_raw, dict):
+            usage = {k: int(v) for k, v in usage_raw.items() if isinstance(v, (int, float))}
+
         return LLMResponse(content=content, usage=usage)
+
+    async def chat_completions_create_stream(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> AsyncGenerator[str, None]:
+        body: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        try:
+            async with self._http.stream(
+                "POST",
+                "chat/completions",
+                json=body,
+                headers=self._headers(),
+            ) as response:
+                if response.status_code == 401:
+                    raise ValueError(
+                        "LLM returned 401 Unauthorized. Check CINEMIND_LLM_API_KEY if the server requires it."
+                    )
+                if response.status_code >= 400:
+                    text = (await response.aread()).decode(errors="replace")
+                    raise ValueError(f"LLM stream error HTTP {response.status_code}: {text[:800]}")
+
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    for choice in obj.get("choices") or []:
+                        delta = choice.get("delta") or {}
+                        piece = delta.get("content") or ""
+                        if piece:
+                            yield piece
+        except httpx.TimeoutException as e:
+            raise RuntimeError(f"LLM stream timed out: {e}") from e
+        except httpx.RequestError as e:
+            raise RuntimeError(f"LLM stream connection error: {e}") from e
 

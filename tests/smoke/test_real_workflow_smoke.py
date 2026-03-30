@@ -1,8 +1,12 @@
 """
 Smoke test: real LLM workflow runs on a minimal input.
 
-Requires OPENAI_API_KEY. Skips if not set. Run with:
-  OPENAI_API_KEY=sk-... pytest tests/smoke/test_real_workflow_smoke.py -v
+Requires a reachable OpenAI-compatible server and:
+  CINEMIND_LLM_BASE_URL, CINEMIND_LLM_MODEL
+Optional: CINEMIND_LLM_API_KEY
+
+  CINEMIND_LLM_BASE_URL=http://127.0.0.1:8000/v1 CINEMIND_LLM_MODEL=... \\
+    pytest tests/smoke/test_real_workflow_smoke.py -v
 From repo root with PYTHONPATH=src.
 """
 import asyncio
@@ -19,11 +23,13 @@ if _src.exists() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 
-def _has_openai_key():
-    return bool((os.getenv("OPENAI_API_KEY") or "").strip())
+def _llm_configured():
+    from config import is_llm_configured
+
+    return is_llm_configured()
 
 
-@pytest.mark.skipif(not _has_openai_key(), reason="OPENAI_API_KEY not set; real LLM smoke skipped")
+@pytest.mark.skipif(not _llm_configured(), reason="CINEMIND_LLM_BASE_URL + CINEMIND_LLM_MODEL not set; smoke skipped")
 @pytest.mark.asyncio
 async def test_real_workflow_minimal_query():
     """Real agent returns a non-empty response for a minimal query (smoke)."""

@@ -927,8 +927,12 @@ class IntentExtractor:
             StructuredIntent
         """
         try:
-            from config import OPENAI_MODEL
-            
+            from config import LLM_MODEL
+            from ..llm.client import LLMClient
+
+            if not isinstance(client, LLMClient):
+                raise TypeError("extract_with_llm expects an LLMClient instance")
+
             extraction_prompt = f"""Extract structured intent from this movie query.
 
 Query: "{query}"
@@ -986,17 +990,17 @@ CRITICAL RULES:
 
 Respond with ONLY the JSON, nothing else."""
 
-            response = await client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
+            llm_resp = await client.chat_completions_create(
+                LLM_MODEL,
+                [
                     {"role": "system", "content": "You are an intent extractor. Respond with ONLY valid JSON, no other text."},
-                    {"role": "user", "content": extraction_prompt}
+                    {"role": "user", "content": extraction_prompt},
                 ],
                 temperature=0.1,
-                max_tokens=300
+                max_tokens=300,
             )
-            
-            result_text = response.choices[0].message.content.strip()
+
+            result_text = (llm_resp.content or "").strip()
             
             # Parse JSON
             try:

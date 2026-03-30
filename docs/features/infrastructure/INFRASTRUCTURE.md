@@ -208,7 +208,7 @@ flowchart LR
     subgraph Observability
         RT["RequestTracker<br/>Per-request context"]
         OT["OperationTimer<br/>Stage timing"]
-        COST["calculate_openai_cost()<br/>Token → dollar"]
+        COST["estimate_llm_cost()<br/>Token → dollar"]
         OBS["Observability<br/>Aggregation"]
     end
 
@@ -230,7 +230,7 @@ Tracks a single request through all pipeline stages:
 | Request ID | Generated or provided |
 | Stage timings | `OperationTimer` context manager |
 | Token usage | LLM response |
-| Cost | `calculate_openai_cost()` |
+| Cost | `estimate_llm_cost()` (unknown models → 0) |
 | Search operations | Search engine callbacks |
 | Cache hits/misses | Semantic cache |
 

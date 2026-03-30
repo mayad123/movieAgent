@@ -30,7 +30,7 @@ gcloud run deploy cinemind \
   --source . \
   --platform managed \
   --region us-central1 \
-  --set-env-vars OPENAI_API_KEY=$OPENAI_API_KEY,TAVILY_API_KEY=$TAVILY_API_KEY
+  --set-env-vars CINEMIND_LLM_BASE_URL=$CINEMIND_LLM_BASE_URL,CINEMIND_LLM_MODEL=$CINEMIND_LLM_MODEL,CINEMIND_LLM_API_KEY=$CINEMIND_LLM_API_KEY,TAVILY_API_KEY=$TAVILY_API_KEY
 ```
 
 #### Azure (Container Instances)
@@ -39,7 +39,7 @@ az container create \
   --resource-group myResourceGroup \
   --name cinemind \
   --image cinemind:latest \
-  --environment-variables OPENAI_API_KEY=$OPENAI_API_KEY TAVILY_API_KEY=$TAVILY_API_KEY
+  --environment-variables CINEMIND_LLM_BASE_URL=$CINEMIND_LLM_BASE_URL CINEMIND_LLM_MODEL=$CINEMIND_LLM_MODEL CINEMIND_LLM_API_KEY=$CINEMIND_LLM_API_KEY TAVILY_API_KEY=$TAVILY_API_KEY
 ```
 
 ### 3. API Endpoints
@@ -54,7 +54,8 @@ Once deployed, the API is available at:
 ### 4. Production Considerations
 
 #### Environment Variables
-- Set `OPENAI_API_KEY` (required)
+- Set `CINEMIND_LLM_BASE_URL` and `CINEMIND_LLM_MODEL` (required for real agent)
+- Set `CINEMIND_LLM_API_KEY` when the inference server requires auth
 - Set `TAVILY_API_KEY` (recommended)
 - Set `PORT` if different from 8000
 

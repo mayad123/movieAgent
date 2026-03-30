@@ -4,9 +4,22 @@ Get up and running with CineMind in 5 minutes!
 
 ## Step 1: Install Dependencies
 
+Use a local virtualenv at **`.venv`** (already gitignored):
+
 ```bash
-pip install -r requirements.txt
+make venv
 ```
+
+That creates `.venv`, upgrades pip, and runs `pip install -r requirements.txt`. The project **Makefile** uses `.venv/bin/python` automatically when `.venv` exists (`make demo`, `make test`, etc.).
+
+Activate when running commands outside Make:
+
+```bash
+source .venv/bin/activate    # macOS / Linux
+# .venv\Scripts\activate     # Windows cmd/PowerShell
+```
+
+Optional editable install: `make install` or `make dev` (dev extras).
 
 ## Step 2: Set Up API Keys
 
@@ -15,15 +28,16 @@ pip install -r requirements.txt
    cp env.example .env
    ```
 
-2. Edit `.env` and add your keys:
+2. Edit `.env` and add your LLM server + optional search keys:
    ```
-   OPENAI_API_KEY=sk-your-key-here
+   CINEMIND_LLM_BASE_URL=http://127.0.0.1:8000
+   CINEMIND_LLM_MODEL=meta-llama/Llama-3.3-8B-Instruct
+   CINEMIND_LLM_API_KEY=   # if your inference server requires a bearer token
    TAVILY_API_KEY=tvly-your-key-here  # Optional but recommended
    ```
 
-   **Get your keys:**
-   - OpenAI: https://platform.openai.com/api-keys
-   - Tavily: https://tavily.com (free tier available)
+   **LLM:** Run an OpenAI-compatible inference server (vLLM, llama.cpp, LM Studio, etc.) and point `CINEMIND_LLM_BASE_URL` at its `/v1` root.
+   **Tavily:** https://tavily.com (free tier available)
 
 ## Step 3: Try It Out
 
@@ -86,9 +100,9 @@ Then access the API at http://localhost:8000
 
 ## Troubleshooting
 
-**"OpenAI API key not found"**
-- Make sure `.env` file exists and contains `OPENAI_API_KEY`
-- Verify the key is correct
+**"LLM not configured"**
+- Set `CINEMIND_LLM_BASE_URL` and `CINEMIND_LLM_MODEL` in `.env` (see `.env.example`)
+- Ensure the inference server is reachable from the API process
 
 **"Tavily search failed"**
 - Tavily is optional but recommended for better search

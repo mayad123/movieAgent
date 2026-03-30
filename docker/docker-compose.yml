@@ -9,15 +9,27 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      # LLM — leave blank to run in Playground mode (FakeLLMClient, no key needed)
+      - CINEMIND_LLM_BASE_URL=${CINEMIND_LLM_BASE_URL:-}
+      - CINEMIND_LLM_MODEL=${CINEMIND_LLM_MODEL:-}
+      - CINEMIND_LLM_API_KEY=${CINEMIND_LLM_API_KEY:-}
+      # Search
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # TMDB — free token enables real poster images (themoviedb.org → Settings → API)
+      - TMDB_READ_ACCESS_TOKEN=${TMDB_READ_ACCESS_TOKEN:-}
+      - ENABLE_TMDB_SCENES=${ENABLE_TMDB_SCENES:-true}
+      # Watchmode — streaming availability (optional)
+      - WATCHMODE_API_KEY=${WATCHMODE_API_KEY:-}
     env_file:
-      - .env
+      # Paths are relative to this compose file (docker/) → repo-root .env
+      # If .env does not exist the service still starts in Playground mode.
+      - path: ../.env
+        required: false
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # python:3.11-slim has no curl; use stdlib
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-

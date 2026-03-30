@@ -23,7 +23,7 @@ cp .env.example .env
 
 | Variable | Required | Notes |
 |----------|----------|--------|
-| `OPENAI_API_KEY` | For Real Agent | Required for real LLM mode. |
+| `CINEMIND_LLM_BASE_URL`, `CINEMIND_LLM_MODEL` | For Real Agent | OpenAI-compatible inference server (optional `CINEMIND_LLM_API_KEY`). |
 | `TAVILY_API_KEY` | No | Enhanced search. |
 | `TMDB_READ_ACCESS_TOKEN` | No | TMDB posters/scenes when `ENABLE_TMDB_SCENES=true`. |
 | `ENABLE_TMDB_SCENES` | No | `true`/`false`. |

@@ -71,7 +71,7 @@ The `CineMind` class is the primary orchestrator. On instantiation it wires ever
 ```mermaid
 graph LR
     CM["CineMind"]
-    CM --> LLM["LLMClient<br/>(OpenAI or Fake)"]
+    CM --> LLM["LLMClient<br/>(HTTP or Fake)"]
     CM --> SE["SearchEngine"]
     CM --> SP["SourcePolicy"]
     CM --> IE["IntentExtractor"]
@@ -143,6 +143,14 @@ sequenceDiagram
 
 ---
 
+### Related Movies Surface (Hub / Details)
+
+When the LLM layer returns `metadata.similar_movies`, `CineMind.search_and_analyze()` maps it into the final result payload:
+
+- Sets `result["recommended_movies"]` to the normalized `metadata.similar_movies` titles (used by existing media flow).
+- Also sets `result["relatedMovies"]` (if it is not already present) to the lightweight shape: `[{ "title": "<Movie Title>" }, ...]`.
+- This `relatedMovies` list powers UI “related titles” surfaces (Movie Hub and the Movie Details “related” section); full poster / TMDB IDs are populated later by media enrichment (`attach_media_to_result`).
+
 ## Agent Mode (`mode.py`)
 
 Two execution modes control which pipeline runs:
@@ -150,21 +158,21 @@ Two execution modes control which pipeline runs:
 | Mode | LLM | Web Search | Media Source | Use Case |
 |------|-----|-----------|-------------|----------|
 | `PLAYGROUND` | `FakeLLMClient` | Disabled | TMDB only | Development, demos, testing |
-| `REAL_AGENT` | `OpenAILLMClient` | Tavily + DuckDuckGo | TMDB | Production |
+| `REAL_AGENT` | `HttpChatLLMClient` | Tavily + DuckDuckGo | TMDB | Production |
 
 **Resolution logic:**
 
 ```mermaid
 flowchart TD
     ENV["Read AGENT_MODE env var"]
-    ENV -->|"REAL_AGENT"| CHECK["OPENAI_API_KEY present?"]
+    ENV -->|"REAL_AGENT"| CHECK["CINEMIND_LLM_BASE_URL<br/>+ MODEL configured?"]
     ENV -->|"PLAYGROUND" or unset| PG["→ PLAYGROUND"]
     CHECK -->|Yes| RA["→ REAL_AGENT"]
     CHECK -->|No| FALLBACK["→ PLAYGROUND (fallback)"]
 ```
 
 - `get_configured_mode()` — reads `AGENT_MODE` env var (default: `PLAYGROUND`)
-- `resolve_effective_mode()` — applies safety fallback when API key is missing
+- `resolve_effective_mode()` — applies safety fallback when LLM env is incomplete
 
 ---
 
@@ -235,7 +243,7 @@ graph TD
 
 | Package | Used In | Purpose |
 |---------|---------|---------|
-| `openai` | `core.py` (via `llm.client`) | LLM API calls |
+| `httpx` | `core.py` (via `llm.client`) | LLM HTTP calls |
 | `tavily` | `core.py` (via `search.search_engine`) | Web search |
 | `logging` | All modules | Structured logging |
 | `asyncio` | `core.py` | Async pipeline execution |
@@ -247,16 +255,17 @@ graph TD
 | Variable | Default | Used By |
 |----------|---------|---------|
 | `AGENT_MODE` | `PLAYGROUND` | `mode.py` — selects pipeline |
-| `OPENAI_API_KEY` | — | `mode.py` — fallback check; `llm/client.py` — API auth |
-| `OPENAI_MODEL` | `gpt-4o` | `core.py` — model selection |
+| `CINEMIND_LLM_BASE_URL` | — | `mode.py` — fallback check; `HttpChatLLMClient` base URL |
+| `CINEMIND_LLM_MODEL` | — | `core.py` — model id |
+| `CINEMIND_LLM_API_KEY` | — | Optional bearer token for inference server |
 
 ---
 
 ## Design Patterns & Practices
 
-1. **Strategy Pattern** — `AgentMode` selects between `FakeLLMClient` and `OpenAILLMClient` at runtime
+1. **Strategy Pattern** — `AgentMode` selects between `FakeLLMClient` and `HttpChatLLMClient` at runtime
 2. **Pipeline Pattern** — `search_and_analyze` chains stages with early exits (cache hit)
-3. **Graceful Degradation** — missing API key auto-downgrades to playground mode
+3. **Graceful Degradation** — missing LLM configuration auto-downgrades to playground mode at the API boundary
 4. **Dependency Injection** — `CineMind` accepts an optional `llm_client` parameter; tests inject fakes
 5. **Single Responsibility** — `core.py` orchestrates only; domain logic lives in dedicated packages
 
@@ -283,7 +292,7 @@ python -m pytest tests/integration/ tests/smoke/ tests/test_scenarios_offline.py
 |-----------|---------------|
 | `tests/integration/test_agent_offline_e2e.py` | Full pipeline with `FakeLLM`: plan → search → prompt → generate → validate |
 | `tests/smoke/test_playground_smoke.py` | Playground mode via FastAPI TestClient |
-| `tests/smoke/test_real_workflow_smoke.py` | Real LLM workflow (requires `OPENAI_API_KEY`) |
+| `tests/smoke/test_real_workflow_smoke.py` | Real LLM workflow (requires `CINEMIND_LLM_*`) |
 | `tests/test_scenarios_offline.py` | YAML scenario harness — routing, prompting, validation |
 | `tests/fixtures/scenarios/gold/*.yaml` | 28 regression scenarios (must pass) |
 | `tests/fixtures/scenarios/explore/*.yaml` | 46 experimental scenarios (informational) |

@@ -310,23 +310,17 @@ class OperationTimer:
         return False
 
 
-def calculate_openai_cost(usage: Dict, model: str) -> float:
+def estimate_llm_cost(usage: Dict, model: str) -> float:
     """
-    Calculate cost in USD for OpenAI API usage.
-    
-    Pricing (as of 2024, approximate):
-    - gpt-3.5-turbo: $0.0015/1K input tokens, $0.002/1K output tokens
-    - gpt-4: $0.03/1K input tokens, $0.06/1K output tokens
-    - gpt-4-turbo: $0.01/1K input tokens, $0.03/1K output tokens
-    - gpt-4o: $0.005/1K input tokens, $0.015/1K output tokens
+    Estimate cost in USD from token usage. Unknown model ids default to 0 (typical for self-hosted Llama).
+    Known hosted GPT ids retain approximate list pricing for backwards compatibility.
     """
     if not usage:
         return 0.0
-    
+
     input_tokens = usage.get("prompt_tokens", 0)
     output_tokens = usage.get("completion_tokens", 0)
-    
-    # Pricing per 1K tokens
+
     pricing = {
         "gpt-3.5-turbo": (0.0015, 0.002),
         "gpt-4": (0.03, 0.06),
@@ -334,10 +328,14 @@ def calculate_openai_cost(usage: Dict, model: str) -> float:
         "gpt-4o": (0.005, 0.015),
         "gpt-4o-mini": (0.00015, 0.0006),
     }
-    
-    # Default to gpt-4 pricing if model not found
-    input_price, output_price = pricing.get(model.lower(), (0.03, 0.06))
-    
+
+    input_price, output_price = pricing.get(model.lower(), (0.0, 0.0))
+
     cost = (input_tokens / 1000 * input_price) + (output_tokens / 1000 * output_price)
     return round(cost, 6)
+
+
+def calculate_openai_cost(usage: Dict, model: str) -> float:
+    """Deprecated alias for :func:`estimate_llm_cost`."""
+    return estimate_llm_cost(usage, model)
 

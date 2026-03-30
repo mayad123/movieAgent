@@ -33,6 +33,11 @@ ENV/
 # IDE
 .vscode/
 .idea/
+.cursor/hooks/.related_tests_last_run
+.cursor/hooks/.session_track_last
+
+# Session log hook signals (local queue for drafting entries)
+docs/session_logs/.tracking/
 *.swp
 *.swo
 *~
@@ -81,3 +86,34 @@ data/exports/*.csv
 # Old directories (if they still exist at root)
 prompt_comparison/
 
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.pyre_configuration.local
+
+# Test / coverage outputs
+coverage.xml
+*.cover
+*.py,cover
+
+# Packaging / build metadata
+pip-wheel-metadata/
+
+# Type checker / test env managers
+.tox/
+.nox/
+
+# Local env variants (keep templates committed)
+.env.*
+!.env.example
+
+# Local runtime files
+*.pid
+
+# Cursor / Claude local artifacts
+.cursor/projects/
+.cursor/agent/
+.claude/

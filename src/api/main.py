@@ -6,7 +6,9 @@ import logging
 import json
 import os
 import re
-from typing import Optional
+import time
+import uuid
+from typing import Optional, List
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Path as ApiPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,9 +24,10 @@ try:
 
     from cinemind.agent import CineMind
     from cinemind.agent import AgentMode, get_configured_mode, resolve_effective_mode
-    from config import REAL_AGENT_TIMEOUT_SECONDS, is_watchmode_configured
+    from config import REAL_AGENT_TIMEOUT_SECONDS, is_watchmode_configured, is_llm_configured
     from cinemind.infrastructure import Database
     from cinemind.infrastructure import Observability
+    from cinemind.infrastructure import ProjectsStore
     from cinemind.infrastructure.tagging import RequestTagger, OUTCOMES
     from workflows import run_real_agent_with_fallback as run_real_agent_workflow, run_playground
     from schemas import (
@@ -35,6 +38,11 @@ try:
         DiagnosticResponse,
         SimilarMoviesResponse,
         MovieDetailsResponse,
+        ProjectSummary,
+        ProjectDetail,
+        ProjectCreateRequest,
+        ProjectAssetsAddRequest,
+        ProjectAssetsAddResponse,
     )
     from cinemind.media.media_enrichment import enrich_batch, build_similar_movie_clusters
     from cinemind.media.movie_hub_genre_parsing import parse_movie_hub_genre_buckets
@@ -69,21 +77,23 @@ app.add_middleware(
 # Global agent instance (lazy initialization)
 _agent: Optional[CineMind] = None
 _observability: Optional[Observability] = None
+_projects_store: Optional[ProjectsStore] = None
 
 
 @app.on_event("startup")
 def _log_agent_mode_at_startup():
     """Log whether Real Agent is available so you can confirm the right server and env."""
-    key_set = bool((os.getenv("OPENAI_API_KEY") or "").strip())
+    llm_ok = is_llm_configured()
     effective = resolve_effective_mode(AgentMode.REAL_AGENT).value
     logger.info(
-        "CineMind API startup: OPENAI_API_KEY=%s, Real Agent when requested=%s",
-        "set" if key_set else "not set",
+        "CineMind API startup: LLM configured=%s, Real Agent when requested=%s",
+        llm_ok,
         effective,
     )
-    if not key_set:
+    if not llm_ok:
         logger.info(
-            "To use Real Agent, set OPENAI_API_KEY and run this API (src.api.main), not the Playground Server."
+            "To use Real Agent, set CINEMIND_LLM_BASE_URL and CINEMIND_LLM_MODEL "
+            "(OpenAI-compatible server, e.g. local Llama / vLLM) and run this API (src.api.main)."
         )
 
 
@@ -101,6 +111,14 @@ def get_observability() -> Observability:
         db = Database()
         _observability = Observability(db)
     return _observability
+
+
+def get_projects_store() -> ProjectsStore:
+    """Get or create projects store instance."""
+    global _projects_store
+    if _projects_store is None:
+        _projects_store = ProjectsStore()
+    return _projects_store
 
 
 def _inject_mode_metadata(
@@ -375,6 +393,61 @@ async def where_to_watch(
     )
 
 
+@app.get("/api/projects", response_model=List[ProjectSummary])
+async def list_projects():
+    """List all projects."""
+    store = get_projects_store()
+    return store.list_projects()
+
+
+@app.post("/api/projects", response_model=ProjectSummary)
+async def create_project(req: ProjectCreateRequest):
+    """Create a new project."""
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name is required")
+    store = get_projects_store()
+    return store.create_project(
+        name=name,
+        description=req.description,
+        context_focus=req.contextFocus,
+    )
+
+
+@app.get("/api/projects/{project_id}", response_model=ProjectDetail)
+async def get_project(project_id: str):
+    """Fetch one project with assets."""
+    store = get_projects_store()
+    project = store.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.post("/api/projects/{project_id}/assets", response_model=ProjectAssetsAddResponse)
+async def add_project_assets(project_id: str, req: ProjectAssetsAddRequest):
+    """Add assets to a project, skipping duplicates."""
+    if not req.assets:
+        return ProjectAssetsAddResponse(added=0, skipped=0, total=0)
+    store = get_projects_store()
+    result = store.add_assets(project_id, [asset.model_dump() for asset in req.assets])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.delete("/api/projects/{project_id}/assets/{asset_ref}")
+async def delete_project_asset(project_id: str, asset_ref: str):
+    """Delete one project asset by id or legacy index."""
+    store = get_projects_store()
+    result = store.delete_asset(project_id, asset_ref)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not result:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return {"deleted": True}
+
+
 @app.post("/search", response_model=MovieResponse)
 async def search_movies(query: MovieQuery):
     """
@@ -426,6 +499,42 @@ async def search_movies(query: MovieQuery):
         )
 
 
+def _format_hub_conversation_history_block(history: Optional[list], *, max_per_message: int = 2000, max_block_total: int = 12000) -> str:
+    """
+    Bounded prior-turn block for sub-context Movie Hub multi-turn prompts.
+    """
+    if not history:
+        return ""
+    parts: list[str] = []
+    total = 0
+    for item in history:
+        if item is None:
+            continue
+        if isinstance(item, dict):
+            role = str(item.get("role") or "").strip().lower()
+            raw = str(item.get("content") or "").strip()
+        else:
+            role = str(getattr(item, "role", "") or "").strip().lower()
+            raw = str(getattr(item, "content", "") or "").strip()
+        if role not in ("user", "assistant"):
+            continue
+        if not raw:
+            continue
+        if len(raw) > max_per_message:
+            raw = raw[: max_per_message - 3] + "..."
+        line = f"{role.capitalize()}: {raw}"
+        if total + len(line) + 1 > max_block_total:
+            break
+        parts.append(line)
+        total += len(line) + 1
+    if not parts:
+        return ""
+    return (
+        "Sub-context Movie Hub — prior conversation (same anchor movie; use for continuity when interpreting follow-ups):\n"
+        + "\n".join(parts)
+    )
+
+
 @app.post("/query")
 async def query(req: QueryRequest):
     """
@@ -474,25 +583,38 @@ async def query(req: QueryRequest):
         # Effective prompt sent to the agent (marker stripped, plus optional
         # candidate-title injection for sub-context hub filtering).
         agent_user_query = stripped_user_query
+        hub_history_block = _format_hub_conversation_history_block(
+            req.hub_conversation_history if req.hub_conversation_history is not None else None
+        )
         if candidate_titles:
             # The UI already enforces a strict output contract; we add an
             # additional instruction so the model filters within the loaded
             # poster universe.
             candidates_text = "\n".join(candidate_titles)
-            agent_user_query = (
-                stripped_user_query
-                + "\n\n"
-                + "Candidate Titles (use for filtering within the shown hub):\n"
-                + candidates_text
-                + "\n\n"
-                + "Return the Movie Hub structured format (strict contract):\n"
+            hub_contract = (
+                "Return the Movie Hub structured format (strict contract):\n"
                 + "- Return exactly 4 genre blocks.\n"
                 + "- Each block MUST start with: Genre: <GenreName>\n"
                 + "- Then provide exactly 5 numbered lines formatted exactly as: \"1. Title (Year)\"\n"
                 + "- Total titles: 20.\n"
                 + "- You MUST output exactly 20 titles (4 * 5), even if the Candidate Titles list contains fewer than 20 unique titles.\n"
-                + "- Prefer titles from the Candidate Titles list. If needed, you MUST add extra titles, but any title you add must still follow \"Title (Year)\" format.\n"
+                + "- Prefer titles from the Candidate Titles list first. If needed, you MAY add closely similar titles, but any title you add must still follow \"Title (Year)\" format and stay consistent with the anchor movie context.\n"
                 + "- Return ONLY the genre blocks. No commentary. No markdown."
+            )
+            question_section = (
+                stripped_user_query
+                if not hub_history_block
+                else ("Current user question:\n" + stripped_user_query.strip())
+            )
+            prefix = (hub_history_block + "\n\n") if hub_history_block else ""
+            agent_user_query = (
+                prefix
+                + question_section
+                + "\n\n"
+                + "Candidate Titles (movies currently shown in the hub; prefer filtering from this set first):\n"
+                + candidates_text
+                + "\n\n"
+                + hub_contract
             )
 
         def build_filtered_candidate_movie_hub_clusters() -> Optional[list[dict]]:
@@ -536,7 +658,6 @@ async def query(req: QueryRequest):
                     if bt:
                         base_title = bt + (f" ({by})" if by is not None else "")
 
-                used_tmdb_ids: set[int] = set()
                 flat_movies: list[dict] = []
                 for card in enriched_cards:
                     if not isinstance(card, dict):
@@ -548,11 +669,6 @@ async def query(req: QueryRequest):
                         tmdb_id_int = None
 
                     primary_image_url = card.get("primary_image_url")
-                    if tmdb_id_int is not None:
-                        if tmdb_id_int in used_tmdb_ids:
-                            primary_image_url = None
-                        else:
-                            used_tmdb_ids.add(tmdb_id_int)
 
                     title = (card.get("movie_title") or card.get("title") or "").strip()
                     if not title:
@@ -584,7 +700,82 @@ async def query(req: QueryRequest):
                 logger.debug("Deterministic candidate filtering failed: %s", e)
                 return None
 
+        def _normalize_movie_hub_title(value: object) -> str:
+            return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+
+        def _normalize_movie_hub_year(value: object) -> Optional[int]:
+            if value is None:
+                return None
+            try:
+                y = int(str(value).strip())
+            except Exception:
+                return None
+            return y if 1800 <= y <= 2100 else None
+
+        def _movie_hub_key(movie: object) -> Optional[str]:
+            """
+            Canonical identity order for sub-context dedupe:
+            1) tmdbId
+            2) normalized title + year
+            3) normalized title
+            """
+            if not isinstance(movie, dict):
+                return None
+            tmdb_id = movie.get("tmdbId")
+            if tmdb_id is not None:
+                try:
+                    tmdb_id_int = int(str(tmdb_id).strip())
+                    return f"tmdb:{tmdb_id_int}"
+                except Exception:
+                    pass
+
+            title_raw = movie.get("title") or movie.get("movie_title") or ""
+            title = _normalize_movie_hub_title(title_raw)
+            if not title:
+                return None
+            year_val = _normalize_movie_hub_year(movie.get("year"))
+            if year_val is not None:
+                return f"title_year:{title}|{year_val}"
+            return f"title:{title}"
+
+        def dedupe_movie_hub_clusters(clusters: object, *, max_total: int = 20) -> list[dict]:
+            """
+            Remove duplicate movies across all clusters while preserving first-seen order.
+            """
+            if not isinstance(clusters, list):
+                return []
+            seen: set[str] = set()
+            total = 0
+            out: list[dict] = []
+            for cluster in clusters:
+                if total >= max_total:
+                    break
+                if not isinstance(cluster, dict):
+                    continue
+                movies = cluster.get("movies")
+                if not isinstance(movies, list):
+                    continue
+                kept_movies: list[dict] = []
+                for movie in movies:
+                    if total >= max_total:
+                        break
+                    if not isinstance(movie, dict):
+                        continue
+                    key = _movie_hub_key(movie)
+                    if key and key in seen:
+                        continue
+                    if key:
+                        seen.add(key)
+                    kept_movies.append(movie)
+                    total += 1
+                if kept_movies:
+                    next_cluster = dict(cluster)
+                    next_cluster["movies"] = kept_movies
+                    out.append(next_cluster)
+            return out
+
         def maybe_add_movie_hub_clusters(result_dict: dict) -> None:
+            t0 = time.perf_counter()
             if not context_movie or not isinstance(result_dict, dict):
                 return
             try:
@@ -750,7 +941,6 @@ async def query(req: QueryRequest):
 
                 # Map enriched cards into the SimilarMovie contract shape.
                 flat_movies: list[dict] = []
-                used_tmdb_ids: set[int] = set()
                 for idx, item in enumerate(flat_items[:max_total]):
                     card = aligned_cards[idx] if idx < len(aligned_cards) else None
                     card = card if isinstance(card, dict) else None
@@ -774,19 +964,6 @@ async def query(req: QueryRequest):
                     primary_image_url = (card.get("primary_image_url") if card else None) or None
                     page_url = (card.get("page_url") if card else None) or ""
                     tmdb_id = (card.get("tmdb_id") if card else None) or None
-
-                    # Prevent the exact same poster from appearing repeatedly when
-                    # multiple candidate titles resolve to the same TMDB entity.
-                    if tmdb_id is not None:
-                        try:
-                            tmdb_id_int = int(tmdb_id)
-                        except Exception:
-                            tmdb_id_int = None
-                        if tmdb_id_int is not None:
-                            if tmdb_id_int in used_tmdb_ids:
-                                primary_image_url = None
-                            else:
-                                used_tmdb_ids.add(tmdb_id_int)
 
                     flat_movies.append(
                         {
@@ -816,8 +993,10 @@ async def query(req: QueryRequest):
                             }
                         )
 
-                if clusters and any(c.get("movies") for c in clusters):
-                    result_dict["movieHubClusters"] = clusters
+                deduped_clusters = dedupe_movie_hub_clusters(clusters, max_total=max_total)
+                if deduped_clusters and any(c.get("movies") for c in deduped_clusters):
+                    result_dict["movieHubClusters"] = deduped_clusters
+                logger.debug("hub_parse_enrich_ms=%.1f", (time.perf_counter() - t0) * 1000)
             except Exception as e:
                 logger.debug("Failed to build filtered movieHubClusters: %s", e)
 
@@ -838,6 +1017,54 @@ async def query(req: QueryRequest):
                     total += len(movies)
             return total
 
+        def attach_movie_hub_clusters(result_dict: dict) -> None:
+            """
+            Build movieHubClusters with minimal duplicate work:
+            - Prefer deterministic candidate path when sufficiently complete.
+            - Fall back to parse/enrich path for quality or when deterministic is missing/underfilled.
+            """
+            if not isinstance(result_dict, dict):
+                return
+            t_attach = time.perf_counter()
+            deterministic_clusters: Optional[list[dict]] = None
+            deterministic_total = 0
+            try:
+                t_det = time.perf_counter()
+                deterministic_clusters = build_filtered_candidate_movie_hub_clusters()
+                logger.debug("hub_deterministic_ms=%.1f", (time.perf_counter() - t_det) * 1000)
+                if deterministic_clusters:
+                    deterministic_total = _count_total_moviehub_items(deterministic_clusters)
+            except Exception:
+                deterministic_clusters = None
+                deterministic_total = 0
+
+            # If deterministic path is already good enough, skip parse/enrich path to save latency.
+            min_deterministic = max(1, int(os.getenv("HUB_DETERMINISTIC_MIN_ITEMS", "12")))
+            if deterministic_clusters and deterministic_total >= min_deterministic:
+                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(
+                    deterministic_clusters, max_total=20
+                )
+                logger.debug(
+                    "hub_attach_strategy=deterministic total_items=%s total_ms=%.1f",
+                    deterministic_total,
+                    (time.perf_counter() - t_attach) * 1000,
+                )
+                return
+
+            maybe_add_movie_hub_clusters(result_dict)
+            existing = result_dict.get("movieHubClusters")
+            existing_total = _count_total_moviehub_items(existing)
+            if deterministic_clusters and (not existing or existing_total < 20):
+                result_dict["movieHubClusters"] = dedupe_movie_hub_clusters(
+                    deterministic_clusters, max_total=20
+                )
+            logger.debug(
+                "hub_attach_strategy=parse_then_merge existing_items=%s deterministic_items=%s total_ms=%.1f",
+                existing_total,
+                deterministic_total,
+                (time.perf_counter() - t_attach) * 1000,
+            )
+
         if mode == AgentMode.PLAYGROUND.value:
             result = await run_playground(
                 user_query=agent_user_query,
@@ -856,35 +1083,35 @@ async def query(req: QueryRequest):
                 result["agent_mode"] = AgentMode.PLAYGROUND.value
                 result["modeFallback"] = True
                 result["fallback_reason"] = fallback_reason
+                rid = result.get("request_id") or str(uuid.uuid4())
+                result["request_id"] = rid
+                result["responseEnvelopeVersion"] = "v1"
+                result["message_id"] = req.message_id or str(uuid.uuid4())
+                result["thread_id"] = req.thread_id or (f"sub-{rid}" if context_movie else f"main-{rid}")
                 _inject_mode_metadata(result, "PLAYGROUND", req.requested_agent_mode, mode_fallback=True)
                 logger.info("Request completed in mode: PLAYGROUND (fallback). reason=%s", fallback_reason)
-                maybe_add_movie_hub_clusters(result)
-                deterministic_clusters = build_filtered_candidate_movie_hub_clusters()
-                if deterministic_clusters:
-                    existing = result.get("movieHubClusters")
-                    if not existing or _count_total_moviehub_items(existing) < 20:
-                        result["movieHubClusters"] = deterministic_clusters
+                attach_movie_hub_clusters(result)
                 return result
 
         result["agent_mode"] = mode
+        rid = result.get("request_id") or str(uuid.uuid4())
+        result["request_id"] = rid
+        result["responseEnvelopeVersion"] = "v1"
+        result["message_id"] = req.message_id or str(uuid.uuid4())
+        result["thread_id"] = req.thread_id or (f"sub-{rid}" if context_movie else f"main-{rid}")
         mode_override_reason = None
         if (
             mode == AgentMode.PLAYGROUND.value
             and req.requested_agent_mode == "REAL_AGENT"
-            and not (os.getenv("OPENAI_API_KEY") or "").strip()
+            and not is_llm_configured()
         ):
-            mode_override_reason = "OPENAI_API_KEY not set; Real Agent unavailable."
+            mode_override_reason = "LLM not configured (CINEMIND_LLM_BASE_URL + CINEMIND_LLM_MODEL); Real Agent unavailable."
         _inject_mode_metadata(
             result, mode, req.requested_agent_mode, mode_fallback=False, mode_override_reason=mode_override_reason
         )
 
         # If hub context marker was provided, generate question-filtered clusters for the UI.
-        maybe_add_movie_hub_clusters(result)
-        deterministic_clusters = build_filtered_candidate_movie_hub_clusters()
-        if deterministic_clusters:
-            existing = result.get("movieHubClusters")
-            if not existing or _count_total_moviehub_items(existing) < 20:
-                result["movieHubClusters"] = deterministic_clusters
+        attach_movie_hub_clusters(result)
 
         logger.info("Request completed in mode: %s", mode)
         return result
@@ -1095,13 +1322,14 @@ async def update_request_outcome(request_id: str, outcome: str = Query(..., desc
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    global _agent, _observability
+    global _agent, _observability, _projects_store
     if _agent:
         await _agent.close()
         _agent = None
     if _observability and hasattr(_observability, 'db'):
         _observability.db.close()
         _observability = None
+    _projects_store = None
 
 
 # Serve the web frontend (must be the LAST mount so API routes take priority)

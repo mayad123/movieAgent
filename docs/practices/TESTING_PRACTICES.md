@@ -176,7 +176,7 @@ The codebase provides built-in fakes:
 
 | Fake | Replaces | Use Case |
 |------|----------|----------|
-| `FakeLLMClient` | `OpenAILLMClient` | All tests that don't need real LLM |
+| `FakeLLMClient` | `HttpChatLLMClient` | All tests that don't need real LLM |
 | `set_default_media_cache(mock)` | Real media cache | Tests for enrichment logic |
 
 ```python
@@ -227,6 +227,11 @@ Scenario tests are end-to-end tests using predefined queries and expected behavi
   expected_contains: ["Christopher Nolan"]
   must_have_sources: true
 ```
+
+For AI Response UX, scenarios should focus on **structure and tone** rather than exact wording. Use fields such as:
+
+- `expected.validator_checks.expected_violation_types` to assert when boilerplate or verbosity issues are detected.
+- Simple checks for paragraph breaks (presence of blank lines) and list usage (lines starting with `-` or `1.`) in sample outputs.
 
 ### Running Scenarios
 
@@ -323,7 +328,7 @@ Quick reference: which tests cover which feature area.
 | **Extraction** | `tests/unit/extraction/` (4 files) | — | `tests/test_scenarios_offline.py` |
 | **Planning** | `tests/unit/planning/` (4 files) | `test_routing_mocked.py` | `tests/test_scenarios_offline.py` |
 | **Search** | `tests/unit/search/` (2 files) | `test_routing_mocked.py` | — |
-| **Media** | `tests/unit/media/` (8 files) | — | — |
+| **Media** | `tests/unit/media/` (including `test_media_alignment.py`) | — | — |
 | **Prompting** | `tests/unit/prompting/` (3 files) | `test_agent_offline_e2e.py` | `tests/test_scenarios_offline.py` |
 | **Integrations** | `tests/unit/integrations/` (4 files) | — | — |
 | **Workflows** | `tests/unit/workflows/` (1 file) | — | — |

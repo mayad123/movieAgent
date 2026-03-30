@@ -144,8 +144,12 @@ class HybridClassifier:
         Returns structured JSON with type, entities, freshness_signal, confidence.
         """
         try:
-            from config import OPENAI_MODEL
-            
+            from config import LLM_MODEL, CINEMIND_LLM_SUPPORTS_JSON_MODE
+            from ..llm.client import LLMClient
+
+            if not isinstance(client, LLMClient):
+                raise TypeError("classify_with_llm expects an LLMClient instance")
+
             classification_prompt = f"""Classify this movie-related query and extract information.
 
 Query: "{query}"
@@ -166,47 +170,34 @@ Rules:
 
 Respond with ONLY the JSON, nothing else."""
 
-            # Try to use JSON mode if available (gpt-4o, gpt-4-turbo, etc.)
+            response_format = {"type": "json_object"} if CINEMIND_LLM_SUPPORTS_JSON_MODE else None
             try:
-                # Check if model supports JSON mode
-                json_mode_models = ["gpt-4o", "gpt-4-turbo", "gpt-4-1106-preview", "gpt-3.5-turbo-1106"]
-                use_json_mode = any(model in OPENAI_MODEL.lower() for model in json_mode_models)
-                
-                if use_json_mode:
-                    response = await client.chat.completions.create(
-                        model=OPENAI_MODEL,
-                        messages=[
+                llm_resp = await client.chat_completions_create(
+                    LLM_MODEL,
+                    [
+                        {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
+                        {"role": "user", "content": classification_prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=200,
+                    response_format=response_format,
+                )
+            except Exception as e:
+                if response_format:
+                    logger.warning("LLM JSON mode failed, retrying without response_format: %s", e)
+                    llm_resp = await client.chat_completions_create(
+                        LLM_MODEL,
+                        [
                             {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
-                            {"role": "user", "content": classification_prompt}
+                            {"role": "user", "content": classification_prompt},
                         ],
                         temperature=0.1,
                         max_tokens=200,
-                        response_format={"type": "json_object"}
                     )
                 else:
-                    response = await client.chat.completions.create(
-                        model=OPENAI_MODEL,
-                        messages=[
-                            {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
-                            {"role": "user", "content": classification_prompt}
-                        ],
-                        temperature=0.1,
-                        max_tokens=200
-                    )
-            except Exception as e:
-                # Fallback if JSON mode fails
-                logger.warning(f"JSON mode not supported, using regular mode: {e}")
-                response = await client.chat.completions.create(
-                    model=OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are a query classifier. Respond with ONLY valid JSON, no other text."},
-                        {"role": "user", "content": classification_prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=200
-                )
-            
-            result_text = response.choices[0].message.content.strip()
+                    raise
+
+            result_text = (llm_resp.content or "").strip()
             
             # Try to parse JSON (handle cases where LLM adds extra text)
             try:

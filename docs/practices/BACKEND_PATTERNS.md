@@ -196,7 +196,7 @@ except asyncio.TimeoutError:
 ```python
 class CineMind:
     def __init__(self, llm_client: Optional[LLMClient] = None):
-        self.llm = llm_client or OpenAILLMClient()
+        self.llm = llm_client or HttpChatLLMClient(...)  # from CINEMIND_LLM_* in production
         self.search = SearchEngine()
         self.planner = RequestPlanner(
             router=RequestTypeRouter(),

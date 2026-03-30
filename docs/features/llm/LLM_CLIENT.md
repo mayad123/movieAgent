@@ -1,7 +1,7 @@
 # LLM Client
 
 > **Package:** `src/cinemind/llm/`
-> **Purpose:** Abstraction layer over LLM providers — defines a common interface, a real OpenAI implementation, and a fake client for testing and playground mode.
+> **Purpose:** Abstraction layer over LLM backends — defines a common interface, an OpenAI-compatible HTTP implementation (`httpx`), and a fake client for testing and playground mode.
 
 <details>
 <summary><strong>Quick AI Context</strong> — Jump to what you need</summary>
@@ -9,7 +9,7 @@
 | I need to understand... | Jump to |
 |------------------------|---------|
 | Client class hierarchy | [Architecture](#architecture) |
-| OpenAI implementation | [OpenAILLMClient](#openaillmclient) |
+| HTTP implementation | [HttpChatLLMClient](#httpchatllmclient) |
 | Fake client for tests | [FakeLLMClient](#fakellmclient) |
 | Response data structure | [LLMResponse](#llmresponse) |
 | Who uses which client | [Integration Points](#integration-points) |
@@ -18,9 +18,9 @@
 | What else breaks if I change this | [Change Impact Guide](#change-impact-guide) |
 
 **Example changes and where to look:**
-- "Switch LLM provider" → [Architecture](#architecture) + [OpenAILLMClient](#openaillmclient)
+- "Switch LLM server / model" → [HttpChatLLMClient](#httpchatllmclient) + `CINEMIND_LLM_*` env vars
 - "Change FakeLLM responses" → [FakeLLMClient](#fakellmclient)
-- "Add streaming support" → [Architecture](#architecture)
+- "Add streaming support" → `chat_completions_create_stream` on `LLMClient`
 
 </details>
 
@@ -30,7 +30,7 @@
 
 | Module | Role | Lines |
 |--------|------|-------|
-| `client.py` | `LLMClient` abstract base, `OpenAILLMClient`, `FakeLLMClient` | ~374 |
+| `client.py` | `LLMClient` abstract base, `HttpChatLLMClient`, `FakeLLMClient` | ~600 |
 
 ---
 
@@ -40,30 +40,26 @@
 classDiagram
     class LLMClient {
         <<abstract>>
-        +chat(messages) LLMResponse
-        +stream(messages) AsyncGenerator
+        +chat_completions_create() LLMResponse
+        +chat_completions_create_stream() AsyncGenerator
     }
 
-    class OpenAILLMClient {
-        -api_key: str
-        -model: str
-        +chat(messages) LLMResponse
-        +stream(messages) AsyncGenerator
+    class HttpChatLLMClient {
+        -http: AsyncClient
+        +chat_completions_create() LLMResponse
+        +chat_completions_create_stream() AsyncGenerator
     }
 
     class FakeLLMClient {
-        +chat(messages) LLMResponse
-        +stream(messages) AsyncGenerator
+        +chat_completions_create() LLMResponse
     }
 
     class LLMResponse {
         +content: str
-        +model: str
         +usage: Dict
-        +finish_reason: str
     }
 
-    LLMClient <|-- OpenAILLMClient : implements
+    LLMClient <|-- HttpChatLLMClient : implements
     LLMClient <|-- FakeLLMClient : implements
     LLMClient ..> LLMResponse : returns
 ```
@@ -72,30 +68,29 @@ classDiagram
 
 ## Client Implementations
 
-### OpenAILLMClient
+### HttpChatLLMClient
 
-Production client wrapping the OpenAI Chat Completions API.
+Production client: `POST /v1/chat/completions` (and SSE streaming) against any OpenAI-compatible server (vLLM, llama.cpp server, LM Studio, TGI, etc.).
 
 ```mermaid
 sequenceDiagram
     participant Core as CineMind
-    participant Client as OpenAILLMClient
-    participant API as OpenAI API
+    participant Client as HttpChatLLMClient
+    participant API as LLM HTTP API
 
-    Core->>Client: chat(messages)
-    Client->>API: POST /chat/completions
-    API-->>Client: {choices, usage, model}
+    Core->>Client: chat_completions_create(...)
+    Client->>API: POST /v1/chat/completions
+    API-->>Client: JSON choices, usage
     Client-->>Core: LLMResponse
-
-    Note over Client: Handles rate limits, retries, token tracking
 ```
 
 | Feature | Detail |
 |---------|--------|
-| Model | Configurable via `OPENAI_MODEL` env var (default: `gpt-4o`) |
-| Auth | `OPENAI_API_KEY` env var |
-| Streaming | Async generator via `stream()` method |
-| Token tracking | Usage stats in `LLMResponse.usage` |
+| Model | `CINEMIND_LLM_MODEL` |
+| Base URL | `CINEMIND_LLM_BASE_URL` (`/v1` appended if omitted) |
+| Auth | Optional `CINEMIND_LLM_API_KEY` (`Bearer`) |
+| Streaming | `chat_completions_create_stream` (SSE `data:` lines) |
+| Token tracking | `LLMResponse.usage` when the server returns it |
 
 ### FakeLLMClient
 
@@ -117,9 +112,8 @@ Deterministic client for testing and playground mode — returns canned response
 | Field | Type | Description |
 |-------|------|-------------|
 | `content` | `str` | The generated text |
-| `model` | `str` | Model name that produced the response |
-| `usage` | `Dict` | Token usage: `prompt_tokens`, `completion_tokens`, `total_tokens` |
-| `finish_reason` | `str` | `"stop"`, `"length"`, etc. |
+| `usage` | `Dict` | Token usage: `prompt_tokens`, `completion_tokens`, `total_tokens` (when present) |
+| `metadata` | `Dict` | Optional extras (e.g. batch enrichment) |
 
 ---
 
@@ -129,7 +123,7 @@ Deterministic client for testing and playground mode — returns canned response
 graph TD
     subgraph llm["cinemind.llm"]
         CLIENT["LLMClient (abstract)"]
-        OPENAI["OpenAILLMClient"]
+        HTTP["HttpChatLLMClient"]
         FAKE["FakeLLMClient"]
     end
 
@@ -140,10 +134,10 @@ graph TD
         TAG["cinemind.infrastructure.tagging<br/>(HybridClassifier)"]
     end
 
-    CORE -->|REAL_AGENT mode| OPENAI
+    CORE -->|REAL_AGENT mode| HTTP
     PLAY -->|PLAYGROUND mode| FAKE
-    IE -->|optional fallback| CLIENT
-    TAG -->|optional fallback| CLIENT
+    IE -->|LLM fallback| CLIENT
+    TAG -->|LLM layer B| CLIENT
 ```
 
 ---
@@ -153,13 +147,13 @@ graph TD
 ```mermaid
 flowchart TD
     MODE{"AgentMode?"}
-    MODE -->|REAL_AGENT| KEY{"OPENAI_API_KEY set?"}
-    KEY -->|Yes| OPENAI["OpenAILLMClient"]
-    KEY -->|No| FALLBACK["FakeLLMClient<br/>(degraded mode)"]
+    MODE -->|REAL_AGENT| CFG{"CINEMIND_LLM_BASE_URL<br/>and MODEL set?"}
+    CFG -->|Yes| HTTP["HttpChatLLMClient"]
+    CFG -->|No| FALLBACK["Effective mode falls back<br/>to PLAYGROUND at API boundary"]
     MODE -->|PLAYGROUND| FAKE["FakeLLMClient"]
 ```
 
-The client is selected at `CineMind` construction time and injected into all subsystems that need LLM access.
+At `CineMind` construction: either inject `llm_client` (tests/playground) or build `HttpChatLLMClient` with env config (real agent).
 
 ---
 
@@ -169,52 +163,46 @@ The client is selected at `CineMind` construction time and injected into all sub
 
 | Package | Used In | Purpose |
 |---------|---------|---------|
-| `openai` | `OpenAILLMClient` | OpenAI Python SDK |
+| `httpx` | `HttpChatLLMClient` | Async HTTP + SSE streaming |
 | `abc` | `LLMClient` | Abstract base class |
 | `dataclasses` | `LLMResponse` | Response data structure |
-| `logging` | `client.py` | Request/response logging |
 
 ### Environment Variables
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `OPENAI_API_KEY` | — | `OpenAILLMClient` authentication |
-| `OPENAI_MODEL` | `gpt-4o` | Model selection |
+| `CINEMIND_LLM_BASE_URL` | — | Inference server root |
+| `CINEMIND_LLM_MODEL` | — | Chat model id |
+| `CINEMIND_LLM_API_KEY` | — | Optional bearer token |
+| `CINEMIND_LLM_TIMEOUT_SECONDS` | `120` | Request timeout |
+| `CINEMIND_LLM_SUPPORTS_JSON_MODE` | `false` | Optional `response_format` for classifiers |
 
 ---
 
 ## Design Patterns & Practices
 
-1. **Strategy Pattern** — `LLMClient` abstract class with two implementations, selected at runtime
-2. **Dependency Injection** — `CineMind` accepts `llm_client` parameter; never constructs the client internally
-3. **Interface Segregation** — `LLMClient` exposes only `chat()` and `stream()`; no OpenAI-specific leaks
-4. **Zero-Cost Testing** — `FakeLLMClient` enables full pipeline testing without API calls or keys
-5. **Token Accounting** — every response includes usage stats for cost tracking
+1. **Strategy Pattern** — `LLMClient` with `HttpChatLLMClient` vs `FakeLLMClient`
+2. **Dependency Injection** — `CineMind(..., llm_client=...)` for tests
+3. **OpenAI-compatible wire** — no vendor Python SDK required
+4. **Zero-Cost Testing** — `FakeLLMClient` for CI
 
 ---
 
 ## Test Coverage
 
-### Tests to Run When Changing This Package
-
 ```bash
-# LLM is tested indirectly via integration tests
+python -m pytest tests/unit/llm/test_http_chat_llm_client.py -v
 python -m pytest tests/integration/test_agent_offline_e2e.py -v
 
-# Smoke test with real LLM (requires OPENAI_API_KEY)
+# Smoke test with real server (requires CINEMIND_LLM_* env)
 python -m pytest tests/smoke/test_real_workflow_smoke.py -v
-
-# All tests using FakeLLMClient
-python -m pytest tests/unit/ tests/integration/ -v
 ```
 
 | Test File | What It Covers |
 |-----------|---------------|
+| `tests/unit/llm/test_http_chat_llm_client.py` | JSON parsing and HTTP errors |
 | `tests/integration/test_agent_offline_e2e.py` | Full pipeline with `FakeLLMClient` |
-| `tests/smoke/test_real_workflow_smoke.py` | Real `OpenAILLMClient` (requires API key) |
-| All `tests/unit/` and `tests/integration/` | Use `FakeLLMClient` — changing its responses affects all |
-
-> **Note:** `FakeLLMClient` is used throughout the test suite. Changing its response format or behavior affects virtually every test.
+| `tests/smoke/test_real_workflow_smoke.py` | Real HTTP stack (requires env) |
 
 ---
 
@@ -222,8 +210,8 @@ python -m pytest tests/unit/ tests/integration/ -v
 
 | If you change... | Also check... |
 |-----------------|---------------|
-| `LLMClient` interface | `OpenAILLMClient`, `FakeLLMClient`, all consumers |
+| `LLMClient` interface | `HttpChatLLMClient`, `FakeLLMClient`, intent extraction, tagging |
 | `LLMResponse` fields | `CineMind` response processing, observability cost calculation |
-| OpenAI model default | Cost estimates, response quality, token limits |
-| `FakeLLMClient` responses | Playground test assertions, demo behavior |
-| Streaming implementation | `api/main.py` `/search/stream` endpoint |
+| Default timeout / URL normalization | `config/__init__.py`, deployment docs |
+| `FakeLLMClient` responses | Playground and integration test assertions |
+| Streaming | `CineMind.stream_response`, any `/stream` API routes |

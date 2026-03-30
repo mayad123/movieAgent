@@ -1,6 +1,6 @@
 """CineMind agent package."""
 from .agent.core import CineMind
-from config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, OPENAI_MODEL
+from config import SYSTEM_PROMPT, AGENT_NAME, AGENT_VERSION, LLM_MODEL
 from .media.media_enrichment import (
     MediaEnrichmentResult,
     enrich,
@@ -22,7 +22,7 @@ __all__ = [
     'SYSTEM_PROMPT',
     'AGENT_NAME',
     'AGENT_VERSION',
-    'OPENAI_MODEL',
+    'LLM_MODEL',
     'MediaEnrichmentResult',
     'enrich',
     'enrich_batch',

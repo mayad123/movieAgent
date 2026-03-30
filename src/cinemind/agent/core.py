@@ -16,23 +16,24 @@ import re
 from typing import List, Dict, Optional, AsyncGenerator, Tuple
 from datetime import datetime
 
-try:
-    from openai import AsyncOpenAI
-except ImportError:
-    AsyncOpenAI = None
+import httpx
 
 from config import (
     SYSTEM_PROMPT,
     AGENT_NAME,
     AGENT_VERSION,
-    OPENAI_MODEL,
+    LLM_MODEL,
     PROMPT_VERSION,
     REAL_AGENT_MAX_TOKENS,
     REAL_AGENT_MAX_TOOL_CALLS,
+    get_llm_base_url,
+    CINEMIND_LLM_API_KEY,
+    CINEMIND_LLM_TIMEOUT_SECONDS,
+    is_llm_configured,
 )
 from ..search.search_engine import SearchEngine, MovieDataAggregator
 from ..infrastructure.database import Database
-from ..infrastructure.observability import Observability, calculate_openai_cost
+from ..infrastructure.observability import Observability, estimate_llm_cost
 from ..infrastructure.tagging import RequestTagger, HybridClassifier, classify_with_llm
 from ..infrastructure.cache import SemanticCache
 from ..planning.source_policy import SourcePolicy
@@ -43,7 +44,7 @@ from ..extraction.candidate_extraction import CandidateExtractor
 from ..planning.tool_plan import ToolPlanner, ToolPlan
 from ..prompting import PromptBuilder, EvidenceBundle, get_template
 from ..prompting.output_validator import OutputValidator
-from ..llm.client import LLMClient, OpenAILLMClient
+from ..llm.client import LLMClient, HttpChatLLMClient
 from ..media.media_enrichment import attach_media_to_result
 
 # Configure logging (simple format, request_id added in observability)
@@ -59,32 +60,38 @@ class CineMind:
     CineMind agent for real-time movie analysis and discovery.
     """
     
-    def __init__(self, openai_api_key: Optional[str] = None, tavily_api_key: Optional[str] = None,
-                 enable_observability: bool = True, llm_client: Optional[LLMClient] = None):
+    def __init__(
+        self,
+        llm_api_key: Optional[str] = None,
+        tavily_api_key: Optional[str] = None,
+        enable_observability: bool = True,
+        llm_client: Optional[LLMClient] = None,
+        openai_api_key: Optional[str] = None,
+    ):
         """
         Initialize CineMind agent.
-        
+
         Args:
-            openai_api_key: OpenAI API key for LLM (ignored if llm_client is provided)
+            llm_api_key: Optional bearer token for the LLM HTTP API (overrides env)
             tavily_api_key: Tavily API key for real-time search
             enable_observability: Enable request tracking and metrics
-            llm_client: Optional LLM client instance (for dependency injection in tests)
-                       If not provided, creates OpenAI client from api_key
+            llm_client: Optional LLM client (for tests). If not set, uses CINEMIND_LLM_* env + httpx.
+            openai_api_key: Deprecated alias for llm_api_key (tests / backward compatibility)
         """
-        # Initialize LLM client (support dependency injection for testing)
+        self._http_client: Optional[httpx.AsyncClient] = None
         if llm_client:
             self.client = llm_client
         else:
-            if not AsyncOpenAI:
-                raise ImportError("OpenAI library not installed. Install with: pip install openai")
-            
-            self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-            if not self.openai_api_key:
-                raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
-            
-            # Wrap OpenAI client in adapter
-            openai_client = AsyncOpenAI(api_key=self.openai_api_key)
-            self.client = OpenAILLMClient(openai_client)
+            if not is_llm_configured():
+                raise ValueError(
+                    "LLM not configured. Set CINEMIND_LLM_BASE_URL and CINEMIND_LLM_MODEL "
+                    "(OpenAI-compatible server). Set CINEMIND_LLM_API_KEY if the server requires auth."
+                )
+            key = (llm_api_key or openai_api_key or CINEMIND_LLM_API_KEY or "").strip()
+            base = get_llm_base_url().rstrip("/") + "/"
+            timeout = httpx.Timeout(CINEMIND_LLM_TIMEOUT_SECONDS)
+            self._http_client = httpx.AsyncClient(base_url=base, timeout=timeout)
+            self.client = HttpChatLLMClient(self._http_client, api_key=key)
         self.search_engine = SearchEngine(tavily_api_key=tavily_api_key)
         
         # Initialize source policy and related components
@@ -131,7 +138,13 @@ class CineMind:
             self.cache = SemanticCache(temp_db)
         
         logger.info(f"Initialized {self.agent_name} v{self.version} (observability: {enable_observability})")
-    
+
+    async def close(self) -> None:
+        """Release HTTP resources (httpx client) when not using an injected llm_client."""
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
+
     async def search_and_analyze(self, user_query: str, use_live_data: bool = True,
                                 request_id: Optional[str] = None,
                                 request_type: Optional[str] = None,
@@ -253,25 +266,25 @@ class CineMind:
             plan_dict["prompt_version"] = PROMPT_VERSION
             plan_dict["tool_config_version"] = f"cine_prompt_{PROMPT_VERSION}"
             
-            should_call_openai, reason = self.cache.should_call_openai_on_cache_hit(
+            should_call_llm, reason = self.cache.should_call_llm_on_cache_hit(
                 cache_hit, plan_dict, cache_hit.similarity_score
             )
             
             logger.info(f"[{request_id}] Cache {cache_hit.cache_tier} hit! (similarity: {cache_hit.similarity_score:.3f})")
-            logger.info(f"[{request_id}] Decision: {'Call OpenAI' if should_call_openai else 'Serve cached'} - Reason: {reason}")
+            logger.info(f"[{request_id}] Decision: {'Call LLM' if should_call_llm else 'Serve cached'} - Reason: {reason}")
             
-            # If decision tree says NO OpenAI, serve cached directly
-            if not should_call_openai:
+            # If decision tree says NO LLM, serve cached directly
+            if not should_call_llm:
                 # Track request for metrics
                 if self.observability:
                     track_ctx = self.observability.track_request(
-                        request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
+                        request_id, user_query, use_live_data, LLM_MODEL, request_type=request_type
                     )
                     tracker = track_ctx.__enter__()
                     tracker.log_metric("cache_hit", 1.0, {
                         "cache_tier": cache_hit.cache_tier,
                         "similarity_score": cache_hit.similarity_score,
-                        "openai_skipped": True,
+                        "llm_skipped": True,
                         "skip_reason": reason
                     })
                     tracker.log_metric("cache_savings_usd", cache_hit.cost_metrics.get("saved_cost", 0))
@@ -295,13 +308,13 @@ class CineMind:
                     "cost_usd": 0.0,  # No cost for cache hit
                     "request_type": request_type,
                     "outcome": outcome or "success",
-                    "model_version": OPENAI_MODEL,
+                    "model_version": LLM_MODEL,
                     "prompt_version": PROMPT_VERSION,
                     "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",
                     "cache_hit": True,
                     "cache_tier": cache_hit.cache_tier,
                     "cache_similarity": cache_hit.similarity_score,
-                    "openai_skipped": True,
+                    "llm_skipped": True,
                     "skip_reason": reason
                 }
                 
@@ -314,9 +327,9 @@ class CineMind:
 
                 return result
 
-            # Decision tree says YES OpenAI (e.g., re-verify, rewrite, etc.)
+            # Decision tree says YES LLM (e.g., re-verify, rewrite, etc.)
             # Fall through to normal flow but use cached sources/data
-            logger.info(f"[{request_id}] Cache hit but OpenAI needed for: {reason}")
+            logger.info(f"[{request_id}] Cache hit but LLM needed for: {reason}")
             # Continue to normal flow but can use cached structured_facts if available
         
         # No cache hit - proceed with normal flow
@@ -325,7 +338,7 @@ class CineMind:
         # Track request if observability is enabled
         if self.observability:
             track_ctx = self.observability.track_request(
-                request_id, user_query, use_live_data, OPENAI_MODEL, request_type=request_type
+                request_id, user_query, use_live_data, LLM_MODEL, request_type=request_type
             )
             tracker = track_ctx.__enter__()
             tracker.log_metric("cache_hit", 0.0)
@@ -946,16 +959,16 @@ class CineMind:
             llm_start = time.time()
             try:
                 if tracker:
-                    with tracker.time_operation("openai_llm"):
+                    with tracker.time_operation("llm_chat"):
                         llm_response = await self.client.chat_completions_create(
-                            model=OPENAI_MODEL,
+                            model=LLM_MODEL,
                             messages=messages,
                             temperature=0.7,
                             max_tokens=REAL_AGENT_MAX_TOKENS
                         )
                 else:
                     llm_response = await self.client.chat_completions_create(
-                        model=OPENAI_MODEL,
+                        model=LLM_MODEL,
                         messages=messages,
                         temperature=0.7,
                         max_tokens=REAL_AGENT_MAX_TOKENS
@@ -991,7 +1004,7 @@ class CineMind:
                 # Use corrected text if auto-fix was applied, otherwise re-prompt if needed
                 if validation_result.corrected_text:
                     agent_response = validation_result.corrected_text
-                    logger.info(f"[{request_id}] Applied auto-fix for forbidden terms")
+                    logger.info(f"[{request_id}] Applied validation post-processing (forbidden/markdown/boilerplate)")
                 elif validation_result.requires_reprompt:
                     # Re-prompt with strict correction instruction
                     logger.info(f"[{request_id}] Re-prompting due to validation violations")
@@ -1008,16 +1021,16 @@ class CineMind:
                     
                     # Re-prompt
                     if tracker:
-                        with tracker.time_operation("openai_llm_correction"):
+                        with tracker.time_operation("llm_chat_correction"):
                             correction_llm_response = await self.client.chat_completions_create(
-                                model=OPENAI_MODEL,
+                                model=LLM_MODEL,
                                 messages=correction_messages,
                                 temperature=0.3,  # Lower temperature for corrections
                                 max_tokens=REAL_AGENT_MAX_TOKENS
                             )
                     else:
                         correction_llm_response = await self.client.chat_completions_create(
-                            model=OPENAI_MODEL,
+                            model=LLM_MODEL,
                             messages=correction_messages,
                             temperature=0.3,
                             max_tokens=REAL_AGENT_MAX_TOKENS
@@ -1036,7 +1049,7 @@ class CineMind:
                     logger.info(f"[{request_id}] Re-prompt completed, using corrected response")
                 # token_usage already defined above
                 
-                cost_usd = calculate_openai_cost(token_usage, OPENAI_MODEL)
+                cost_usd = estimate_llm_cost(token_usage, LLM_MODEL)
                 
                 # Log metrics
                 if tracker:
@@ -1194,7 +1207,7 @@ class CineMind:
                     "outcome": outcome or "success",  # Default to success if not set
                     "prompt": full_prompt,  # Include the full prompt that was sent
                     "searches": formatted_searches,  # Formatted search results
-                    "model_version": OPENAI_MODEL,  # Model version (e.g., "gpt-3.5-turbo")
+                    "model_version": LLM_MODEL,  # Model version (e.g., "gpt-3.5-turbo")
                     "prompt_version": PROMPT_VERSION,  # Prompt version (e.g., "v1")
                     "agent_config_version": f"cine_prompt_{PROMPT_VERSION}",  # Agent config version
                     # Search metadata (auditable, logged exactly once per request)
@@ -1216,7 +1229,14 @@ class CineMind:
                 # Pass recommended_movies for batch enrichment (e.g. similar movies from FakeLLM)
                 meta = getattr(llm_response, "metadata", None) or {}
                 if meta.get("similar_movies"):
+                    # Normalized list of similar-movie titles for TMDB enrichment.
                     result["recommended_movies"] = meta["similar_movies"]
+
+                    # Also expose a structured relatedMovies list for Movie Hub / Movie Details.
+                    # At this layer we only know titles; media_enrichment will turn these into
+                    # full movie cards (title, year, poster, tmdbId, sourceUrl).
+                    if "relatedMovies" not in result:
+                        result["relatedMovies"] = [{"title": t} for t in meta["similar_movies"] if (t or "").strip()]
 
                 # Media enrichment via TMDB (skip in playground_mode; playground applies its own rule)
                 if not playground_mode:
@@ -1229,27 +1249,24 @@ class CineMind:
             
             except Exception as e:
                 if tracker:
-                    tracker.log_error(f"OpenAI API error: {e}")
-                logger.error(f"[{request_id}] OpenAI API error: {e}")
+                    tracker.log_error(f"LLM error: {e}")
+                logger.error(f"[{request_id}] LLM error: {e}")
                 error_msg = str(e)
-                
-                # Provide helpful error messages
+
                 if "model" in error_msg.lower() and ("not found" in error_msg.lower() or "does not exist" in error_msg.lower()):
                     raise Exception(
-                        f"Model '{OPENAI_MODEL}' not found or not accessible.\n"
-                        f"Please set OPENAI_MODEL in .env file to one of: gpt-3.5-turbo, gpt-4, gpt-4o"
-                    )
+                        f"Model '{LLM_MODEL}' not found or not accessible on the LLM server.\n"
+                        f"Set CINEMIND_LLM_MODEL to the id your server expects."
+                    ) from e
                 elif "quota" in error_msg.lower() or "429" in error_msg or "insufficient_quota" in error_msg.lower():
                     raise Exception(
-                        "OpenAI API quota exceeded. Please check your billing and usage at:\n"
-                        "https://platform.openai.com/usage\n"
-                        "You may need to add payment method or upgrade your plan."
-                    )
-                elif "api key" in error_msg.lower() or "invalid" in error_msg.lower() or "401" in error_msg:
+                        "LLM provider rate-limited or quota exceeded. Retry later or check provider limits."
+                    ) from e
+                elif "api key" in error_msg.lower() or "401" in error_msg or "unauthorized" in error_msg.lower():
                     raise Exception(
-                        "Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file."
-                    )
-                raise Exception(f"Failed to generate response: {e}")
+                        "LLM returned auth error. Check CINEMIND_LLM_API_KEY if your server requires a bearer token."
+                    ) from e
+                raise Exception(f"Failed to generate response: {e}") from e
         
         except Exception as e:
             if track_ctx:
@@ -1297,26 +1314,23 @@ class CineMind:
         # Save request with prompt if observability is enabled
         if self.observability:
             self.observability.db.save_request(
-                request_id, user_query, use_live_data, OPENAI_MODEL, "pending",
+                request_id, user_query, use_live_data, LLM_MODEL, "pending",
                 prompt=full_prompt
             )
         
         try:
-            stream = await self.client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
+            async for piece in self.client.chat_completions_create_stream(
+                LLM_MODEL,
+                [
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
+                    {"role": "user", "content": user_message},
                 ],
                 temperature=0.7,
                 max_tokens=REAL_AGENT_MAX_TOKENS,
-                stream=True
-            )
-            
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-        
+            ):
+                if piece:
+                    yield piece
+
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield f"Error: {e}"

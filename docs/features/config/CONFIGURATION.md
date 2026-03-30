@@ -111,37 +111,121 @@ Pydantic models defining the API contract between server and clients.
 classDiagram
     class MovieQuery {
         +query: str
+        +use_live_data: bool
+        +stream: bool
+        +request_type: Optional[str]
+        +outcome: Optional[str]
+        +requestedAgentMode: Optional[str]
     }
 
     class QueryRequest {
-        +query: str
+        +user_query: str
         +request_type: Optional[str]
+        +requestedAgentMode: Optional[str]
     }
-
-    QueryRequest --|> MovieQuery : extends
 ```
 
 ### Response Models
 
 ```mermaid
 classDiagram
-    class MovieResponse {
-        +response: str
-        +sources: List[Dict]
+    class MovieQuery {
+        +query: str
+        +use_live_data: bool
+        +stream: bool
         +request_type: Optional[str]
-        +search_metadata: Optional[Dict]
-        +media_strip: Optional[List]
-        +attachments: Optional[Dict]
+        +outcome: Optional[str]
+        +requestedAgentMode: Optional[str]
+    }
+
+    class QueryRequest {
+        +user_query: str
+        +request_type: Optional[str]
+        +requestedAgentMode: Optional[str]
+    }
+
+    class MovieResponse {
+        +agent: str
+        +version: str
+        +query: str
+        +response: str
+        +sources: list
+        +timestamp: str
+        +live_data_used: bool
+        +request_id: Optional[str]
+        +token_usage: Optional[dict]
+        +cost_usd: Optional[float]
+        +request_type: Optional[str]
+        +outcome: Optional[str]
+        +agent_mode: Optional[str]
+        +actualAgentMode: Optional[str]
+        +requestedAgentMode: Optional[str]
+        +modeFallback: Optional[bool]
+        +toolsUsed: Optional[list]
+        +fallback_reason: Optional[str]
+        +movieHubClusters: Optional[SimilarCluster][]
+    }
+
+    class SimilarMovie {
+        +title: str
+        +year: Optional[int]
+        +primary_image_url: Optional[str]
+        +page_url: Optional[str]
+        +tmdbId: Optional[int]
+        +mediaType: Optional[str]
+    }
+
+    class SimilarCluster {
+        +kind: str
+        +label: str
+        +movies: SimilarMovie[]
+    }
+
+    class SimilarMoviesResponse {
+        +clusters: SimilarCluster[]
+    }
+
+    class RelatedMovie {
+        +movie_title: Optional[str]
+        +title: Optional[str]
+        +year: Optional[int]
+        +tmdbId: Optional[int]
+        +primary_image_url: Optional[str]
+    }
+
+    class MovieDetailsResponse {
+        +tmdbId: int
+        +movie_title: Optional[str]
+        +year: Optional[int]
+        +tagline: Optional[str]
+        +overview: Optional[str]
+        +runtime_minutes: Optional[int]
+        +genres: Optional[str][]
+        +release_date: Optional[str]
+        +language: Optional[str]
+        +country: Optional[str]
+        +rating: Optional[float]
+        +vote_count: Optional[int]
+        +primary_image_url: Optional[str]
+        +backdrop_url: Optional[str]
+        +directors: Optional[str][]
+        +cast: Optional[str][]
+        +relatedMovies: Optional[RelatedMovie][]
     }
 
     class HealthResponse {
         +status: str
-        +agent_mode: str
+        +agent: str
+        +version: str
+        +agent_mode: Optional[str]
     }
 
     class DiagnosticResponse {
         +status: str
-        +checks: Dict[str, Any]
+        +config_loaded: bool
+        +tmdb_enabled: bool
+        +tmdb_token_present: bool
+        +tmdb_config_reachable: Optional[bool]
     }
 ```
 
@@ -149,11 +233,16 @@ classDiagram
 
 | Model | Direction | Purpose |
 |-------|-----------|---------|
-| `MovieQuery` | Request | Simple query input |
-| `QueryRequest` | Request | Query with optional type hint |
-| `MovieResponse` | Response | Full agent response with media |
-| `HealthResponse` | Response | Health check output |
-| `DiagnosticResponse` | Response | Dependency health |
+| `MovieQuery` | Request | Input for `POST /search` and `POST /search/stream` |
+| `QueryRequest` | Request | Input for `POST /query` |
+| `MovieResponse` | Response | Contract for query endpoints (includes optional `movieHubClusters`) |
+| `SimilarMovie` | Response | Similar-movie card shape for hub UI |
+| `SimilarCluster` | Response | Cluster container (`kind`/`label` + `movies`) |
+| `SimilarMoviesResponse` | Response | Payload for `/api/movies/{movie_id}/similar` |
+| `RelatedMovie` | Response | Minimal related-title shape for details modal |
+| `MovieDetailsResponse` | Response | Payload for `/api/movies/{tmdbId}/details` (tolerant fallback) |
+| `HealthResponse` | Response | `/health` response |
+| `DiagnosticResponse` | Response | `/health/diagnostic` response |
 
 ---
 
@@ -225,8 +314,12 @@ This is the consolidated list of all environment variables used across the syste
 | Variable | Default | Used By |
 |----------|---------|---------|
 | `AGENT_MODE` | `PLAYGROUND` | `agent/mode.py` |
-| `OPENAI_API_KEY` | — | `llm/client.py`, `agent/mode.py` |
-| `OPENAI_MODEL` | `gpt-4o` | `llm/client.py` |
+| `CINEMIND_LLM_BASE_URL` | — | `config/__init__.py`, `agent/core.py` — OpenAI-compatible API root |
+| `CINEMIND_LLM_MODEL` | — | Chat model id on that server |
+| `CINEMIND_LLM_API_KEY` | — | Optional `Authorization: Bearer` for the LLM server |
+| `CINEMIND_LLM_TIMEOUT_SECONDS` | `120` | httpx timeout for chat/stream |
+| `CINEMIND_LLM_SUPPORTS_JSON_MODE` | `false` | If true, intent/tagging may pass `response_format` |
+| `CINEMIND_LLM_EMBEDDING_MODEL` | — | Optional; enables `POST /v1/embeddings` for semantic cache |
 | `AGENT_TIMEOUT_SECONDS` | `30` | `api/main.py` |
 
 ### Search
@@ -243,7 +336,7 @@ This is the consolidated list of all environment variables used across the syste
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `TMDB_API_KEY` | — | `integrations/tmdb/*` |
+| `ENABLE_TMDB_SCENES` | `false` | Enables TMDB-backed enrichment/details (requires token) |
 | `TMDB_READ_ACCESS_TOKEN` | — | `integrations/tmdb/*` |
 | `WATCHMODE_API_KEY` | — | `integrations/watchmode/client.py` |
 | `MEDIA_CACHE_TTL_SECONDS` | `3600` | `media/media_cache.py` |

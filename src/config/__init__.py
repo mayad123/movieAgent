@@ -14,9 +14,45 @@ if _env_path:
 else:
     load_dotenv()
 
+
+def _parse_bool_env(name: str, default: str = "false") -> bool:
+    raw = (os.getenv(name, default) or "").strip().lower()
+    return raw in ("true", "1", "yes")
+
+
 # API Keys
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+
+
+def _normalize_llm_base_url(raw: str) -> str:
+    u = (raw or "").strip().rstrip("/")
+    if not u:
+        return ""
+    # Accept base host only or full .../v1 — chat path is always /v1/chat/completions
+    if not u.endswith("/v1"):
+        u = f"{u}/v1"
+    return u
+
+
+_CINEMIND_LLM_BASE_URL = _normalize_llm_base_url(os.getenv("CINEMIND_LLM_BASE_URL", ""))
+CINEMIND_LLM_MODEL = (os.getenv("CINEMIND_LLM_MODEL") or "").strip()
+CINEMIND_LLM_API_KEY = (os.getenv("CINEMIND_LLM_API_KEY") or "").strip()
+CINEMIND_LLM_TIMEOUT_SECONDS = float(os.getenv("CINEMIND_LLM_TIMEOUT_SECONDS", "120"))
+CINEMIND_LLM_EMBEDDING_MODEL = (os.getenv("CINEMIND_LLM_EMBEDDING_MODEL") or "").strip()
+CINEMIND_LLM_SUPPORTS_JSON_MODE = _parse_bool_env("CINEMIND_LLM_SUPPORTS_JSON_MODE", "false")
+
+# Primary model id for chat + intent/tagging (same HTTP server)
+LLM_MODEL = CINEMIND_LLM_MODEL
+
+
+def is_llm_configured() -> bool:
+    """True when REAL_AGENT can reach an OpenAI-compatible LLM server."""
+    return bool(_CINEMIND_LLM_BASE_URL and CINEMIND_LLM_MODEL)
+
+
+# Resolved base URL for httpx (includes /v1)
+def get_llm_base_url() -> str:
+    return _CINEMIND_LLM_BASE_URL
 
 # --- Watchmode (server-side only; never expose to client / web bundle) ---
 _WATCHMODE_API_KEY_RAW = (os.getenv("WATCHMODE_API_KEY", "") or "").strip()
@@ -44,10 +80,6 @@ def _log_watchmode_status() -> None:
         log.info("Watchmode: API key configured (Where-to-watch available).")
 
 # --- TMDB (single source of truth for backend) ---
-def _parse_bool_env(name: str, default: str = "false") -> bool:
-    raw = (os.getenv(name, default) or "").strip().lower()
-    return raw in ("true", "1", "yes")
-
 _TMDB_TOKEN_RAW = (os.getenv("TMDB_READ_ACCESS_TOKEN", "") or "").strip()
 _TMDB_ENABLED_FLAG = _parse_bool_env("ENABLE_TMDB_SCENES", "false")
 
@@ -76,7 +108,6 @@ _log_watchmode_status()
 # Agent Configuration
 AGENT_NAME = "CineMind"
 AGENT_VERSION = "1.0.0"
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 
 # Search Configuration
 SEARCH_PROVIDERS = ["tavily", "web"]

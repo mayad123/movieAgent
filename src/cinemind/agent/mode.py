@@ -2,8 +2,8 @@
 Backend-controlled agent execution mode.
 
 Single source of truth for which pipeline runs:
-- PLAYGROUND: Wikipedia-only, deterministic (no OpenAI/Tavily).
-- REAL_AGENT: Full agent with tools (OpenAI + optional Tavily).
+- PLAYGROUND: Wikipedia-only, deterministic (no LLM/Tavily).
+- REAL_AGENT: Full agent with tools (OpenAI-compatible LLM HTTP + optional Tavily).
 
 The backend is the final authority. If REAL_AGENT is requested but
 required environment variables are missing, we fall back to PLAYGROUND
@@ -15,10 +15,6 @@ from enum import Enum
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-# Required env var for REAL_AGENT (others like TAVILY_API_KEY are optional)
-REAL_AGENT_REQUIRED_ENV = "OPENAI_API_KEY"
-
 
 class AgentMode(str, Enum):
     """Execution mode: playground (Wikipedia-only) or full agent."""
@@ -38,9 +34,10 @@ def get_configured_mode() -> AgentMode:
 
 
 def _has_required_keys_for_real_agent() -> bool:
-    """Return True if OPENAI_API_KEY is set and non-empty."""
-    key = os.getenv(REAL_AGENT_REQUIRED_ENV)
-    return bool(key and str(key).strip())
+    """Return True if CINEMIND_LLM_BASE_URL and CINEMIND_LLM_MODEL are configured."""
+    from config import is_llm_configured
+
+    return is_llm_configured()
 
 
 def resolve_effective_mode(configured: Optional[AgentMode] = None) -> AgentMode:
@@ -52,8 +49,8 @@ def resolve_effective_mode(configured: Optional[AgentMode] = None) -> AgentMode:
     mode = configured if configured is not None else get_configured_mode()
     if mode == AgentMode.REAL_AGENT and not _has_required_keys_for_real_agent():
         logger.warning(
-            "AGENT_MODE=REAL_AGENT but %s is missing or empty; falling back to PLAYGROUND",
-            REAL_AGENT_REQUIRED_ENV,
+            "AGENT_MODE=REAL_AGENT but LLM is not configured "
+            "(set CINEMIND_LLM_BASE_URL and CINEMIND_LLM_MODEL); falling back to PLAYGROUND",
         )
         return AgentMode.PLAYGROUND
     return mode

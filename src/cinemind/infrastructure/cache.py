@@ -304,7 +304,7 @@ class SemanticCache:
         
         Args:
             db: Database instance for storing cache entries
-            embedding_provider: Function to compute embeddings (default: OpenAI)
+            embedding_provider: Function to compute embeddings (default: httpx embeddings or hash fallback)
         """
         self.db = db
         self.normalizer = PromptNormalizer()
@@ -391,26 +391,54 @@ class SemanticCache:
     
     def _default_embedding_provider(self, text: str) -> List[float]:
         """
-        Default embedding provider using OpenAI.
-        Falls back to simple hash-based if OpenAI not available.
+        Embeddings via OpenAI-compatible POST /v1/embeddings when CINEMIND_LLM_EMBEDDING_MODEL is set;
+        otherwise hash fallback (no external calls).
         """
         try:
-            import os
-            from openai import OpenAI
-            
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                logger.warning("OpenAI API key not found, using fallback embedding")
-                return self._fallback_embedding(text)
-            
-            client = OpenAI(api_key=api_key)
-            response = client.embeddings.create(
-                model="text-embedding-3-small",  # Cheaper, faster
-                input=text
+            from config import (
+                get_llm_base_url,
+                CINEMIND_LLM_EMBEDDING_MODEL,
+                CINEMIND_LLM_API_KEY,
             )
-            return response.data[0].embedding
+        except ImportError:
+            return self._fallback_embedding(text)
+
+        model = (CINEMIND_LLM_EMBEDDING_MODEL or "").strip()
+        if not model:
+            return self._fallback_embedding(text)
+
+        base = get_llm_base_url()
+        if not base:
+            logger.warning("CINEMIND_LLM_EMBEDDING_MODEL set but CINEMIND_LLM_BASE_URL missing; using fallback embedding")
+            return self._fallback_embedding(text)
+
+        try:
+            import httpx
+
+            headers = {"Content-Type": "application/json"}
+            key = (CINEMIND_LLM_API_KEY or "").strip()
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            url_base = base.rstrip("/") + "/"
+            with httpx.Client(base_url=url_base, timeout=60.0) as client:
+                r = client.post(
+                    "embeddings",
+                    json={"model": model, "input": text},
+                    headers=headers,
+                )
+            if r.status_code >= 400:
+                logger.warning("Embedding HTTP %s: %s; using fallback", r.status_code, r.text[:200])
+                return self._fallback_embedding(text)
+            data = r.json()
+            rows = data.get("data") or []
+            if not rows:
+                return self._fallback_embedding(text)
+            vec = rows[0].get("embedding")
+            if not isinstance(vec, list):
+                return self._fallback_embedding(text)
+            return [float(x) for x in vec]
         except Exception as e:
-            logger.warning(f"Embedding generation failed: {e}, using fallback")
+            logger.warning("Embedding generation failed: %s, using fallback", e)
             return self._fallback_embedding(text)
     
     def _fallback_embedding(self, text: str) -> List[float]:
@@ -689,10 +717,10 @@ class SemanticCache:
         # All checks passed - cache entry is safe to use
         return (True, "cache_valid")
     
-    def should_call_openai_on_cache_hit(self, cache_entry: CacheEntry, 
+    def should_call_llm_on_cache_hit(self, cache_entry: CacheEntry, 
                                        request_plan, similarity_score: float = 1.0) -> Tuple[bool, str]:
         """
-        Decision tree: Should we call OpenAI even on a cache hit?
+        Decision tree: Should we call the LLM even on a cache hit?
         Uses RequestPlan for decision making.
         
         Args:
@@ -714,12 +742,12 @@ class SemanticCache:
         # First check cache correctness rules
         should_use, reason = self.should_use_cache_entry(cache_entry, plan_dict)
         if not should_use:
-            return (True, reason)  # Need to call OpenAI because cache is invalid
+            return (True, reason)  # Need to call LLM because cache is invalid
         
         predicted_type = plan_dict.get("request_type", "")
         need_freshness = plan_dict.get("need_freshness", False)
         
-        # 1. Exact hit with high confidence -> No OpenAI needed
+        # 1. Exact hit with high confidence -> No LLM needed
         if cache_entry.cache_tier == "exact" and similarity_score >= 0.99:
             return (False, "exact_match_high_confidence")
         
@@ -739,7 +767,7 @@ class SemanticCache:
             if cache_age_hours > ttl_hours:
                 return (True, f"high_freshness_reverify (age: {cache_age_hours:.1f}h > ttl: {ttl_hours:.1f}h)")
         
-        # 4. Default: Serve cached (no OpenAI)
+        # 4. Default: Serve cached (no LLM)
         return (False, "cache_valid_serve_direct")
     
     def _get_cache_age_hours(self, entry: CacheEntry) -> float:
