@@ -39,7 +39,10 @@ class SearchDecision:
     fallback_provider: str | None = None
     override_used: bool = False
     override_reason: str | None = None
-    # Note: Kaggle-specific fields removed - Kaggle is now handled by KaggleRetrievalAdapter
+    # Backward-compatible Kaggle metadata (still used by integration tests/callers).
+    kaggle_query_string: str | None = None
+    kaggle_max_score: float = 0.0
+    kaggle_stage_a_candidates: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -49,6 +52,9 @@ class SearchDecision:
             "fallback_provider": self.fallback_provider,
             "override_used": self.override_used,
             "override_reason": self.override_reason,
+            "kaggle_query_string": self.kaggle_query_string,
+            "kaggle_max_score": self.kaggle_max_score,
+            "kaggle_stage_a_candidates": self.kaggle_stage_a_candidates,
         }
 
 
@@ -70,6 +76,8 @@ class SearchEngine:
         # This class no longer manages Kaggle directly
         if enable_kaggle is not None:
             logger.warning("enable_kaggle parameter is deprecated - Kaggle is now handled by KaggleRetrievalAdapter")
+        # Compatibility hook for older tests/callers that patch `search_engine.kaggle_searcher`.
+        self.kaggle_searcher = None
 
     def build_intent_queries(self, intent: str, entities: list[str], request_type: str = "info") -> list[str]:
         """
@@ -174,8 +182,22 @@ class SearchEngine:
         results = []
         decision = SearchDecision()
 
-        # Note: Kaggle retrieval is now handled by KaggleRetrievalAdapter (called from agent/search aggregator)
-        # This method only handles Tavily and web search
+        # Backward-compatible Kaggle short-circuit (for integration tests/legacy callers).
+        # Preferred flow uses KaggleRetrievalAdapter before this method.
+        if self.kaggle_searcher and hasattr(self.kaggle_searcher, "is_highly_correlated"):
+            try:
+                effective_kaggle_query = kaggle_query_string or query
+                is_high, kaggle_results, max_corr = self.kaggle_searcher.is_highly_correlated(
+                    effective_kaggle_query
+                )
+                decision.kaggle_query_string = effective_kaggle_query
+                decision.kaggle_max_score = float(max_corr or 0.0)
+                decision.kaggle_stage_a_candidates = len(kaggle_results or [])
+                if is_high and kaggle_results:
+                    # High-confidence structured evidence wins; skip Tavily/fallback.
+                    return (kaggle_results[:max_results], decision)
+            except Exception as e:
+                logger.warning(f"Legacy Kaggle compatibility path failed: {e}")
 
         # Step 1: Determine if Tavily should be used
         # Only allow Tavily if skip_tavily=False OR a valid override_reason is provided
@@ -289,37 +311,37 @@ class SearchEngine:
             url = "https://api.duckduckgo.com"
             params = {"q": query, "format": "json", "no_redirect": "1", "no_html": "1", "skip_disambig": "1"}
 
-            async with self.session.get(url, params=params) as response:
-                if response.status_code == 200:
-                    data = response.json()
-                    results = []
+            response = await self.session.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                results = []
 
-                    # Extract abstract/answer
-                    if data.get("AbstractText"):
+                # Extract abstract/answer
+                if data.get("AbstractText"):
+                    results.append(
+                        {
+                            "title": data.get("Heading", query),
+                            "url": data.get("AbstractURL", ""),
+                            "content": data.get("AbstractText", ""),
+                            "source": "duckduckgo",
+                        }
+                    )
+
+                # Extract related topics
+                for topic in data.get("RelatedTopics", [])[: max_results - 1]:
+                    if isinstance(topic, dict) and "Text" in topic:
                         results.append(
                             {
-                                "title": data.get("Heading", query),
-                                "url": data.get("AbstractURL", ""),
-                                "content": data.get("AbstractText", ""),
+                                "title": topic.get("Text", "").split(" - ")[0]
+                                if " - " in topic.get("Text", "")
+                                else query,
+                                "url": topic.get("FirstURL", ""),
+                                "content": topic.get("Text", ""),
                                 "source": "duckduckgo",
                             }
                         )
 
-                    # Extract related topics
-                    for topic in data.get("RelatedTopics", [])[: max_results - 1]:
-                        if isinstance(topic, dict) and "Text" in topic:
-                            results.append(
-                                {
-                                    "title": topic.get("Text", "").split(" - ")[0]
-                                    if " - " in topic.get("Text", "")
-                                    else query,
-                                    "url": topic.get("FirstURL", ""),
-                                    "content": topic.get("Text", ""),
-                                    "source": "duckduckgo",
-                                }
-                            )
-
-                    return results[:max_results]
+                return results[:max_results]
         except Exception as e:
             logger.error(f"Web search fallback error: {e}")
 
