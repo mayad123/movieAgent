@@ -30,7 +30,7 @@
 
 | Module | Role | Lines |
 |--------|------|-------|
-| `main.py` | FastAPI application with all routes | ~1170 |
+| `main.py` | FastAPI application with all routes | ~1490 |
 | `__init__.py` | Package marker | minimal |
 
 ---
@@ -48,6 +48,7 @@ flowchart LR
         direction TB
         HEALTH["/health"]
         DIAG["/health/diagnostic"]
+        CACHE["/health/cache"]
         SEARCH_POST["POST /search"]
         QUERY["POST /query"]
         STREAM["POST /search/stream"]
@@ -60,6 +61,7 @@ flowchart LR
         PROJECTS_DETAIL["GET /api/projects/{id}"]
         PROJECTS_ASSETS_ADD["POST /api/projects/{id}/assets"]
         PROJECTS_ASSETS_DELETE["DELETE /api/projects/{id}/assets/{asset_ref}"]
+        PROJECTS_DISCOVER["GET /api/projects/{id}/discover"]
         OBS_REQ_LIST["/observability/requests"]
         OBS_REQ_TRACE["/observability/requests/{request_id}"]
         OBS_STATS["/observability/stats"]
@@ -78,6 +80,7 @@ flowchart LR
     WEB --> PROJECTS_DETAIL
     WEB --> PROJECTS_ASSETS_ADD
     WEB --> PROJECTS_ASSETS_DELETE
+    WEB --> PROJECTS_DISCOVER
     WEB --> STATIC
     EXT --> QUERY
     EXT --> STREAM
@@ -94,6 +97,7 @@ flowchart LR
 |----------|--------|-------------|
 | `/health` | GET | Liveness check — returns status + effective `agent_mode` |
 | `/health/diagnostic` | GET | Config + TMDB diagnostic (`config_loaded`, `tmdb_enabled`, `tmdb_token_present`, `tmdb_config_reachable`) |
+| `/health/cache` | GET | In-process cache hit/miss metrics — `resolve_cache`, `metadata_bundle`, `media_cache` stats (`size`, `hits`, `misses`, `expired`, `evictions`). Zero-cost observability for TMDB cache performance. |
 
 ### Query Endpoints
 
@@ -158,6 +162,7 @@ The UI calls it via `web/js/modules/api.js` (`fetchSimilarMovies(...)`).
 | `/api/projects/{project_id}` | GET | Get one project with `assets` |
 | `/api/projects/{project_id}/assets` | POST | Add project assets in batch with de-duplication |
 | `/api/projects/{project_id}/assets/{asset_ref}` | DELETE | Delete an asset by id or legacy list index |
+| `/api/projects/{project_id}/discover` | GET | Returns discovery clusters + context summary |
 
 ### Movie Details (Full-screen Modal)
 
@@ -220,8 +225,8 @@ sequenceDiagram
 |-------|--------|---------|
 | `MovieQuery` | `query`, `use_live_data`, `stream`, `request_type?`, `outcome?`, `requestedAgentMode?` | Input for `POST /search` and `POST /search/stream` |
 | `HubHistoryMessage` | `role` (`user` \| `assistant`), `content` | One turn in `QueryRequest.hubConversationHistory` |
-| `QueryRequest` | `user_query`, `request_type?`, `requestedAgentMode?`, `hubConversationHistory?` (alias `hub_conversation_history`) | Input for `POST /query` |
-| `MovieResponse` | `agent`, `version`, `query`, `response`, `sources`, `timestamp`, `live_data_used`, `request_id?`, `token_usage?`, `cost_usd?`, `request_type?`, `outcome?`, `agent_mode?`, `actualAgentMode?`, `requestedAgentMode?`, `modeFallback?`, `toolsUsed?`, `fallback_reason?`, `movieHubClusters?` | Declared response for `POST /search`. `/query` returns the same JSON shape; the server may also inject extra keys at runtime (e.g. `modeOverrideReason`) from `_inject_mode_metadata`. |
+| `QueryRequest` | `user_query`, `request_type?`, `requestedAgentMode?`, `hubConversationHistory?` (alias `hub_conversation_history`), `threadId?` (string), `messageId?` (string) | Input for `POST /query` |
+| `MovieResponse` | `agent`, `version`, `query`, `response`, `sources`, `timestamp`, `live_data_used`, `request_id?`, `token_usage?`, `cost_usd?`, `request_type?`, `outcome?`, `agent_mode?`, `actualAgentMode?`, `requestedAgentMode?`, `modeFallback?`, `toolsUsed?`, `fallback_reason?`, `movieHubClusters?`, `responseEnvelopeVersion` (string), `message_id` (string), `thread_id` (string) | Declared response for `POST /search`. `/query` returns the same JSON shape; the server may also inject extra keys at runtime (e.g. `modeOverrideReason`) from `_inject_mode_metadata`. |
 | `SimilarMovie` | `title`, `year?`, `primary_image_url?`, `page_url?`, `tmdbId?`, `mediaType?` | Similar-movie card compatible with hub UI |
 | `SimilarCluster` | `kind`, `label`, `movies` | Cluster of similar movies by kind (genre/tone/cast) |
 | `SimilarMoviesResponse` | `clusters` | Response payload for `/api/movies/{movie_id}/similar` |
@@ -229,12 +234,13 @@ sequenceDiagram
 | `MovieDetailsResponse` | `tmdbId` (required) + optional title/meta/credits/media/`relatedMovies` | Response payload for `/api/movies/{tmdbId}/details` |
 | `ProjectSummary` | `id`, `name`, `description?`, `contextFocus?`, `createdAt`, `updatedAt`, `assetCount` | Project list/create response |
 | `ProjectDetail` | `ProjectSummary` + `assets: ProjectAsset[]` | Project detail response |
-| `ProjectAsset` | `id`, `title`, `posterImageUrl?`, `pageUrl?`, `pageId?`, `conversationId?`, `subConversationId?`, `capturedAt`, `storedRef?` | Stored project asset |
+| `ProjectAsset` | `id`, `title`, `posterImageUrl?`, `pageUrl?`, `pageId?`, `conversationId?`, `subConversationId?`, `capturedAt`, `storedRef?`, `tmdbId?` (int), `year?` (int), `genres?` (list[str]), `cast?` (list[str]), `keywords?` (list[str]) | Stored project asset |
 | `ProjectCreateRequest` | `name`, `description?`, `contextFocus?` | Create project request |
 | `ProjectAssetsAddRequest` | `assets: ProjectAssetInput[]` | Add assets request |
 | `ProjectAssetsAddResponse` | `added`, `skipped`, `total` | Add assets result |
 | `HealthResponse` | `status`, `agent`, `version`, `agent_mode?` | `/health` response |
 | `DiagnosticResponse` | `status`, `config_loaded`, `tmdb_enabled`, `tmdb_token_present`, `tmdb_config_reachable?` | `/health/diagnostic` response |
+| `CacheStatsResponse` | `resolve_cache`, `metadata_bundle`, `media_cache` (each a `dict[str, int]`) | `/health/cache` response |
 
 ---
 
@@ -355,6 +361,6 @@ python -m pytest tests/integration/test_agent_offline_e2e.py -v
 | Hub marker, history bounds, or candidate-title prompt contract | `src/api/main.py` (`_format_hub_conversation_history_block`, `maybe_add_movie_hub_clusters`), `cinemind.media.movie_hub_*`, `tests/unit/media/test_movie_hub_filtering.py` |
 | Similar-movies endpoint or `build_similar_movie_clusters` | `src/api/main.py`, `cinemind.media.media_enrichment`, `tests/unit/media/test_media_alignment.py` |
 | Endpoint paths | Frontend `js/modules/api.js`, any external integrations |
-| CORS configuration | `src/api/main.py` CORS middleware (`allow_origins=["*"]`) |
+| CORS configuration | `src/api/main.py` CORS middleware — environment-conditional: in development `allow_origins=["*"]`; in production restricts to `[CINEMIND_DEPLOY_URL]` or `[]` if the variable is unset |
 | Observability endpoints | `src/cinemind/infrastructure/observability`, `src/cinemind/infrastructure/database`, `src/cinemind/infrastructure/tagging` |
 | Where-to-Watch response shape | `integrations/watchmode/normalizer.py`, frontend `where-to-watch.js` |

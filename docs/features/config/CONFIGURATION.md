@@ -29,7 +29,7 @@
 | Package | Module | Role | Lines |
 |---------|--------|------|-------|
 | `config/` | `env.py` | Locate `.env` file by walking up from cwd | ~33 |
-| `schemas/` | `api.py` | Pydantic models for API request/response | ~57 |
+| `schemas/` | `api.py` | Pydantic models for API request/response | ~236 |
 | `services/` | `interfaces.py` | Protocol interfaces for domain services | ~19 |
 | `lib/` | `env.py` | Simpler `.env` finder (legacy) | ~15 |
 
@@ -122,6 +122,9 @@ classDiagram
         +user_query: str
         +request_type: Optional[str]
         +requestedAgentMode: Optional[str]
+        +hubConversationHistory: Optional[list]
+        +threadId: Optional[str]
+        +messageId: Optional[str]
     }
 ```
 
@@ -320,17 +323,21 @@ This is the consolidated list of all environment variables used across the syste
 | `CINEMIND_LLM_TIMEOUT_SECONDS` | `120` | httpx timeout for chat/stream |
 | `CINEMIND_LLM_SUPPORTS_JSON_MODE` | `false` | If true, intent/tagging may pass `response_format` |
 | `CINEMIND_LLM_EMBEDDING_MODEL` | — | Optional; enables `POST /v1/embeddings` for semantic cache |
-| `AGENT_TIMEOUT_SECONDS` | `30` | `api/main.py` |
+| `CINEMIND_LLM_FALLBACK_MODEL` | — | Fallback model tried if primary is unavailable after cold-start retries |
+| `CINEMIND_LLM_COLD_START_RETRIES` | `3` | Max retry attempts on 503 "Model is loading" cold-start responses |
+| `CINEMIND_REAL_AGENT_TIMEOUT` | `90` | `config/__init__.py` (`REAL_AGENT_TIMEOUT_SECONDS`) |
+| `CINEMIND_REAL_AGENT_MAX_TOKENS` | `2000` | Max token budget for real agent responses |
+| `CINEMIND_REAL_AGENT_MAX_TOOL_CALLS` | `10` | Max tool call iterations for real agent |
+| `PROMPT_VERSION` | `v1` | Prompt version label (selects system prompt variant in `versions.py`) |
 
 ### Search
 
 | Variable | Default | Used By |
 |----------|---------|---------|
 | `TAVILY_API_KEY` | — | `search/search_engine.py` |
-| `KAGGLE_ENABLED` | `true` | `search/kaggle_retrieval_adapter.py` |
-| `KAGGLE_DATASET_PATH` | `data/imdb.csv` | `search/kaggle_search.py` |
-| `KAGGLE_CORRELATION_THRESHOLD` | `0.8` | `search/kaggle_search.py` |
-| `KAGGLE_SEARCH_TIMEOUT_SECONDS` | `5` | `search/kaggle_retrieval_adapter.py` |
+| `ENABLE_KAGGLE_SEARCH` | `true` | `search/kaggle_retrieval_adapter.py` |
+| `KAGGLE_DATASET_PATH` | — | `search/kaggle_search.py` |
+| `KAGGLE_CORRELATION_THRESHOLD` | `0.7` | `search/kaggle_search.py` |
 
 ### Media
 
@@ -338,16 +345,17 @@ This is the consolidated list of all environment variables used across the syste
 |----------|---------|---------|
 | `ENABLE_TMDB_SCENES` | `false` | Enables TMDB-backed enrichment/details (requires token) |
 | `TMDB_READ_ACCESS_TOKEN` | — | `integrations/tmdb/*` |
+| `TMDB_POSTER_MODE` | `fallback_only` | Poster resolution strategy (`fallback_only`, etc.) |
 | `WATCHMODE_API_KEY` | — | `integrations/watchmode/client.py` |
-| `MEDIA_CACHE_TTL_SECONDS` | `3600` | `media/media_cache.py` |
-| `MEDIA_CACHE_MAX_ENTRIES` | `1000` | `media/media_cache.py` |
+| `CINEMIND_MEDIA_CACHE_TTL_ENRICH` | `1800` | Enrich-result cache TTL (seconds). `media/media_cache.py` |
+| `CINEMIND_MEDIA_CACHE_TTL_TMDB_POSTER` | `86400` | TMDB poster URL cache TTL (seconds). `media/media_cache.py` |
+| `CINEMIND_MEDIA_CACHE_MAX_ENTRIES` | `500` | Max entries across both media caches. `media/media_cache.py` |
 
 ### Infrastructure
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `DATABASE_URL` | — | `infrastructure/database.py` |
-| `SQLITE_PATH` | `cinemind.db` | `infrastructure/database.py` |
+| `DATABASE_URL` | `cinemind.db` | SQLite path or Postgres DSN. `infrastructure/database.py` |
 | `CACHE_DEFAULT_TTL_HOURS` | `24` | `infrastructure/cache.py` |
 | `CACHE_EMBEDDING_THRESHOLD` | `0.92` | `infrastructure/cache.py` |
 | `CACHE_MAX_ENTRIES` | `10000` | `infrastructure/cache.py` |
@@ -356,9 +364,9 @@ This is the consolidated list of all environment variables used across the syste
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `HOST` | `0.0.0.0` | `api/main.py` |
-| `PORT` | `8000` | `api/main.py` |
-| `CORS_ORIGINS` | `*` | `api/main.py` |
+| `PORT` | `8000` | `api/main.py` (read directly via `os.getenv`) |
+| `CINEMIND_ENV` | `development` | `config/__init__.py` — `development` or `production`; controls CORS and log level |
+| `CINEMIND_DEPLOY_URL` | — | `config/__init__.py` — deployed URL for production CORS (e.g. `https://cinemind.onrender.com`) |
 
 ---
 

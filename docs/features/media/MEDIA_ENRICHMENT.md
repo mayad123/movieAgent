@@ -31,13 +31,16 @@
 | Module | Role | Lines (approx.) |
 |--------|------|-----------------|
 | `__init__.py` | Re-exports: `enrich`, `enrich_batch`, `attach_media_to_result`, `build_attachments_from_media`, `MediaEnrichmentResult`, cache/focus helpers, `classify_attachment_intent`, `apply_playground_attachment_behavior` (**does not** re-export `build_similar_movie_clusters` or hub parsers — import submodules) | ~10 |
-| `media_enrichment.py` | TMDB-only enrichment, `attach_media_to_result`, `build_attachments_from_media`, **`build_similar_movie_clusters`** | ~700 |
-| `media_cache.py` | TTL + LRU: enrich results + TMDB poster URLs (separate TTLs) | ~125 |
+| `media_enrichment.py` | TMDB-only enrichment, `attach_media_to_result`, `build_attachments_from_media`, **`build_similar_movie_clusters`** | ~820 |
+| `media_cache.py` | TTL + LRU: four cache namespaces — enrich results, TMDB poster URLs, batch cards (hot-path dedupe), tmdb-id cards (cross-title dedup) | ~200 |
 | `media_focus.py` | Single-movie vs multi-movie from `request_type` + query regexes | ~85 |
 | `attachment_intent_classifier.py` | Deterministic attachment intent + scene guardrails | ~215 |
 | `playground_attachments.py` | Playground-only attachment pipeline + scenes provider | ~270 |
 | `movie_hub_genre_parsing.py` | `parse_movie_hub_genre_buckets` for hub genre buckets | ~270 |
 | `movie_hub_filtering.py` | `filter_movie_hub_clusters_by_question` (TMDB-backed filters) | ~265 |
+| `project_enrichment.py` | TMDB metadata enrichment for project assets | — |
+| `project_context.py` | Aggregate context from project movie collection | — |
+| `project_discovery.py` | Build discovery clusters from aggregate project context | — |
 
 ---
 
@@ -97,8 +100,8 @@ The core enrichment module — resolves movie titles to TMDB data and builds att
 | Function | Purpose |
 |----------|---------|
 | `enrich(user_query, fallback_title=..., fallback_from_result=..., *, cache=..., use_enrich_cache=...)` | TMDB-only resolve via `get_search_phrases(user_query)` (phrase resolutions run **in parallel**, up to 2 workers); builds `media_strip` + optional `did_you_mean` candidates; uses **`MediaCache`** for enrich-key + poster URLs; **`resolve_movie`** results are also cached in-process (see TMDB resolve cache); never raises |
-| `enrich_batch(titles, *, max_concurrent=2, max_titles=8, cache=...)` | Thread pool enrichment; dedupes titles; without token returns minimal `{movie_title, page_url:"#"}` cards; logs total duration at **debug** (`TMDB enrich_batch ... total_ms=`) |
-| `build_attachments_from_media(result)` | Builds `attachments.sections` from `media_strip` / `media_candidates` / `media_gallery_label`; may set **`relatedMovies`** from the non-primary section |
+| `enrich_batch(titles, *, max_concurrent=2, max_titles=8, cache=...)` | Thread pool enrichment; dedupes by normalised title; checks `batch_card:` cache before the thread pool (cache-hits skip the resolver entirely); stores each resolved card in `batch_card:` after resolution; without token returns minimal `{movie_title, page_url:"#"}` cards; logs at **debug** (`TMDB enrich_batch ... cache_hits= ... total_ms=`) |
+| `build_attachments_from_media(result)` | Builds `attachments.sections` from `media_strip` / `media_candidates` / `media_gallery_label`; may set **`relatedMovies`** from the non-primary section (only when not already present on the item) |
 | `attach_media_to_result(user_query, result, *, titles=..., gallery_label=..., cache=...)` | Priority: explicit `titles` → `recommended_movies` → `extract_titles_for_enrichment(response)` → `enrich(user_query)` |
 | `build_similar_movie_clusters(...)` | See [Movie Hub clusters](#movie-hub-clusters-build_similar_movie_clusters) |
 
@@ -190,7 +193,7 @@ Some pipeline stages also expose a lightweight `relatedMovies` list alongside at
 ### Return contract
 
 - `{"clusters": [ {...}, {...}, {...} ]}` — always **three** clusters: `kind` **`genre`**, **`tone`**, **`cast`** (stable UI contract).
-- **`movies` lists today:** only the **`genre`** cluster is populated from TMDB **`/movie/{id}/similar`** results (up to **`max_results`**). **`tone`** and **`cast`** are **placeholders** (empty `movies`) for future enrichment.
+- **`movies` lists today:** the **`genre`** cluster is populated from TMDB **`/movie/{id}/similar`** results (up to **`max_results`**). **`tone`** and **`cast`** clusters are populated using TMDB metadata overlap — placement is mutually exclusive (`elif` ordering): a movie goes into **`cast`** if shared cast members >= 2 (up to a **cap of 6 movies** per cluster), then into **`tone`** if shared keywords >= 2 (up to **6**), otherwise into **`genre`**. Cast takes priority over tone.
 - Each movie card includes: `title`, `year`, `primary_image_url`, `page_url`, `tmdbId`, `mediaType`.
 
 ### Data behavior
@@ -211,7 +214,7 @@ Single-title enrichment and batch helpers strip a trailing **`(YYYY)`** before c
 
 `parse_movie_hub_genre_buckets(response_text, *, expected_genres=6, expected_items_per_genre=5, min_total_items=30, ...)` parses hub-formatted assistant text into buckets for `movieHubClusters`. Production **`POST /query`** hub flow passes **`expected_genres=4`**, **`min_total_items=20`** to match the 4×5 hub contract (see `src/api/main.py`).
 
-- Genre headers accept **`Genre:`**, **`Genres:`**, **`Category:`**, **`Type:`**, etc. (see `_GENRE_LINE_RE`).
+- Genre headers accept **`Genre:`**, **`Genres:`**, **`Category:`**, **`Type:`**, **`Tone:`**, **`Theme:`**, **`Cast:`**, **`Crew:`** (see `_GENRE_LINE_RE`).
 - Items: numbered lines (`1. Title (Year)`), bullets, and fallbacks that extract `Title (Year)` from structured lines.
 - **Never raises.** On low signal, falls back to `extract_titles_for_enrichment`-style extraction or a single default bucket (**“Similar by genre”**).
 - **`_strip_leading_list_markers`** removes leaked `1.` / bullet prefixes so titles stay clean in the UI.
@@ -228,19 +231,33 @@ Single-title enrichment and batch helpers strip a trailing **`(YYYY)`** before c
 | **“movies like &lt;Title&gt;”** (`extract_like_movie_title`) | Builds a target id set via **`build_similar_movie_clusters`** (intersection with current candidates). If intersection would be **empty**, keeps original clusters. |
 | **Actor** (`extract_actor_constraint`: “starring …”, “stars …”) | Keeps movies whose cast list matches (normalized substring). |
 | **Horror / scary** (`extract_horror_constraint`) | Include or exclude using genre + keyword signals (`_is_horror_movie`). |
+| **Tone/mood** (`extract_tone_constraint`) | Include or exclude by tone/mood keywords (lighthearted, dark, funny, romantic, thrilling, emotional, adventurous + negations). |
 | **Empty after filter** | Restores **original** `clusters` so the hub never collapses to zero cards. |
 
 ---
 
 ## Media cache (`media_cache.py`)
 
-Single `TTLCache` instance inside `MediaCache` with **two logical namespaces** (key prefixes `enrich:` and `tmdb_poster:`) and **different TTLs**:
+Single `TTLCache` instance inside `MediaCache` with **four logical namespaces** (key prefixes) and different TTLs:
+
+| Prefix | Key | Value | TTL |
+|--------|-----|-------|-----|
+| `enrich:` | normalised query string | `MediaEnrichmentResult` | `CINEMIND_MEDIA_CACHE_TTL_ENRICH` (1800s) |
+| `tmdb_poster:` | `title\|year` | poster URL or `__NO_POSTER__` | `CINEMIND_MEDIA_CACHE_TTL_TMDB_POSTER` (86400s) |
+| `batch_card:` | normalised title string | UI-ready card dict | `CINEMIND_MEDIA_CACHE_TTL_ENRICH` (1800s) |
+| `tmdb_card:` | TMDB movie id (int) | UI-ready card dict | `CINEMIND_MEDIA_CACHE_TTL_ENRICH` (1800s) |
+
+**`batch_card:`** is populated and consumed by `enrich_batch` — hub turn 2 for the same 20 titles becomes a pure cache read, no thread pool, no TMDB calls.
+
+**`tmdb_card:`** is populated and consumed by `_enrich_one_title_tmdb` — a second resolve for the same movie via a different title string (e.g. `"Inception"` vs `"Inception (2010)"`) hits the id-keyed cache and skips the card rebuild.
 
 ```mermaid
 graph LR
     subgraph MediaCache
-        ENRICH_CACHE["enrich:&lt;normalized query&gt;<br/>→ MediaEnrichmentResult"]
-        POSTER_CACHE["tmdb_poster:&lt;title|year&gt;<br/>→ poster URL or NO_POSTER"]
+        ENRICH_CACHE["enrich:&lt;query&gt;<br/>→ MediaEnrichmentResult"]
+        POSTER_CACHE["tmdb_poster:&lt;title|year&gt;<br/>→ poster URL"]
+        BATCH_CACHE["batch_card:&lt;title&gt;<br/>→ card dict"]
+        ID_CACHE["tmdb_card:&lt;id&gt;<br/>→ card dict"]
     end
 
     subgraph Config["Environment"]
@@ -264,6 +281,8 @@ graph LR
 |----------|---------|
 | `get_default_media_cache()` | Singleton `MediaCache` |
 | `set_default_media_cache(cache)` | Inject mock / test cache |
+| `get_batch_card(normalized_title)` / `set_batch_card(...)` | Hot-path batch dedupe by title |
+| `get_card_by_tmdb_id(tmdb_id)` / `set_card_by_tmdb_id(...)` | Cross-title dedupe by TMDB id |
 
 ### TMDB resolve cache (`integrations/tmdb/resolve_cache.py`)
 
@@ -273,6 +292,16 @@ Separate from **`MediaCache`**: **`resolve_movie()`** memoizes **`TMDBResolveRes
 |---------------------|---------|---------|
 | `CINEMIND_TMDB_RESOLVE_CACHE_TTL_SECONDS` | `3600` | TTL for cached resolve results |
 | `CINEMIND_TMDB_RESOLVE_CACHE_MAX_ENTRIES` | `2000` | LRU cap |
+
+### TMDB metadata bundle cache (`integrations/tmdb/movie_metadata.py`)
+
+Short-lived in-process memo so that sequential `fetch_movie_genre_names` + `fetch_movie_cast_names` calls for the same movie id share one HTTP round trip (`GET /movie/{id}?append_to_response=credits,keywords`). Used by hub filtering during one narrowing pass.
+
+| Environment variable | Default | Purpose |
+|---------------------|---------|---------|
+| `CINEMIND_TMDB_METADATA_BUNDLE_MEMO_TTL_SECONDS` | `3600` | TTL for memoized genre/cast/keyword bundles |
+
+Stats for all three caches (resolve, metadata bundle, media cache) are exposed at `GET /health/cache`.
 
 **Hub / API tuning** (see also `src/api/main.py`): `HUB_ENRICH_POSTERS_LIMIT` (max titles to enrich with posters per hub response), `HUB_ENRICH_MAX_CONCURRENT` (thread pool size for `enrich_batch`, default 4, capped at 12).
 

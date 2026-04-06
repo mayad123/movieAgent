@@ -31,10 +31,10 @@
 | Module | Role | Lines (approx.) |
 |--------|------|-----------------|
 | `__init__.py` | Public exports (`PromptBuilder`, `EvidenceBundle`, `EvidenceFormatter`, templates, `OutputValidator`, `versions`) | ~30 |
-| `prompt_builder.py` | Build **`[system, user]`** messages from `RequestPlan` + `EvidenceBundle` (thin `SYSTEM_PROMPT` + dynamic instructions) | ~410 |
+| `prompt_builder.py` | Build **`[system, user]`** messages from `RequestPlan` + `EvidenceBundle` (thin `SYSTEM_PROMPT` + dynamic instructions) | ~401 |
 | `evidence_formatter.py` | Dedupe, truncate, label evidence; returns `EvidenceFormatResult` | ~420 |
-| `templates.py` | `ResponseTemplate` registry + `get_template(request_type, intent)` | ~290 |
-| `output_validator.py` | Validate / auto-fix responses vs template; boilerplate + markdown cleanup | ~330 |
+| `templates.py` | `ResponseTemplate` registry + `get_template(request_type, intent)` | ~340 |
+| `output_validator.py` | Validate / auto-fix responses vs template; boilerplate + markdown cleanup | ~407 |
 | `versions.py` | **`PROMPT_VERSIONS`** long-form system prompts + `list_versions` / `compare_versions` (see [Versioning note](#prompt-versioning-versionspy)) | ~125 |
 
 ---
@@ -164,6 +164,7 @@ Per-request-type templates that control how the LLM structures its response, inc
 | `citation_style` | `str` | `natural` \| `minimal` \| `none` |
 | `citation_examples` | `List[str]` | Example phrasing for natural citations |
 | `structure_hints` | `List[str]` | e.g. `direct_answer`, `list_format`, `comparison_table` |
+| `tone_directives` | `List[str]` | e.g. `conversational`, `no_hedging`, `enthusiastic_brief`, `specific_reasons`, `analytical`, `practical`, `authoritative` — rendered into prompt by `to_instructions()` |
 
 `ResponseTemplate.to_instructions()` turns these into plain-text lines appended to the system-side **RESPONSE INSTRUCTIONS** block (including a **plain text only** / no-markdown reminder).
 
@@ -200,7 +201,7 @@ graph LR
 
 | Function | Purpose |
 |----------|---------|
-| `get_template(request_type)` | Look up template by request type |
+| `get_template(request_type, intent)` | Look up template by request type |
 | `list_all_templates()` | All registered templates |
 
 ### Response Structure Expectations
@@ -232,12 +233,14 @@ flowchart TD
     FT --> AF["Auto-fix forbidden terms if enable_auto_fix"]
     AF --> VERB["Verbosity min/max sentences & words"]
     VERB --> BP["Boilerplate + list bullet normalize"]
-    BP --> MD["Markdown artifact strip<br/>(no violation records — display-only)"]
+    BP --> TONE["Tone compliance check (soft — no reprompt)"]
+    TONE --> SHAPE["Structure shape check (soft — no reprompt)"]
+    SHAPE --> MD["Markdown artifact strip<br/>(no violation records — display-only)"]
     MD --> FRESH["Freshness phrases if need_freshness and template requires include_as_of_date"]
     FRESH --> RESULT["ValidationResult"]
 ```
 
-**Re-prompt (`requires_reprompt`):** `True` if there are **verbosity** violations, **freshness** violations, or **forbidden** violations when `enable_auto_fix` is off. Markdown normalization does **not** add violations and does **not** force reprompt.
+**Re-prompt (`requires_reprompt`):** `True` if there are **verbosity** violations, **freshness** violations, or **forbidden** violations when `enable_auto_fix` is off. Tone compliance and structure shape violations add to `violations` (affecting `is_valid`) but never trigger `requires_reprompt`. Markdown normalization does **not** add violations and does **not** force reprompt.
 
 ### Key Types
 
@@ -253,6 +256,7 @@ The validator can optionally:
 - Strip common AI boilerplate at the very start of the answer (e.g., \"As an AI language model...\").
 - Normalize list bullets (`*`, `•`) to `-` and collapse excessive blank lines so paragraphs/lists render cleanly in the frontend.
 - Strip markdown the model often echoes but the chat UI does not render: unwrap `**text**` / `***text***`, remove lines that are only `***` or `---`, and drop decorative asterisks after list markers (e.g. `1. ***`). `_normalize_markdown_artifacts` records **no** violations (display-only); `corrected_text` still reflects the cleanup when text changes.
+- **Soft checks** (no auto-fix, no reprompt): `_check_tone_compliance` verifies `tone_directives` adherence and `_check_structure_shape` verifies `structure_hints` adherence. Both add to `violations` (making `is_valid = False`) but never set `requires_reprompt`.
 
 ---
 
